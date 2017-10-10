@@ -90,6 +90,9 @@ static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t
 static u8 fat32fs_lfn_checksum (u8* pFcbName);
 static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
 
+/*
+* Initialize a new FAT32 filesystem on a volume
+*/
 fat32fs_t* fat32fs_init(hdd_device_t* drive, u8 partition)
 {
 	//read the fat32 BPB
@@ -141,6 +144,9 @@ fat32fs_t* fat32fs_init(hdd_device_t* drive, u8 partition)
 	return tr;
 }
 
+/*
+* Free the ressources used by a FAT32 filesystem that needs to be removed
+*/
 void fat32fs_close(fat32fs_t* fs)
 {
 	kfree(fs->bpb);
@@ -148,6 +154,9 @@ void fat32fs_close(fat32fs_t* fs)
 	kfree(fs);
 }
 
+/*
+* Read all the files and folders inside a directory into a linked list
+*/
 list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 {
 	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to read a file as a directory", "FAT32FS_READ_EDIR"); //TEMP
@@ -314,7 +323,10 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 	//kprintf("size = %u (i=%u, f=%u)\n", *size, i, falses_entries);
 	return tr;
 }
-	
+
+/*
+* Get a file_descriptor from a path, "opening" the file
+*/
 file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
 {
 	//The path should be relative to the mount point (excluded) of this fat32fs
@@ -392,6 +404,9 @@ file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
 	return 0;
 }
 
+/*
+* Read the data of a file previously opened by fat32fs_open_file()
+*/
 u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 {
 	u64 offset = file->offset;
@@ -445,6 +460,9 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 	return 0;
 }
 
+/*
+* Create a new file
+*/
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir)
 {
 	fat32fs_t* fs = (fat32fs_t*) dir->file_system;

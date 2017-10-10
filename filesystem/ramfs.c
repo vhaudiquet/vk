@@ -4,6 +4,12 @@
 
 #define RAMFS_EOC 0x1
 
+/*
+* This is my first RAMFS implementation ; i did not test it, or debugged it, and it may be working really bad
+* The only fs i have implemented before was FAT32 so i took the FAT32 vision to make this one
+* This is basically a FAT32 inside RAM, but as we are into ram no need for LFN entries or some other crap like that from FAT32
+*/
+
 typedef struct ramfs_fd
 {
     char* name;

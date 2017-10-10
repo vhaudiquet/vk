@@ -2,6 +2,11 @@
 #include "filesystem/fs.h"
 #include "memory/mem.h"
 
+/* Some basic data structures
+* (note : the linked list implementation was written during the FAT32fs dev, and is good for performance, but bad on other parts
+*  of the kernel (if there is no loop in the piece of code, we have to make one to fill the list))
+*/
+
 //QUEUES
 queue_t* queue_init(u32 size)
 {

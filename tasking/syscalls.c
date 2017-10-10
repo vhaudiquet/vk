@@ -4,6 +4,13 @@
 #include "memory/mem.h"
 #include "devices/keyboard.h"
 
+/*
+* For now, i have less than 10 syscalls, and they are all in this file
+* Then i may need to expand the file or to rewrite it
+* For now it contains the system calls, that i use almost only to debug the kernel
+* (the idea is to build a stable and powerfull kernel, and then creates a way for userland to call each kernel service)
+*/
+
 static void vga_text_syscall(u16 ss, u32 ebx, u32 edx);
 static void kbd_syscall(u16 ss, u32 ebx);
 

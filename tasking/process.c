@@ -4,6 +4,10 @@
 #include "memory/mem.h"
 #include "cpu/cpu.h"
 
+/*
+* Implementation of PROCESS, used by the scheduler
+*/
+
 process_t* kernel_process = 0;
 process_t* idle_process = 0;
 

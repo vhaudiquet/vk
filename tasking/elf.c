@@ -1,6 +1,10 @@
 #include "task.h"
 #include "memory/mem.h"
 
+/* 
+* This file provides ways to read an ELF executable and copy it in memory
+*/
+
 typedef struct elf_header
 {
     u8 magic[4];

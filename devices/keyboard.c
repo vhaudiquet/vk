@@ -2,6 +2,14 @@
 #include "keyboard.h"
 #include "tasking/task.h"
 
+/*
+* THIS IS A TEMP KEYBOARD DRIVER ; i dont know yet if the keyboard driver has a place in the kernel,
+* or if the kernel should just pass the keycode to the userland GUI or SCHELL, and this interface decides
+* what to do with it
+* Even if the keyboard driver takes place inside the kernel, there will be modules to support others kbd layouts
+* (this is only used to test thingsS)
+*/
+
 bool kbd_requested = false;
 volatile u8 kbd_keycode = 0;
 

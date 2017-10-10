@@ -39,9 +39,15 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     scheduler_add_process(init_idle_process()); //Add idle_process to the loop, so that if there is no process the kernel don't crash
     init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
 
+    //DEBUG : printing kernel stack bottom / top
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
+
     kprintf("Getting kernel execution context...");
+    
+    //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
+    
+    //by enabling interrupts now, the scheduler gets active but that leads to a system crash
     //asm("sti");
 
     //getting live / root dir infos
@@ -82,7 +88,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         mount("/", FS_TYPE_RAMFS, rfs);
         kprintf("%lramfs mounted '/'\n", 3);
         kprintf("live dir : %s\n", aroot_dir);
-        //need to mount /sys
+        //need to mount /sys but no ATAPI/USB driver yet
         fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");
     }
     else if(mode == KERNEL_MODE_INSTALLED)
@@ -93,8 +99,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         char h = *aroot_dir;
 
         kprintf("Mounting root dir to drive %cd%c%u...", h, drive_index+'a', part_index+1);
-
-        //kprintf("%lroot: drive %d, partition %d (type:%c)\n", 3, drive_index, part_index, h);
 
         hdd_device_t* dev = h == 'h' ? hd_devices[drive_index] : sd_devices[drive_index];
         if(!dev) fatal_kernel_error("Could not find root drive !", "INSTALLED_KERNEL_LOADING");
@@ -107,7 +111,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     }
     
     //running /sys/init
-    file_descriptor_t* init_file = open_file("/sys/init");//open_file("/boot/grub/fonts/unicode.pf2");
+    file_descriptor_t* init_file = open_file("/sys/init");
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
     char* init_buffer =
     #ifdef MEMLEAK_DBG
@@ -136,6 +140,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
     scheduler_add_process(init_process);
 
+    //adding debug process to see if the scheduler really works on real multitasking
     //file_descriptor_t* dbg_task_file = open_file("/sys/dbg.elf");
     //process_t* dbg_process = create_process(dbg_task_file);
     //scheduler_add_process(dbg_process);

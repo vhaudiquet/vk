@@ -3,6 +3,11 @@
 #include "error/error.h"
 #include "memory/mem.h"
 
+/*
+* This is the virtual file system, that contains all of the mount points and dialogs with every individual filesystem
+* to provides general functions to open a file from a path, either the file is on disk/ram/external, fat32/ext2/... (once supported)
+*/
+
 typedef struct mount_point
 {
     char* path;

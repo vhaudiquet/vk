@@ -3,6 +3,10 @@
 #include "mem.h"
 #include "cpu/cpu.h"
 
+/*
+* This file provides function to map physical memory at virtual adresses
+*/
+
 //PAGE DIRECTORY : Must be 4 KiB aligned (0x1000)
 u32 kernel_page_directory[1024] __attribute__((aligned(4096))) = {0};
 u32 kernel_page_table[1024] __attribute__((aligned(4096)));

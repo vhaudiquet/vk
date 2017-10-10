@@ -4,7 +4,7 @@ void vga_text_nl();
 
 void _fatal_kernel_error(const char* error_message, const char* error_context, char* err_file, u32 err_line)
 {
-    //Switch back to VGA TEXT Video Mode
+    //Switch back to VGA TEXT Video Mode : set_video_mode(g_80x25_text);
     asm("cli");
     vga_text_nl();
     kprintf("%v[FATAL ERROR] : %s\n", 0b00001100, error_message);

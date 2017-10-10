@@ -2,6 +2,10 @@
 #include "memory/mem.h"
 #include "cpu/cpu.h"
 
+/*
+* First SCHEDULER implementation ; schedule() is called on each clock interrupt
+*/
+
 typedef struct ASLEEP_PROCESS_D
 {
     process_t* process;

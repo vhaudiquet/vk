@@ -2,6 +2,10 @@
 #include "mem.h"
 #include "error/error.h"
 
+/*
+* This file has the goal to trace the physical memory and to gets avaible blocks of it
+*/
+
 p_block_t* first_block = 0;
 u64 detected_memory = 0;
 u32 detected_memory_below32;

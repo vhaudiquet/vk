@@ -2,6 +2,10 @@
 #include "error/error.h"
 #include "mem.h"
 
+/*
+* This is the kernel heap ; it provides kmalloc(), kfree() and krealloc().
+*/
+
 #define UNKNOWN_BLOCK_ERRMSG "Unknown block in kernel heap"
 #define HEAP_FULL_ERRMSG "The kernel heap is full. How did you do this ?"
 

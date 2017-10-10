@@ -3,6 +3,10 @@
 #include "memory/mem.h"
 #include "filesystem/fs.h"
 
+/*
+* Contains basic utils functions, that would be provided by the libc if there was one
+*/
+
 /*------------------------------- MEMORY -----------------------------*/
 void * memcpy(void * restrict dest, const void * restrict src, size_t n) 
 {

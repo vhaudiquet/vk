@@ -2,6 +2,12 @@
 #include "mem.h"
 #include "error/error.h"
 
+/*
+* This is the kernel page heap, used when we have to allocate a new PAGE_TABLE or a new PAGE_DIRECTORY
+* It is different from the kernel standard heap because the addresses have to be 4096B-aligned
+* The functions provided are pt_alloc() and pt_free() (page table and directories have the same size so same function)
+*/
+
 #define KPHEAP_BLOCK_SIZE 4096
 #define KPHEAP_BLOCK_FREE 0
 #define KPHEAP_BLOCK_USED 1
