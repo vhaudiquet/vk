@@ -103,7 +103,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     outb(0x20, 0x20);
 
     //DEBUG
-    kprintf("going to eip 0x%X cs 0x%X esp 0x%X ss 0x%X\n", current_process->eip, current_process->sregs.cs, current_process->esp, current_process->sregs.ss);
+    //kprintf("going to eip 0x%X cs 0x%X esp 0x%X ss 0x%X\n", current_process->eip, current_process->sregs.cs, current_process->esp, current_process->sregs.ss);
     //kprintf("eax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
     
     //restore segments register

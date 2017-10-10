@@ -42,7 +42,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
     kprintf("Getting kernel execution context...");
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
-    asm("sti");
+    //asm("sti");
 
     //getting live / root dir infos
     u8 mode = aboot_hint_present;
