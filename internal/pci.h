@@ -1,0 +1,2 @@
+const char* const pci_class[] = {"OLD", "MASS STORAGE", "NETWORK", "DISPLAY", "MULTIMEDIA", "MEMORY", "BRIDGE", "COMMUNICATION",
+                        "SYSTEM", "INPUT", "DOCK", "PROCESSOR", "SERIAL BUSES", "WIRELESS", "I/O", "SATELLITE", "CRYPT", "AQUISITION", "UNKNOWN"};
