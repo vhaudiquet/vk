@@ -23,11 +23,21 @@ CLOCK_IRQ:
     push %es
     push %fs
     push %gs
-    cli
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+    cld
+    # cli
     call schedule
     mov $0x20, %al
     out %al, $0x20 # -> tells the PIC that it's OK, we've handled the interrupt, you can send more
-    add $16, %esp
+    # add $16, %esp
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
     popa
     iret
 

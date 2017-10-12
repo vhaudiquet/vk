@@ -56,11 +56,16 @@ void* kmalloc(u32 size)
         block_header_t* currentBlock = (block_header_t*) i;
 
         //log
-        //kprintf("[ALLOC] [MALLOC] Block %X (size = %d) (status = %s)\n", i, currentBlock->size, (currentBlock->status ? "RESERVED" : "FREE"));
+        //kprintf("[ALLOC] [MALLOC] Block %X (size = %d) (status = %s)\n", i, currentBlock->size, (currentBlock->status ? "RESERVED" : "FREE"))        //kprintf("Comment : %s\n", currentBlock->comment);
 
         //Check if the current block is valid
         if(currentBlock->magic != BLOCK_HEADER_MAGIC)
+        {
+            #ifdef MEMLEAK_DBG
+            kprintf("Error on block at 0x%X\n", currentBlock);
+            #endif
             fatal_kernel_error(UNKNOWN_BLOCK_ERRMSG, "Memory allocation");
+        }
 
         //Check if the current block is free and large enough
         if(!currentBlock->status && currentBlock->size >= size)

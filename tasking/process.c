@@ -48,6 +48,7 @@ process_t* create_process(file_descriptor_t* executable)
     tr->gregs.edx = 0;
     tr->gregs.esi = 0;
     tr->gregs.edi = 0;
+    tr->ebp = 0;
 
     tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
     tr->sregs.cs = 0x1B;
@@ -58,9 +59,13 @@ process_t* create_process(file_descriptor_t* executable)
     tr->page_directory = page_directory;
 
     //process kernel stack
-    void* kstack = kmalloc(8192);
+    void* kstack = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(8192, "process kernel stack");
+    #else
+    kmalloc(8192);
+    #endif
     tr->kesp = ((u32) kstack) + 8191;
-    tr->kss = 0x10;
 
     tr->base_kstack = (u32) kstack;
 
@@ -75,25 +80,40 @@ jmp idle_loop\n");
 
 process_t* init_idle_process()
 {
-    idle_process = kmalloc(sizeof(process_t));
+    idle_process = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(process_t), "idle process");
+    #else
+    kmalloc(sizeof(process_t));
+    #endif
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
     idle_process->sregs.ds = idle_process->sregs.es = idle_process->sregs.fs = idle_process->sregs.gs = idle_process->sregs.ss = 0x10;
     idle_process->sregs.cs = 0x08;
     idle_process->eip = (u32) idle_loop; //IDLE LOOP
-    idle_process->esp = idle_process->kesp = ((u32) kmalloc(1024))+1023;
-    idle_process->kss = 0x10;
+    idle_process->esp = idle_process->kesp = 
+    #ifdef MEMLEAK_DBG
+    ((u32) kmalloc(1024, "idle process kernel stack"))+1023;
+    #else
+    ((u32) kmalloc(1024))+1023;
+    #endif
     idle_process->base_stack = idle_process->base_kstack = idle_process->kesp - 1023;
     idle_process->page_directory = kernel_page_directory;
     return idle_process;
 }
 
-void init_kernel_process()
+process_t* init_kernel_process()
 {
-    kernel_process = kmalloc(sizeof(process_t));
+    kernel_process = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(process_t), "kernel process");
+    #else
+    kmalloc(sizeof(process_t));
+    #endif
     kernel_process->page_directory = kernel_page_directory;
-    //kernel_process->kss = 0x10;
-    current_process = kernel_process;
+
+    //current_process = kernel_process;
+    return kernel_process;
 }
 
 void exit_process(process_t* process)

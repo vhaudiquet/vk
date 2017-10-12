@@ -22,22 +22,19 @@ void scheduler_init()
     p_ready_queue = queue_init(10);
 }
 
-//u32 time = 0;
+process_t* toswitch = 0;
 void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp, u32 ebx, u32 edx, u32 ecx, u32 eax, u32 eip, u32 cs, u32 flags, u32 esp_2, u32 ss)
 {
-    //time++;
-    //if(time % 25) return;
-
     //if there is no process to schedule, we return
-    process_t* toswitch = queue_take(p_ready_queue);
+    toswitch = queue_take(p_ready_queue);
     if(!toswitch) return;
 
     //asm("mov %%ss, %%eax":"=a"(ss));
     //kprintf("schedule : ring %u (cs = 0x%X) (ss = 0x%X)\n", cs & 0x3, cs, ss);
     //if we are currently running idle process, lets throw it away
-    if(current_process == idle_process)
+    /*if(current_process == idle_process)
     {
-        //kprintf("throwing kernel process away...\n");
+        //kprintf("throwing idle process away...\n");
         list_entry_t* list_pointer = p_wait_list;
         list_entry_t* list_before = 0;
         u32 i = 0;
@@ -46,16 +43,31 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
             list_before = list_pointer;
             list_pointer = list_pointer->next;
         }
-        if(i == 0) p_wait_list = list_pointer = kmalloc(sizeof(list_entry_t));
-        else list_pointer = kmalloc(sizeof(list_entry_t));
+        if(!i) p_wait_list = list_pointer =
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list list entry");
+        #else
+        kmalloc(sizeof(list_entry_t));
+        #endif
+        else list_pointer =
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list list entry");
+        #else
+        kmalloc(sizeof(list_entry_t));
+        #endif
         if(list_before) list_before->next = list_pointer;
-        asleep_data_t* pdata = kmalloc(sizeof(asleep_data_t));
-        pdata->process = current_process;
+        asleep_data_t* pdata = 
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(asleep_data_t), "scheduler: asleep_process_data");
+        #else
+        kmalloc(sizeof(asleep_data_t));
+        #endif
+        pdata->process = idle_process;
         pdata->sleep_reason = SLEEP_PAUSED;
         pdata->sleep_data = 0;
         list_pointer->element = pdata;
         p_wl_size++;
-    }
+    }*/
     //else save the context of current process and put in back in queue
     else if(current_process)
     {
@@ -82,7 +94,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         }
         else 
         {
-            current_process->esp = esp;//stack_ptr[9] + 12;
+            current_process->esp = esp;
             current_process->sregs.ss = TSS.ss0;
         }
 
@@ -96,9 +108,8 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     current_process = toswitch;
 
     /*restore context of toswitch process and return*/
-    //set TSS values
+    //set TSS value
     TSS.esp0 = current_process->kesp;
-    TSS.ss0 = current_process->kss;
 
     //page directory switch
     pd_switch(current_process->page_directory);
@@ -107,44 +118,74 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     outb(0x20, 0x20);
 
     //DEBUG
-    //kprintf("going to eip 0x%X cs 0x%X esp 0x%X ss 0x%X\n", current_process->eip, current_process->sregs.cs, current_process->esp, current_process->sregs.ss);
-    //kprintf("eax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
-    
+    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X ss 0x%X\n", 3, current_process->eip, current_process->sregs.cs, current_process->esp, current_process->sregs.ss);
+    //kprintf("%leax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", 3, current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
+    //kprintf("%lTSS.ss0 = 0x%X\n", 3, TSS.ss0);
+
     //restore segments register
     asm("mov %0, %%ds \n \
     mov %1, %%es \n \
 	mov %2, %%fs \n \
     mov %3, %%gs \n"::"r"(current_process->sregs.ds), "r"(current_process->sregs.es), "r"(current_process->sregs.fs), "r"(current_process->sregs.gs));
 
-    //if we return to normal execution, we let iret do the stack switch
-    if(current_process->sregs.cs != 0x08)
-    {
-        asm("pushl %0\n \
-             pushl %1\n"::"r"(current_process->sregs.ss), "r"(current_process->esp));
-    }
     //if we return to a system call, we directly restore the stack
-    else asm("mov %0, %%esp"::"r"(current_process->esp));
-    
+    if(current_process->sregs.cs == 0x08) 
+    {
+        __asm__ __volatile__ ("mov %0, %%esp"::"g"(current_process->esp):"%esp");
+    }
+    //else asm("mov %0, %%esp"::"g"(current_process->kesp):"%esp");
+    else
+    //if we return to normal execution, we let iret do the stack switch
+    //if(current_process->sregs.cs != 0x08)
+    {
+        __asm__ __volatile__("pushl %0\n \
+             pushl %1\n"::"g"(current_process->sregs.ss), "g"(current_process->esp));
+    }
+
     //pushing flags, cs and eip (to be popped out by iret)
-    asm("pushfl\n \
+    __asm__ __volatile__("pushfl\n \
          popl %%eax        \n \
          orl $0x200, %%eax \n \
          and $0xffffbfff, %%eax \n \
          push %%eax        \n \
-         pushl %0\n \
-         pushl %1 \n"::"r"(current_process->sregs.cs), "r"(current_process->eip):"%eax");
+         pushl %0 \n \
+         pushl %1 \n"::"g"(current_process->sregs.cs), "g"(current_process->eip):"%eax");
 
     //restore general registers (esi, edi, ebp, eax, ebx, ecx, edx)
-    asm("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"r"(current_process->gregs.esi), "r"(current_process->gregs.edi), "r"(current_process->ebp));
-    asm("nop"::"a"(current_process->gregs.eax), "b"(current_process->gregs.ebx), "c"(current_process->gregs.ecx), "d"(current_process->gregs.edx));
+    __asm__ __volatile__ ("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"g"(current_process->gregs.esi), "g"(current_process->gregs.edi), "g"(current_process->ebp));
+    __asm__ __volatile__ ("iret"::"a"(current_process->gregs.eax), "b"(current_process->gregs.ebx), "c"(current_process->gregs.ecx), "d"(current_process->gregs.edx));
 
     //black magic
-    asm("iret");
+    //__asm__ __volatile__("iret");
 }
+
+/*
+void __attribute__((used)) schedule2()
+{
+    u32 esp = 0; asm("mov %%esp, %%eax":"=a"(esp));
+    u32 gs = *((u32*) esp);
+    u32 fs = *((u32*) esp+4);
+    u32 es = *((u32*) esp+8);
+    u32 ds = *((u32*) esp+12);
+    u32 edi = *((u32*) esp+16);
+    u32 esi = *((u32*) esp+20);
+    u32 ebp = *((u32*) esp+24);
+    u32 esp_2 = *((u32*) esp+28);
+    kprintf("esp = 0x%X\n", esp);
+    kprintf("gs = 0x%X ; fs = 0x%X ; es = 0x%X ; ds = 0x%X\n", gs, fs, es, ds);
+    kprintf("edi = 0x%X ; esi = 0x%X ; ebp = 0x%X ; esp = 0x%X\n", edi, esi, ebp, esp_2);
+    asm("cli;hlt");
+    //__asm__ __volatile__("iret");
+}
+*/
 
 void scheduler_add_process(process_t* process)
 {
-    queue_add(p_ready_queue, process);
+    if(!current_process)
+    {
+        current_process = process;
+    }
+    else queue_add(p_ready_queue, process);
 }
 
 void scheduler_remove_process(process_t* process)
@@ -160,14 +201,15 @@ void scheduler_remove_process(process_t* process)
         current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
         current_process->sregs.cs = 0x08;
         asm("mov %%esp, %%eax":"=a"(current_process->esp));
-        current_process->eip = (u32) (scheduler_remove_process+0xbd);//(0xc0107bb5);
+        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(0xc0107bb5);
 
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)
         {
             scheduler_wake_process(idle_process);
         }
-        asm("int $32"); //call clock int to schedule
+        //asm("int $32"); //call clock int to schedule
+        schedule(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0, 0, 0);
     }
     else queue_remove(p_ready_queue, process);
 }
@@ -182,10 +224,25 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u8 sleep_data)
         list_before = list_pointer;
         list_pointer = list_pointer->next;
     }
-    if(i == 0) p_wait_list = list_pointer = kmalloc(sizeof(list_entry_t));
-    else list_pointer = kmalloc(sizeof(list_entry_t));
+    if(i == 0) p_wait_list = list_pointer = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list listentry");
+    #else
+    kmalloc(sizeof(list_entry_t));
+    #endif
+    else list_pointer =
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list listentry");
+    #else
+    kmalloc(sizeof(list_entry_t));
+    #endif
     if(list_before) list_before->next = list_pointer;
-    asleep_data_t* pdata = kmalloc(sizeof(asleep_data_t));
+    asleep_data_t* pdata = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(asleep_data_t), "scheduler: asleep_process_data");
+    #else
+    kmalloc(sizeof(asleep_data_t));
+    #endif
     pdata->process = process;
     pdata->sleep_reason = sleep_reason;
     pdata->sleep_data = sleep_data;

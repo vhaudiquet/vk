@@ -21,7 +21,6 @@ typedef struct PROCESS
     u32 ebp;
     u32* page_directory;
     u32 kesp;
-    u32 kss;
     u32 base_stack;
     u32 base_kstack;
 } process_t;
@@ -30,7 +29,7 @@ process_t* create_process(file_descriptor_t* executable);
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
-void init_kernel_process();
+process_t* init_kernel_process();
 
 //Threads
 typedef struct THREAD

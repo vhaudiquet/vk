@@ -36,14 +36,13 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     install_block_devices(); //Setup block devices (ATA, ATAPI,...)
 
     scheduler_init(); //Init scheduler
-    scheduler_add_process(init_idle_process()); //Add idle_process to the loop, so that if there is no process the kernel don't crash
-    init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
+    scheduler_add_process(init_kernel_process()); //Add kernel process as current_process (kernel init is not done yet)
+    scheduler_add_process(init_idle_process()); //Add idle_process to the queue, so that if there is no process the kernel don't crash
 
     //DEBUG : printing kernel stack bottom / top
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
 
     kprintf("Getting kernel execution context...");
-    
     //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
     
@@ -79,7 +78,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     char* context = (mode == KERNEL_MODE_LIVE ? "LIVE\n" : mode == KERNEL_MODE_INSTALLED ? "INSTALLED\n" : "FAILED\n");
     u8 color = (mode == KERNEL_MODE_LIVE ? 0b00001111 : mode == KERNEL_MODE_INSTALLED ? 0b00001111 : 0b00001100);
     vga_text_spemsg(context, color);
-    
+
+    //asm("sti");
+
     //mounting / either to RAMFS (live) or DISK (installed)
     if(mode == KERNEL_MODE_LIVE)
     {
@@ -110,6 +111,8 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         vga_text_okmsg();
     }
     
+    //asm("sti");
+
     //running /sys/init
     file_descriptor_t* init_file = open_file("/sys/init");
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");

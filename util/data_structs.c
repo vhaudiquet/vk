@@ -10,8 +10,18 @@
 //QUEUES
 queue_t* queue_init(u32 size)
 {
-    queue_t* tr = kmalloc(sizeof(queue_t));
-    tr->front = kmalloc(size*sizeof(void*));
+    queue_t* tr = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(queue_t), "queue_t");
+    #else
+    kmalloc(sizeof(queue_t));
+    #endif
+    tr->front = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(size*sizeof(void*), "queue data");
+    #else
+    kmalloc(size*sizeof(void*));
+    #endif
     tr->rear = tr->front - sizeof(void*);
     tr->size = size;
     return tr;
