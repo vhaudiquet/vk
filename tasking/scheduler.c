@@ -72,7 +72,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     else if(current_process)
     {
         //save context of current process
-        current_process->sregs.cs  = cs;
+        current_process->cs  = cs;
         current_process->eip = eip;
         current_process->gregs.eax = eax;
         current_process->gregs.ecx = ecx;
@@ -81,21 +81,17 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         current_process->ebp = ebp;
         current_process->gregs.esi = esi;
         current_process->gregs.edi = edi;
-        current_process->sregs.ds = ds;
-        current_process->sregs.es = es;
-        current_process->sregs.fs = fs;
-        current_process->sregs.gs = gs;
 
         //if system call, theses are not pushed on the stack
-        if (current_process->sregs.cs != 0x08) 
+        if (current_process->cs != 0x08) 
         {
             current_process->esp = esp_2;
-            current_process->sregs.ss = ss;
+            //current_process->sregs.ss = ss;
         }
         else 
         {
-            current_process->esp = esp;
-            current_process->sregs.ss = TSS.ss0;
+            current_process->esp = esp+0xC;
+            //kprintf("%lSaving p esp : 0x%X\n", 1, esp);
         }
 
         //current_process->flags = flags;
@@ -118,18 +114,17 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     outb(0x20, 0x20);
 
     //DEBUG
-    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X ss 0x%X\n", 3, current_process->eip, current_process->sregs.cs, current_process->esp, current_process->sregs.ss);
+    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X %s\n", 3, current_process->eip, current_process->cs, current_process->esp, current_process == idle_process ? "(idle)" : "");
     //kprintf("%leax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", 3, current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
-    //kprintf("%lTSS.ss0 = 0x%X\n", 3, TSS.ss0);
 
     //restore segments register
     asm("mov %0, %%ds \n \
-    mov %1, %%es \n \
-	mov %2, %%fs \n \
-    mov %3, %%gs \n"::"r"(current_process->sregs.ds), "r"(current_process->sregs.es), "r"(current_process->sregs.fs), "r"(current_process->sregs.gs));
+    mov %0, %%es \n \
+	mov %0, %%fs \n \
+    mov %0, %%gs \n"::"r"((current_process->cs == 0x08 ? 0x10 : 0x23)));
 
     //if we return to a system call, we directly restore the stack
-    if(current_process->sregs.cs == 0x08) 
+    if(current_process->cs == 0x08) 
     {
         __asm__ __volatile__ ("mov %0, %%esp"::"g"(current_process->esp):"%esp");
     }
@@ -139,7 +134,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     //if(current_process->sregs.cs != 0x08)
     {
         __asm__ __volatile__("pushl %0\n \
-             pushl %1\n"::"g"(current_process->sregs.ss), "g"(current_process->esp));
+             pushl %1\n"::"g"(0x23), "g"(current_process->esp));
     }
 
     //pushing flags, cs and eip (to be popped out by iret)
@@ -149,14 +144,13 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
          and $0xffffbfff, %%eax \n \
          push %%eax        \n \
          pushl %0 \n \
-         pushl %1 \n"::"g"(current_process->sregs.cs), "g"(current_process->eip):"%eax");
+         pushl %1 \n"::"g"(current_process->cs), "g"(current_process->eip):"%eax");
 
     //restore general registers (esi, edi, ebp, eax, ebx, ecx, edx)
     __asm__ __volatile__ ("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"g"(current_process->gregs.esi), "g"(current_process->gregs.edi), "g"(current_process->ebp));
     __asm__ __volatile__ ("iret"::"a"(current_process->gregs.eax), "b"(current_process->gregs.ebx), "c"(current_process->gregs.ecx), "d"(current_process->gregs.edx));
-
-    //black magic
-    //__asm__ __volatile__("iret");
+    //black magic : the end of function is dead code
+    //that cause a corruption of 0xC bytes on the stack per idle schedule (but normal processes arent affected ?)
 }
 
 /*
@@ -198,10 +192,10 @@ void scheduler_remove_process(process_t* process)
         //and we are good
         current_process->gregs.eax = current_process->gregs.ebx = current_process->gregs.ecx = current_process->gregs.edx = 0;
         current_process->gregs.edi = current_process->gregs.esi = current_process->ebp = 0;
-        current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
-        current_process->sregs.cs = 0x08;
+        //current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
+        current_process->cs = 0x08;
         asm("mov %%esp, %%eax":"=a"(current_process->esp));
-        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(0xc0107bb5);
+        current_process->eip = (u32) (scheduler_remove_process+0xc5);//(0xc0107bb5);
 
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)

@@ -50,8 +50,8 @@ process_t* create_process(file_descriptor_t* executable)
     tr->gregs.edi = 0;
     tr->ebp = 0;
 
-    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
-    tr->sregs.cs = 0x1B;
+    //tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
+    tr->cs = 0x1B;
 
     tr->eip = (u32) code_offset;
     tr->esp = (u32) stack_offset;
@@ -88,8 +88,8 @@ process_t* init_idle_process()
     #endif
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
-    idle_process->sregs.ds = idle_process->sregs.es = idle_process->sregs.fs = idle_process->sregs.gs = idle_process->sregs.ss = 0x10;
-    idle_process->sregs.cs = 0x08;
+    //idle_process->sregs.ds = idle_process->sregs.es = idle_process->sregs.fs = idle_process->sregs.gs = idle_process->sregs.ss = 0x10;
+    idle_process->cs = 0x08;
     idle_process->eip = (u32) idle_loop; //IDLE LOOP
     idle_process->esp = idle_process->kesp = 
     #ifdef MEMLEAK_DBG

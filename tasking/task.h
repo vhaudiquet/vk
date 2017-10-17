@@ -15,7 +15,8 @@ void* elf_load(file_descriptor_t* file, u32* page_directory);
 typedef struct PROCESS
 {
     g_regs_t gregs;
-    s_regs_t sregs;
+    //s_regs_t sregs;
+    u32 cs;
     u32 eip;
     u32 esp;
     u32 ebp;

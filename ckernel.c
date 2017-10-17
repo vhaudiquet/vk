@@ -46,8 +46,8 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
     
-    //by enabling interrupts now, the scheduler gets active but that leads to a system crash
-    //asm("sti");
+    //enable interrupts (scheduler go go go)
+    asm("sti");
 
     //getting live / root dir infos
     u8 mode = aboot_hint_present;
@@ -79,8 +79,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     u8 color = (mode == KERNEL_MODE_LIVE ? 0b00001111 : mode == KERNEL_MODE_INSTALLED ? 0b00001111 : 0b00001100);
     vga_text_spemsg(context, color);
 
-    //asm("sti");
-
     //mounting / either to RAMFS (live) or DISK (installed)
     if(mode == KERNEL_MODE_LIVE)
     {
@@ -110,8 +108,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         }
         vga_text_okmsg();
     }
-    
-    //asm("sti");
 
     //running /sys/init
     file_descriptor_t* init_file = open_file("/sys/init");
@@ -149,7 +145,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //scheduler_add_process(dbg_process);
 
     //enabling interrupts
-    asm("sti");
+    //asm("sti");
 
     scheduler_remove_process(kernel_process);
     //loop infinetely
