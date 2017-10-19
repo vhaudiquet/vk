@@ -93,7 +93,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
 /*
 * Initialize a new FAT32 filesystem on a volume
 */
-fat32fs_t* fat32fs_init(hdd_device_t* drive, u8 partition)
+fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 {
 	//read the fat32 BPB
 	bpb_t* bpb = 
@@ -103,7 +103,7 @@ fat32fs_t* fat32fs_init(hdd_device_t* drive, u8 partition)
 	kmalloc(sizeof(bpb_t));
 	#endif
 	u32 offset = drive->partitions[partition]->start_lba;
-	hdd_read(offset, 0, (u8*) bpb, sizeof(bpb_t), drive);
+	block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive);
 
 	//check if it is a valid fat32 fs
 	if(*bpb->system_id_string != 'F' || *(bpb->system_id_string+1) != 'A' || *(bpb->system_id_string+2) != 'T' || *(bpb->system_id_string+3) != '3' || *(bpb->system_id_string+4) != '2')
@@ -185,7 +185,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		hdd_read(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
 		buffer += (fs->bpb->sectors_per_cluster*512);
 	}
@@ -416,7 +416,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 	if(count+offset < fs->bpb->sectors_per_cluster*512)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, (u32) file->fsdisk_loc);
-		hdd_read(pos, (u32) offset, (u8*) buffer, count, fs->drive);
+		block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
 		return 0;
 	}
 	
@@ -438,13 +438,13 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
 		if(count >= fs->bpb->sectors_per_cluster*512)
 		{
-			hdd_read(pos, (u32) offset, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+			block_read_flexible(pos, (u32) offset, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 			count = ((u32)(count - ((u64)fs->bpb->sectors_per_cluster*512)));
 			if(offset) offset = 0;
 		}
 		else
 		{
-			hdd_read(pos, (u32) offset, (u8*) buffer, count, fs->drive);
+			block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
 			if(offset) offset = 0;
 			break;
 		}
@@ -489,7 +489,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		hdd_read(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
 		buffer += (fs->bpb->sectors_per_cluster*512);
 	}
@@ -681,7 +681,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		hdd_write(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
 		buffer += (fs->bpb->sectors_per_cluster*512);
 	}
@@ -753,7 +753,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		hdd_read(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
 		buffer += (fs->bpb->sectors_per_cluster*512);
 	}
@@ -825,7 +825,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		hdd_write(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
 		buffer += (fs->bpb->sectors_per_cluster*512);
 	}
@@ -902,9 +902,9 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	for(i = fclus_tw; i <= lclus_tw; i++)
 	{
 		if(i == fclus_tw)
-			hdd_write(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), (u32) offset, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
+			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), (u32) offset, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
 		else
-			hdd_write(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), 0, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
+			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), 0, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
 		
 		clusbuffer = clusbuffer->next;	
 	}
@@ -939,12 +939,12 @@ static void fat32fs_read_fat(fat32fs_t* fs)
 	{
 		if(size2 > 512*255)
 		{
-			hdd_read(fat_sector, 0, (u8*) fs->fat_table+i, 512*255, fs->drive);
+			block_read_flexible(fat_sector, 0, (u8*) fs->fat_table+i, 512*255, fs->drive);
 			size2 -= 512*255;
 		}
 		else
 		{
-			hdd_read(fat_sector, 0, (u8*) fs->fat_table+i, size2, fs->drive);
+			block_read_flexible(fat_sector, 0, (u8*) fs->fat_table+i, size2, fs->drive);
 			break;
 		}
 		fat_sector+=255;
@@ -969,7 +969,7 @@ static void fat32fs_write_fat(fat32fs_t* fs)
 {
 	u32 fat_size = fs->bpb->fat_size * fs->bpb->bytes_per_sector;
 	u32 fat_sector = fs->bpb_offset + fs->bpb->reserved_sectors;
-	hdd_write(fat_sector, 0, (u8*) fs->fat_table, fat_size, fs->drive);
+	block_write_flexible(fat_sector, 0, (u8*) fs->fat_table, fat_size, fs->drive);
 }
 
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32* size)

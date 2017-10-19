@@ -23,6 +23,8 @@ void scheduler_init()
 }
 
 process_t* toswitch = 0;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp, u32 ebx, u32 edx, u32 ecx, u32 eax, u32 eip, u32 cs, u32 flags, u32 esp_2, u32 ss)
 {
     //if there is no process to schedule, we return
@@ -152,26 +154,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     //black magic : the end of function is dead code
     //that cause a corruption of 0xC bytes on the stack per idle schedule (but normal processes arent affected ?)
 }
-
-/*
-void __attribute__((used)) schedule2()
-{
-    u32 esp = 0; asm("mov %%esp, %%eax":"=a"(esp));
-    u32 gs = *((u32*) esp);
-    u32 fs = *((u32*) esp+4);
-    u32 es = *((u32*) esp+8);
-    u32 ds = *((u32*) esp+12);
-    u32 edi = *((u32*) esp+16);
-    u32 esi = *((u32*) esp+20);
-    u32 ebp = *((u32*) esp+24);
-    u32 esp_2 = *((u32*) esp+28);
-    kprintf("esp = 0x%X\n", esp);
-    kprintf("gs = 0x%X ; fs = 0x%X ; es = 0x%X ; ds = 0x%X\n", gs, fs, es, ds);
-    kprintf("edi = 0x%X ; esi = 0x%X ; ebp = 0x%X ; esp = 0x%X\n", edi, esi, ebp, esp_2);
-    asm("cli;hlt");
-    //__asm__ __volatile__("iret");
-}
-*/
+#pragma GCC diagnostic pop
 
 void scheduler_add_process(process_t* process)
 {

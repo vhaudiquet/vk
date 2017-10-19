@@ -1,23 +1,20 @@
 #include "storage.h"
+#include "memory/mem.h"
 
-hdd_device_t* hd_devices[4] = {0};
-u8 hd_devices_count = 0;
-hdd_device_t* sd_devices[10] = {0};
-u8 sd_devices_count = 0;
-
-reader_device_t* reader_devices[4] = {0};
-u8 reader_devices_count = 0;
+block_device_t** block_devices = 0;
+u16 block_device_count = 0;
 
 void install_block_devices()
 {
     kprintf("[STO] Installing block devices...");
 
+    block_devices = kmalloc(sizeof(void*)*10);
     ata_install();
 
     vga_text_okmsg();
 }
 
-void hdd_read(u64 sector, u32 offset, u8* data, u64 count, hdd_device_t* drive)
+void block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
 {
     if(drive->device_type == ATA_DEVICE)
     {
@@ -25,7 +22,7 @@ void hdd_read(u64 sector, u32 offset, u8* data, u64 count, hdd_device_t* drive)
     }
 }
 
-void hdd_write(u64 sector, u32 offset, u8* data, u64 count, hdd_device_t* drive)
+void block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
 {
     if(drive->device_type == ATA_DEVICE)
     {

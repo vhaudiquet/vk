@@ -43,31 +43,33 @@ typedef struct master_boot_record
 //BLOCK DEVICES ABSTRACTION LAYER
 #define ATA_DEVICE 1
 #define ATAPI_DEVICE 2
-typedef struct hdd_device
+
+#define HARD_DISK_DRIVE 1
+#define CD_DRIVE 2
+#define USB_DRIVE 3
+
+#define DISK_SUCCESS 0 //operation suceeded
+#define DISK_FAIL_UNREACHABLE 1 //disk was not reachable (either media removed or temp bug)
+#define DISK_FAIL_OUT 2 //block or size > disk capacity
+#define DISK_FAIL_BUSY 3 //disk is already busy
+#define DISK_FAIL_INTERNAL 4 //internal function failure
+
+typedef struct block_device
 {
-    u8 device_type;
 	void* device_struct;
 	u32 device_size;
 	partition_descriptor_t* partitions[4];
-} hdd_device_t;
-extern hdd_device_t* hd_devices[4];
-extern u8 hd_devices_count;
-extern hdd_device_t* sd_devices[10];
-extern u8 sd_devices_count;
-void hdd_read(u64 sector, u32 offset, u8* data, u64 count, hdd_device_t* drive);
-void hdd_write(u64 sector, u32 offset, u8* data, u64 count, hdd_device_t* drive);
-
-typedef struct reader_device
-{
 	u8 device_type;
-	void* device_struct;
-	u16 media_type;
-} reader_device_t;
-extern reader_device_t* reader_devices[4];
-extern u8 reader_devices_count;
+	u8 device_class;
+	u8 partition_count;
+} block_device_t;
+extern block_device_t** block_devices;
+extern u16 block_device_count;
+
+void block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
+void block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
 
 void install_block_devices();
-void print_block_devices();
 
 //ATA devices
 typedef struct ata_device
@@ -80,6 +82,7 @@ typedef struct ata_device
 typedef struct atapi_device
 {
 	u32 base_port;
+	u16 media_type;
 	bool master;
 	bool lba48_support;
 } atapi_device_t;

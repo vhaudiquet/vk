@@ -1,7 +1,7 @@
-#include "../system.h"
-#include "cpu/cpu.h"
-#include "../util/util.h"
+#include "system.h"
+#include "cpu.h"
 #include "error/error.h"
+#include "tasking/task.h"
 
 struct regs_int
 {
@@ -65,14 +65,10 @@ static void handle_page_fault(struct regs_int* r)
 }
 
 void keyboard_interrupt();
-//void schedule();
-//u32 time = 0;
-#include "tasking/task.h"
 void irq_handler(u32 irq_number)
 {
 	switch(irq_number)
 	{
-		//case 0: {time++; if(time){time = 0; schedule();} break;} //Clock interrupt
 		case 1: {keyboard_interrupt(); break;} //Keyboard interrupt
 		case 14: kprintf("%lPrimary ATA interrupt\n", 3); break; //we dont care about ATA interrupts for now, as we are using ATA PIO mode and polling the status
 		case 15: kprintf("%lSecondary ATA interrupt\n", 3); break;

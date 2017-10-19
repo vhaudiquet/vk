@@ -25,9 +25,9 @@ u32 DATA_PORT = 0x1F0;
 #define BYTES_PER_SECTOR 512
 
 static u8 ata_pio_poll_status();
-static hdd_device_t* ata_identify_drive(u32 base_port, bool master);
+static block_device_t* ata_identify_drive(u32 base_port, bool master);
 static void atapi_identify_drive(u32 base_port, bool master);
-static void ata_read_partitions(hdd_device_t* drive);
+static void ata_read_partitions(block_device_t* drive);
 static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
 extern void _irq14();
@@ -47,10 +47,10 @@ void ata_install()
 			if(in > 0 && port > 0)
 			{
 				kprintf("%lFound AHCI ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
-				hdd_device_t* primary = ata_identify_drive(port, true);
-				if(primary) {sd_devices[sd_devices_count] = primary; sd_devices_count++;}
-				hdd_device_t* secondary = ata_identify_drive(port, false);
-				if(secondary) {sd_devices[sd_devices_count] = secondary; sd_devices_count++;}
+				block_device_t* primary = ata_identify_drive(port, true);
+				if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
+				block_device_t* secondary = ata_identify_drive(port, false);
+				if(secondary) {block_devices[block_device_count] = secondary; block_device_count++;}
 				//TEMP
 				init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
 			}
@@ -62,10 +62,10 @@ void ata_install()
 			if(in > 0 && port > 0)
 			{
 				kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
-				hdd_device_t* primary = ata_identify_drive(port, true);
-				if(primary) {sd_devices[sd_devices_count] = primary; sd_devices_count++;}
-				hdd_device_t* secondary = ata_identify_drive(port, false);
-				if(secondary) {sd_devices[sd_devices_count] = secondary; sd_devices_count++;}
+				block_device_t* primary = ata_identify_drive(port, true);
+				if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
+				block_device_t* secondary = ata_identify_drive(port, false);
+				if(secondary) {block_devices[block_device_count] = secondary; block_device_count++;}
 				//TEMP
 				init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
 				
@@ -79,22 +79,22 @@ void ata_install()
 	//installing standard PRIMARY_ATA and SECONDARY_ATA ports
 	if(!std_primary_initialized)
 	{
-		hdd_device_t* primary = ata_identify_drive(PRIMARY_ATA, true);
-		if(primary) {hd_devices[hd_devices_count] = primary; hd_devices_count++;}
-		hdd_device_t* secondary = ata_identify_drive(PRIMARY_ATA, false);
-		if(secondary) {hd_devices[hd_devices_count] = primary; hd_devices_count++;}
+		block_device_t* primary = ata_identify_drive(PRIMARY_ATA, true);
+		if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
+		block_device_t* secondary = ata_identify_drive(PRIMARY_ATA, false);
+		if(secondary) {block_devices[block_device_count] = primary; block_device_count++;}
 	}
 
 	if(!std_secondary_initialized)
 	{
-		hdd_device_t* primary = ata_identify_drive(SECONDARY_ATA, true);
-		if(primary) {hd_devices[hd_devices_count] = primary; hd_devices_count++;}
-		hdd_device_t* secondary = ata_identify_drive(SECONDARY_ATA, false);
-		if(secondary) {hd_devices[hd_devices_count] = primary; hd_devices_count++;}
+		block_device_t* primary = ata_identify_drive(SECONDARY_ATA, true);
+		if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
+		block_device_t* secondary = ata_identify_drive(SECONDARY_ATA, false);
+		if(secondary) {block_devices[block_device_count] = primary; block_device_count++;}
 	}
 }
 
-static hdd_device_t* ata_identify_drive(u32 base_port, bool master)
+static block_device_t* ata_identify_drive(u32 base_port, bool master)
 {
 	//select drive
 	DATA_PORT = base_port;
@@ -133,8 +133,8 @@ static hdd_device_t* ata_identify_drive(u32 base_port, bool master)
 		u8 t0 = inb(LBA_MID_PORT);
 		u8 t1 = inb(LBA_HI_PORT);
 		if(t0 == 0x14 && t1 == 0xEB) {atapi_identify_drive(base_port, master); return 0;}
-		else if(t0 == 0x3C && t1 == 0xC3) kprintf("%l(is a sata device)\n", 3); //TEMP
-		else kprintf("%l(unknown error)\n", 3); //TEMP
+		else if(t0 == 0x3C && t1 == 0xC3) kprintf("%l(ata id: is a sata device)\n", 3); //TEMP
+		else kprintf("%l(ata id: unknown error)\n", 3); //TEMP
 		return 0;
 	}
 
@@ -153,10 +153,10 @@ static hdd_device_t* ata_identify_drive(u32 base_port, bool master)
 
 	#ifdef MEMLEAK_DBG
 	ata_device_t* current = kmalloc(sizeof(ata_device_t), "ATA Device struct");
-	hdd_device_t* current_top = kmalloc(sizeof(hdd_device_t), "ATA HDD Device struct");
+	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATA HDD Device struct");
 	#else
 	ata_device_t* current = kmalloc(sizeof(ata_device_t));
-	hdd_device_t* current_top = kmalloc(sizeof(hdd_device_t));
+	block_device_t* current_top = kmalloc(sizeof(block_device_t));
 	#endif
 
 	if(rsize_64 > 0 && lba48)
@@ -171,6 +171,7 @@ static hdd_device_t* ata_identify_drive(u32 base_port, bool master)
 
 	current_top->device_struct = (void*) current;
 	current_top->device_type = ATA_DEVICE;
+	current_top->device_class = HARD_DISK_DRIVE;
 
 	ata_read_partitions(current_top);
 
@@ -217,21 +218,22 @@ static void atapi_identify_drive(u32 base_port, bool master)
 
 	#ifdef MEMLEAK_DBG
 	atapi_device_t* current = kmalloc(sizeof(atapi_device_t), "ATAPI Device struct");
-	reader_device_t* current_top = kmalloc(sizeof(reader_device_t), "ATAPI Reader Device struct");
+	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATAPI Block Device struct");
 	#else
 	atapi_device_t* current = kmalloc(sizeof(atapi_device_t));
-	reader_device_t* current_top = kmalloc(sizeof(reader_device_t));
+	block_device_t* current_top = kmalloc(sizeof(block_device_t));
 	#endif
 	current->lba48_support = lba48;
 	current->master = master;
 	current->base_port = base_port;
+	current->media_type = unknown_data;
 	
-	current_top->media_type = unknown_data;
 	current_top->device_type = ATAPI_DEVICE;
 	current_top->device_struct = (void*) current;
+	current_top->device_class = CD_DRIVE;
 
-	reader_devices[reader_devices_count] = current_top;
-	reader_devices_count++;
+	block_devices[block_device_count] = current_top;
+	block_device_count++;
 }
 
 static void ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
@@ -638,7 +640,7 @@ static u8 ata_pio_poll_status()
 	return status;
 }
 
-static void ata_read_partitions(hdd_device_t* drive)
+static void ata_read_partitions(block_device_t* drive)
 {
 	if(drive->device_type != ATA_DEVICE) fatal_kernel_error("How did you try to ATA read partitions of a non-ATA device ?", "ATA_READ_PARTITIONS");
 	ata_device_t* current = (ata_device_t*) drive->device_struct;

@@ -20,10 +20,10 @@ u16 current_mount_points = 0;
 
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp);
 
-//u8 detect_fs_type(hdd_device_t* drive, u8 partition) (find by signature)
-//void mount_volume(char* path, hdd_device_t* drive, u8 partition) (using method above)
+//u8 detect_fs_type(block_device_t* drive, u8 partition) (find by signature)
+//void mount_volume(char* path, block_device_t* drive, u8 partition) (using method above)
 
-u8 detect_fs_type(hdd_device_t* drive, u8 partition)
+u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
     if(!drive) return 0;
     
@@ -41,7 +41,7 @@ u8 detect_fs_type(hdd_device_t* drive, u8 partition)
     }
 
     u32 offset = drive->partitions[partition]->start_lba;
-    hdd_read(offset, 0, buff, 512, drive);
+    block_read_flexible(offset, 0, buff, 512, drive);
     
     //FAT8 and 16 signature offset kprintf("s: %s\n", buff+54);
     if(((*(buff+66) == 0x28) | (*(buff+66) == 0x29)) && (strcfirst("FAT32", (char*) buff+82) == 5))
@@ -54,7 +54,7 @@ u8 detect_fs_type(hdd_device_t* drive, u8 partition)
     return 0;
 }
 
-u8 mount_volume(char* path, hdd_device_t* drive, u8 partition)
+u8 mount_volume(char* path, block_device_t* drive, u8 partition)
 {
     void* fs = 0;
     u8 fs_type = detect_fs_type(drive, partition);

@@ -50,6 +50,8 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     asm("sti");
 
     //getting live / root dir infos
+    u8 root_drive = 0;
+    u8 part_index = 1;
     u8 mode = aboot_hint_present;
     if(!mode)
     {
@@ -60,14 +62,30 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
             else if((mbt->boot_device >> 24 == 0x80) | (mbt->boot_device >> 24 == 0x81)) 
             {
                 mode = KERNEL_MODE_INSTALLED;
-                if(hd_devices[0])
-                    strncpy(aroot_dir, "hda1", 4);
-                else if(sd_devices[0])
-                    strncpy(aroot_dir, "sda1", 4);
-                else fatal_kernel_error("Could not guess root device...\n", "KERNEL_CONTEXT_GUESSING");
+                while(block_devices[root_drive]->device_class != HARD_DISK_DRIVE && root_drive < block_device_count)
+                {
+                    root_drive++;
+                    //TODO : check if this loop ended well or not ; if not : fatal error
+                }
             }
-            else if(mbt->boot_device >> 24 == 0xE0) {mode = KERNEL_MODE_LIVE;strncpy(aroot_dir, "cd1", 3);}
-            else if(mbt->boot_device >> 24 == 0xA0) {mode = KERNEL_MODE_LIVE;strncpy(aroot_dir, "usb1", 4);}
+            else if(mbt->boot_device >> 24 == 0xE0) 
+            {
+                mode = KERNEL_MODE_LIVE;
+                while(block_devices[root_drive]->device_class != CD_DRIVE && root_drive < block_device_count)
+                {
+                    root_drive++;
+                    //TODO : check if this loop ended well or not ; if not : fatal error
+                }
+            }
+            else if(mbt->boot_device >> 24 == 0xA0) 
+            {
+                mode = KERNEL_MODE_LIVE;
+                while(block_devices[root_drive]->device_class != USB_DRIVE && root_drive < block_device_count)
+                {
+                    root_drive++;
+                    //TODO : check if this loop ended well or not ; if not : fatal error
+                }
+            }
             else mode = 0;
         }
 
@@ -93,20 +111,20 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     else if(mode == KERNEL_MODE_INSTALLED)
     {
         //mount root dir with root_dir partition
-        u8 drive_index = (u8) (aroot_dir[2] - 97);
-        u8 part_index = (u8) (aroot_dir[3] - 49);
-        char h = *aroot_dir;
+        //u8 drive_index = (u8) (aroot_dir[2] - 97);
+        //u8 part_index = (u8) (aroot_dir[3] - 49);
+        //char h = *aroot_dir;
 
-        kprintf("Mounting root dir to drive %cd%c%u...", h, drive_index+'a', part_index+1);
+        //kprintf("Mounting root dir to drive %cd%c%u...", h, drive_index+'a', part_index+1);
 
-        hdd_device_t* dev = h == 'h' ? hd_devices[drive_index] : sd_devices[drive_index];
+        block_device_t* dev = block_devices[root_drive];
         if(!dev) fatal_kernel_error("Could not find root drive !", "INSTALLED_KERNEL_LOADING");
-        if(!mount_volume("/", dev, part_index))
+        if(!mount_volume("/", dev, (u8) (part_index-1)))
         {
             vga_text_failmsg();
             fatal_kernel_error("Could not mount root dir.", "INSTALLED_KERNEL_LOADING");
         }
-        vga_text_okmsg();
+        //vga_text_okmsg();
     }
 
     //running /sys/init
