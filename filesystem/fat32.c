@@ -103,7 +103,10 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 	kmalloc(sizeof(bpb_t));
 	#endif
 	u32 offset = drive->partitions[partition]->start_lba;
-	block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive);
+	if(block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive))
+	{
+		kfree(bpb); return 0;
+	}
 
 	//check if it is a valid fat32 fs
 	if(*bpb->system_id_string != 'F' || *(bpb->system_id_string+1) != 'A' || *(bpb->system_id_string+2) != 'T' || *(bpb->system_id_string+3) != '3' || *(bpb->system_id_string+4) != '2')
@@ -416,8 +419,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 	if(count+offset < fs->bpb->sectors_per_cluster*512)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, (u32) file->fsdisk_loc);
-		block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
-		return 0;
+		return block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
 	}
 	
 	//alright, we want to read more than 1 cluster, so we'll need to get the whole cluster chain

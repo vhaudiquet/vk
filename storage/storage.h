@@ -66,8 +66,8 @@ typedef struct block_device
 extern block_device_t** block_devices;
 extern u16 block_device_count;
 
-void block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
-void block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
+u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
+u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
 
 void install_block_devices();
 
@@ -87,7 +87,7 @@ typedef struct atapi_device
 	bool lba48_support;
 } atapi_device_t;
 void ata_install();
-void ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-void ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 
 #endif

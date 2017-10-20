@@ -26,9 +26,9 @@ u32 DATA_PORT = 0x1F0;
 
 static u8 ata_pio_poll_status();
 static block_device_t* ata_identify_drive(u32 base_port, bool master);
-static void atapi_identify_drive(u32 base_port, bool master);
+static block_device_t* atapi_identify_drive(u32 base_port, bool master);
 static void ata_read_partitions(block_device_t* drive);
-static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
 extern void _irq14();
 void ata_install()
@@ -132,7 +132,7 @@ static block_device_t* ata_identify_drive(u32 base_port, bool master)
 	{
 		u8 t0 = inb(LBA_MID_PORT);
 		u8 t1 = inb(LBA_HI_PORT);
-		if(t0 == 0x14 && t1 == 0xEB) {atapi_identify_drive(base_port, master); return 0;}
+		if(t0 == 0x14 && t1 == 0xEB) {return atapi_identify_drive(base_port, master);}
 		else if(t0 == 0x3C && t1 == 0xC3) kprintf("%l(ata id: is a sata device)\n", 3); //TEMP
 		else kprintf("%l(ata id: unknown error)\n", 3); //TEMP
 		return 0;
@@ -178,7 +178,7 @@ static block_device_t* ata_identify_drive(u32 base_port, bool master)
 	return current_top;
 }
 
-static void atapi_identify_drive(u32 base_port, bool master)
+static block_device_t* atapi_identify_drive(u32 base_port, bool master)
 {
 	u8 status;
 
@@ -195,7 +195,7 @@ static void atapi_identify_drive(u32 base_port, bool master)
 	status = inb(COMMAND_PORT);
 	if(status == 0x0)
 	{
-		return; //no device (strange and should never happen)
+		return 0; //no device (strange and should never happen)
 	}
 
 	//wait for drive busy/drive error
@@ -204,7 +204,7 @@ static void atapi_identify_drive(u32 base_port, bool master)
 	if(status & 0x01)
 	{
 		fatal_kernel_error("Unknown ATAPI error", "ATAPI_IDENTIFY");//TEMP
-		return;
+		return 0;
 	}
 
 	//at this point we know that data is ready
@@ -232,15 +232,14 @@ static void atapi_identify_drive(u32 base_port, bool master)
 	current_top->device_struct = (void*) current;
 	current_top->device_class = CD_DRIVE;
 
-	block_devices[block_device_count] = current_top;
-	block_device_count++;
+	return current_top;
 }
 
-static void ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
 	//kprintf("writing sector %d at off %d for %d bytes into buffer at 0x%X\n", sector, offset, count, data);
 	//verify that sector is really a 28-bits integer (the fatal error is temp)
-	if(sector & 0xF0000000) fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_28");
+	if(sector & 0xF0000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_28");
 
 	//calculate sector count
 	u32 scount = count / BYTES_PER_SECTOR;
@@ -345,13 +344,14 @@ static void ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_de
 	
 	u8 status = ata_pio_poll_status();
 	
-	if(status & 0x1) fatal_kernel_error("Drive error while flushing", "WRITE_28"); //temp debug
+	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_28"); //temp debug
+	return DISK_SUCCESS;
 }
 
-static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
 	//verify that sector is really a 28-bits integer (the fatal error is temp)
-	if(sector & 0xF0000000) fatal_kernel_error("Trying to read an unadressable sector", "READ_28");
+	if(sector & 0xF0000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to read an unadressable sector", "READ_28");
 
 	//calculate sector count
 	u32 scount = count / BYTES_PER_SECTOR;
@@ -360,7 +360,7 @@ static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_dev
 	//calculate sector offset
 	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
 
-	if(scount > 255) fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
+	if(scount > 255) return DISK_FAIL_INTERNAL; //fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
 
 	//select drive and write sector addr (4 upper bits)
 	DATA_PORT = drive->base_port;
@@ -384,7 +384,7 @@ static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_dev
 
 	//wait for drive to be ready
 	u8 status = ata_pio_poll_status();
-	if(status & 0x1) fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
+	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 
 	//actually read the data
 	u32 data_read = 0;
@@ -404,7 +404,7 @@ static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_dev
 		if(data_read % (512*32))
 		{
 			u8 status = ata_pio_poll_status();
-			if(status & 0x1) fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
+			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 		}
 	}
 
@@ -416,12 +416,14 @@ static void ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_dev
 		inw(DATA_PORT);
 		data_read+=2;
 	}
+
+	return DISK_SUCCESS;
 }
 
-static void ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	//verify that sector is really 48-bits integer (the fatal error is temp)
-	if(sector & 0xFFFF000000000000) fatal_kernel_error("Trying to read an unadressable sector", "READ_48");
+	if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to read an unadressable sector", "READ_48");
 
 	//calculate sector count
 	u32 scount = (u32) (count / BYTES_PER_SECTOR);
@@ -430,7 +432,7 @@ static void ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_dev
 	//calculate sector offset
 	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
 
-	if(scount > 255) fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
+	if(scount > 255) return DISK_FAIL_INTERNAL;//fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
 
 	//select drive
 	DATA_PORT = drive->base_port;
@@ -460,7 +462,7 @@ static void ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_dev
 	//wait for drive to be ready
 	u8 status = ata_pio_poll_status();
 
-	if(status & 0x1) fatal_kernel_error("Drive error while reading", "READ_48"); //temp debug
+	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_48"); //temp debug
 
 	//actually read the data
 	u32 data_read = 0;
@@ -480,7 +482,7 @@ static void ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_dev
 		if(data_read % (512*32))
 		{
 			u8 status = ata_pio_poll_status();
-			if(status & 0x1) fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
+			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 		}
 	}
 	
@@ -490,12 +492,14 @@ static void ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_dev
 		inw(DATA_PORT);
 		data_read+=2;
 	}
+
+	return DISK_SUCCESS;
 }
 
-static void ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	//verify that sector is really a 48-bits integer (the fatal error is temp)
-	if(sector & 0xFFFF000000000000) fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_48");
+	if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_48");
 
 	//calculating sector count
 	u32 scount = (u32) (count / BYTES_PER_SECTOR);
@@ -608,23 +612,24 @@ static void ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_de
 	
 	u8 status = ata_pio_poll_status();
 	
-	if(status & 0x1) fatal_kernel_error("Drive error while flushing", "WRITE_48"); //temp debug
+	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_48"); //temp debug
+	return DISK_SUCCESS;
 }
 
-void ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	if(sector > U32_MAX && drive->lba48_support)
-		ata_pio_read_48(sector, offset, data, count, drive);
+		return ata_pio_read_48(sector, offset, data, count, drive);
 	else
-		ata_pio_read_28((u32) sector, offset, data, (u32) count, drive);
+		return ata_pio_read_28((u32) sector, offset, data, (u32) count, drive);
 }
 
-void ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 		if(sector > U32_MAX && drive->lba48_support)
-			ata_pio_write_48(sector, offset, data, count, drive);
+			return ata_pio_write_48(sector, offset, data, count, drive);
 		else
-			ata_pio_write_28((u32) sector, offset, data, (u32) count, drive);
+			return ata_pio_write_28((u32) sector, offset, data, (u32) count, drive);
 }
 
 static u8 ata_pio_poll_status()
