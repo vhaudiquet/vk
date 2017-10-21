@@ -1,3 +1,19 @@
+/*  
+    This file is part of VK.
+
+    VK is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, version 2.
+
+    VK is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with VK.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "storage.h"
 
 #define BYTES_PER_SECTOR 512
@@ -10,7 +26,6 @@ static u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
     /*prepare a PRDT (Physical Region Descriptor Table)*/
     //u32 prdt_phys = reserve_block(prdt_size, PHYS_KERNELF_BLOCK_TYPE);
     //map_physical(prdt_phys, virtual, kernel_page_dir);
-    //OR kmalloc(sizeof(prdt)) and get_physical() BUT the fact that we need u32 align and contiguous in phys can break there so...
 
     /*Send the physical PRDT addr to Bus Master PRDT Register*/
 
