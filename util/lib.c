@@ -292,7 +292,7 @@ static void vkprintf(const unsigned char* args, va_list ap)
     u8 color = 0b00000111;
     u8 level = 0;
 
-	vga_text_puts((unsigned char*)"[KERNEL] ", 0b00001111);
+	//vga_text_puts((unsigned char*)"[KERNEL] ", 0b00001111);
 	while(*args)
 	{
 		if(*args == '%')

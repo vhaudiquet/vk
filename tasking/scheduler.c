@@ -29,6 +29,7 @@ typedef struct ASLEEP_PROCESS_D
     u8 sleep_data;
 } asleep_data_t;
 
+bool scheduler_started = false;
 process_t* current_process = 0;
 list_entry_t* p_wait_list = 0; u32 p_wl_size = 0;
 queue_t* p_ready_queue = 0;
@@ -36,6 +37,12 @@ queue_t* p_ready_queue = 0;
 void scheduler_init()
 {
     p_ready_queue = queue_init(10);
+}
+
+void scheduler_start()
+{
+    scheduler_started = true;
+    asm("sti");
 }
 
 process_t* toswitch = 0;

@@ -90,20 +90,49 @@ void install_block_devices();
 //ATA devices
 typedef struct ata_device
 {
-	u32 base_port;
+	struct pci_device* controller;
+	u16 base_port;
+	u16 control_port;
 	u16 sectors_per_block;
+	u8 irq;
 	bool master;
 	bool lba48_support;
 } ata_device_t;
 typedef struct atapi_device
 {
-	u32 base_port;
+	struct pci_device* controller;
+	u16 base_port;
+	u16 control_port;
 	u16 media_type;
+	u8 irq;
 	bool master;
 	bool lba48_support;
 } atapi_device_t;
 void ata_install();
 u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+
+u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+
+//GLOBAL ATA
+//extern u32 DATA_PORT;
+#define DATA_PORT(drive) drive->base_port
+#define ERROR_PORT(drive) drive->base_port+1
+#define SECTOR_COUNT_PORT(drive) drive->base_port+2
+#define LBA_LOW_PORT(drive) drive->base_port+3
+#define LBA_MID_PORT(drive) drive->base_port+4
+#define LBA_HI_PORT(drive) drive->base_port+5
+#define DEVICE_PORT(drive) drive->base_port+6
+#define COMMAND_PORT(drive) drive->base_port+7
+#define CONTROL_PORT(drive) drive->control_port
+
+//#define ERROR_PORT DATA_PORT+1
+//#define SECTOR_COUNT_PORT DATA_PORT+2
+//#define LBA_LOW_PORT DATA_PORT+3
+//#define LBA_MID_PORT DATA_PORT+4
+//#define LBA_HI_PORT DATA_PORT+5
+//#define DEVICE_PORT DATA_PORT+6 //talk to master or slave ++LBA_TOP if 48 bits
+//#define COMMAND_PORT DATA_PORT+7
+//#define CONTROL_PORT DATA_PORT+0x206
 
 #endif

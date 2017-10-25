@@ -16,6 +16,7 @@
 
 #include "storage.h"
 #include "memory/mem.h"
+#include "tasking/task.h"
 
 block_device_t** block_devices = 0;
 u16 block_device_count = 0;
@@ -34,7 +35,10 @@ u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device
 {
     if(drive->device_type == ATA_DEVICE)
     {
-        return ata_pio_read(sector, offset, data, count, (ata_device_t*) drive->device_struct);
+        //if(!scheduler_started)
+            return ata_pio_read(sector, offset, data, count, (ata_device_t*) drive->device_struct);
+        //else
+        //    return ata_dma_read_28((u32) sector, offset, data, (u32) count, (ata_device_t*) drive->device_struct);
     }
     return DISK_FAIL_INTERNAL;
 }

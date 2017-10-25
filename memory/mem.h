@@ -68,7 +68,6 @@ typedef struct p_block
     u32 type;
 } p_block_t;
 void physmem_get(multiboot_info_t* mbt);
-void print_mem_map(); //DEBUG
 u32 get_free_mem();
 extern u64 detected_memory;
 extern u32 detected_memory_below32;
@@ -84,6 +83,7 @@ void finish_paging();
 void pd_switch(u32* pd);
 u32* get_kernel_pd_clone();
 void map_memory(u32 size, u32 virt_addr, u32* page_directory);
+void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory);
 bool is_mapped(u32 virt_addr, u32* page_directory);
 u32 get_physical(u32 virt_addr, u32* page_directory);
 //void map_physical(p_block_t* tm, u32 virt_addr);

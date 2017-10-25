@@ -109,11 +109,11 @@ process_t* init_idle_process()
     idle_process->eip = (u32) idle_loop; //IDLE LOOP
     idle_process->esp = idle_process->kesp = 
     #ifdef MEMLEAK_DBG
-    ((u32) kmalloc(1024, "idle process kernel stack"))+1023;
+    ((u32) kmalloc(256, "idle process kernel stack"))+255;
     #else
-    ((u32) kmalloc(1024))+1023;
+    ((u32) kmalloc(256))+255;
     #endif
-    idle_process->base_stack = idle_process->base_kstack = idle_process->kesp - 1023;
+    idle_process->base_stack = idle_process->base_kstack = idle_process->kesp - 255;
     idle_process->page_directory = kernel_page_directory;
     return idle_process;
 }

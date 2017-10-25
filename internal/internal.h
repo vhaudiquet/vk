@@ -22,6 +22,12 @@
 void pic_install();
 
 //PCI Controller
+#define BAR0 0x10
+#define BAR1 0x14
+#define BAR2 0x18
+#define BAR3 0x1C
+#define BAR4 0x20
+#define BAR5 0x24
 typedef struct pci_device
 {
     struct pci_device* next;
@@ -44,7 +50,6 @@ extern pci_device_t* pci_last;
 extern u8 pci_devices_count;
 
 void pci_install();
-void pci_print_devices();
 u32 pci_read_device(pci_device_t* dev, u32 reg);
 
 #endif

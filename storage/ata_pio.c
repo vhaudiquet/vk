@@ -25,28 +25,19 @@
 #include "internal/internal.h"
 #include "cpu/cpu.h"
 
-//care : data port is 16bits
 #define PRIMARY_ATA 0x1F0
 #define SECONDARY_ATA 0x170
-u32 DATA_PORT = 0x1F0;
-#define ERROR_PORT DATA_PORT+1
-#define SECTOR_COUNT_PORT DATA_PORT+2
-#define LBA_LOW_PORT DATA_PORT+3
-#define LBA_MID_PORT DATA_PORT+4
-#define LBA_HI_PORT DATA_PORT+5
-#define DEVICE_PORT DATA_PORT+6 //talk to master or slave ++LBA_TOP if 48 bits
-#define COMMAND_PORT DATA_PORT+7
-#define CONTROL_PORT DATA_PORT+0x206
 
 #define BYTES_PER_SECTOR 512
 
-static u8 ata_pio_poll_status();
-static block_device_t* ata_identify_drive(u32 base_port, bool master);
-static block_device_t* atapi_identify_drive(u32 base_port, bool master);
+static u8 ata_pio_poll_status(ata_device_t* drive);
+static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool master, u8 interrupt, pci_device_t* controller);
+static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, bool master, u8 interrupt, pci_device_t* controller);
 static void ata_read_partitions(block_device_t* drive);
 static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
 extern void _irq14();
+extern void _irq15();
 void ata_install()
 {
 	bool std_primary_initialized = false;
@@ -56,37 +47,45 @@ void ata_install()
 	pci_device_t* curr = pci_first;
 	while(curr != pci_last)
 	{
-		if(curr->class_id == 0x01 && curr->subclass_id == 0x06) 
+		if(curr->class_id == 0x01)
 		{
-			u32 port = pci_read_device(curr, 0x10) >> 2 << 2;
-			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8));
-			if(in > 0 && port > 0)
-			{
-				kprintf("%lFound AHCI ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
-				block_device_t* primary = ata_identify_drive(port, true);
-				if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
-				block_device_t* secondary = ata_identify_drive(port, false);
-				if(secondary) {block_devices[block_device_count] = secondary; block_device_count++;}
-				//TEMP
-				init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
-			}
-		}
-		else if(curr->class_id == 0x01 && curr->subclass_id == 0x01) 
-		{
-			u32 port = pci_read_device(curr, 0x10) >> 2 << 2;
-			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8));
-			if(in > 0 && port > 0)
+			//bar0: primary ata data port
+			u16 port = pci_read_device(curr, BAR0) & 0b1111111111111100;// >> 2 << 2;
+			if((port == 0x0) | (port == 0x1)) port = 0x1F0;
+			//bar1: primary ata control port
+			u16 control_port = pci_read_device(curr, BAR1) & 0b1111111111111100;
+			if((control_port == 0x0) | (control_port == 0x1)) control_port = 0x3F6;
+			//bar2: secondary ata data port
+			u16 port_s = pci_read_device(curr, BAR2) & 0b1111111111111100;
+			if((port_s == 0x0) | (port_s == 0x1)) port_s = 0x170;
+			//bar3: secondary ata control port
+			u16 control_port_s = pci_read_device(curr, BAR3) & 0b1111111111111100;
+			if((control_port_s == 0x0) | (control_port_s == 0x1)) control_port_s = 0x376;
+
+			//pci interrupt
+			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
+			if(!in){in = 14;}
+
+			if(curr->subclass_id == 0x01)
 			{
 				kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
-				block_device_t* primary = ata_identify_drive(port, true);
-				if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
-				block_device_t* secondary = ata_identify_drive(port, false);
-				if(secondary) {block_devices[block_device_count] = secondary; block_device_count++;}
-				//TEMP
-				init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
-				
-				if(port == PRIMARY_ATA) std_primary_initialized = true;
-				else if(port == SECONDARY_ATA) std_secondary_initialized = true;
+				block_device_t* primary_master = ata_identify_drive(port, control_port, true, in, curr);
+				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
+				block_device_t* primary_slave = ata_identify_drive(port, control_port, false, in, curr);
+				if(primary_slave) {block_devices[block_device_count] = primary_slave; block_device_count++;}
+				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, true, (u8) (in+1), curr);
+				if(secondary_master) {block_devices[block_device_count] = secondary_master; block_device_count++;}
+				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, false, (u8) (in+1), curr);
+				if(secondary_slave) {block_devices[block_device_count] = secondary_slave; block_device_count++;}
+				//TEMP IDT
+				if((primary_master != 0) | (primary_slave != 0)) init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
+				if((secondary_master != 0) | (secondary_slave != 0)) init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);
+				if((port == PRIMARY_ATA) | (port_s == PRIMARY_ATA)) std_primary_initialized = true;
+				if((port == SECONDARY_ATA) | (port_s == SECONDARY_ATA)) std_secondary_initialized = true;
+			}
+			else if(curr->subclass_id == 0x06)
+			{
+				kprintf("%lFound unsupported AHCI ATA controller\n", 2);
 			}
 		}
 		curr = curr->next;
@@ -95,60 +94,76 @@ void ata_install()
 	//installing standard PRIMARY_ATA and SECONDARY_ATA ports
 	if(!std_primary_initialized)
 	{
-		block_device_t* primary = ata_identify_drive(PRIMARY_ATA, true);
-		if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
-		block_device_t* secondary = ata_identify_drive(PRIMARY_ATA, false);
-		if(secondary) {block_devices[block_device_count] = primary; block_device_count++;}
+		kprintf("%lATA PRIMARY NOT INITIALIZED ?\n", 2);
+		block_device_t* master = ata_identify_drive(PRIMARY_ATA, 0x3F6, true, 14, 0);
+		if(master) {block_devices[block_device_count] = master; block_device_count++;}
+		block_device_t* slave = ata_identify_drive(PRIMARY_ATA, 0x3F6, false, 14, 0);
+		if(slave) {block_devices[block_device_count] = slave; block_device_count++;}
 	}
 
 	if(!std_secondary_initialized)
 	{
-		block_device_t* primary = ata_identify_drive(SECONDARY_ATA, true);
-		if(primary) {block_devices[block_device_count] = primary; block_device_count++;}
-		block_device_t* secondary = ata_identify_drive(SECONDARY_ATA, false);
-		if(secondary) {block_devices[block_device_count] = primary; block_device_count++;}
+		kprintf("%lATA SECONDARY NOT INITIALIZED ?\n", 2);
+		block_device_t* master = ata_identify_drive(SECONDARY_ATA, 0x376, true, 15, 0);
+		if(master) {block_devices[block_device_count] = master; block_device_count++;}
+		block_device_t* slave = ata_identify_drive(SECONDARY_ATA, 0x376,false, 15, 0);
+		if(slave) {block_devices[block_device_count] = slave; block_device_count++;}
 	}
 }
 
-static block_device_t* ata_identify_drive(u32 base_port, bool master)
+static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool master, u8 irq, pci_device_t* controller)
 {
-	//select drive
-	DATA_PORT = base_port;
+	//prepare data structs
+	#ifdef MEMLEAK_DBG
+	ata_device_t* current = kmalloc(sizeof(ata_device_t), "ATA Device struct");
+	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATA HDD Device struct");
+	#else
+	ata_device_t* current = kmalloc(sizeof(ata_device_t));
+	block_device_t* current_top = kmalloc(sizeof(block_device_t));
+	#endif
 
-	outb(DEVICE_PORT, 0xA0); //always master there, to see if there is a device on the cable or not
-	u8 status = inb(COMMAND_PORT);
+	//setting up parameters
+	current->master = master;
+	current->base_port = base_port;
+	current->control_port = control_port;
+	current->controller = controller;
+	current->irq = irq;
+
+	//select drive
+	outb(DEVICE_PORT(current), 0xA0); //always master there, to see if there is a device on the cable or not
+	u8 status = inb(COMMAND_PORT(current));
 	if(status == 0xFF)
 	{
 		return 0; //no device found
 	}
 
 	//select drive
-	outb(DEVICE_PORT, master ? 0xA0 : 0xB0); //0xB0 = slave
+	outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
 
 	//initialize drive
-	outb(CONTROL_PORT, 0); //clears bits of control register
+	outb(CONTROL_PORT(current), 0); //clears bits of control register
 
 	//identify
-	outb(SECTOR_COUNT_PORT, 0);
-	outb(LBA_LOW_PORT, 0);
-	outb(LBA_MID_PORT, 0);
-	outb(LBA_HI_PORT, 0);
-	outb(COMMAND_PORT, 0xEC); //identify cmd
+	outb(SECTOR_COUNT_PORT(current), 0);
+	outb(LBA_LOW_PORT(current), 0);
+	outb(LBA_MID_PORT(current), 0);
+	outb(LBA_HI_PORT(current), 0);
+	outb(COMMAND_PORT(current), 0xEC); //identify cmd
 
-	status = inb(COMMAND_PORT);
+	status = inb(COMMAND_PORT(current));
 	if(status == 0x0)
 	{
 		return 0; //no device
 	}
 	
 	//wait for drive busy/drive error
-	status = ata_pio_poll_status();
+	status = ata_pio_poll_status(current);
 
 	if(status & 0x01)
 	{
-		u8 t0 = inb(LBA_MID_PORT);
-		u8 t1 = inb(LBA_HI_PORT);
-		if(t0 == 0x14 && t1 == 0xEB) {return atapi_identify_drive(base_port, master);}
+		u8 t0 = inb(LBA_MID_PORT(current));
+		u8 t1 = inb(LBA_HI_PORT(current));
+		if(t0 == 0x14 && t1 == 0xEB) {return atapi_identify_drive(base_port, control_port, master, irq, controller);}
 		else if(t0 == 0x3C && t1 == 0xC3) kprintf("%l(ata id: is a sata device)\n", 3); //TEMP
 		else kprintf("%l(ata id: unknown error)\n", 3); //TEMP
 		return 0;
@@ -158,7 +173,7 @@ static block_device_t* ata_identify_drive(u32 base_port, bool master)
 	u16 i; u16 size[2]; u16 size_64[4]; bool lba48 = false; u16 spb = 0;
 	for(i = 0;i < BYTES_PER_SECTOR/2; i++)
 	{
-		u16 data = inw(DATA_PORT);
+		u16 data = inw(DATA_PORT(current));
 		if(i == 46) spb = data & 0xFF;
 		if(i == 83) lba48 = (data >> 9 << 15 ? 1 : 0);
 		if(i == 60) size[0] = data; if(i == 61) size[1] = data;
@@ -167,22 +182,12 @@ static block_device_t* ata_identify_drive(u32 base_port, bool master)
 	u32 rsize = *((u32*) size);
 	u64 rsize_64 = *((u64*) size_64);
 
-	#ifdef MEMLEAK_DBG
-	ata_device_t* current = kmalloc(sizeof(ata_device_t), "ATA Device struct");
-	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATA HDD Device struct");
-	#else
-	ata_device_t* current = kmalloc(sizeof(ata_device_t));
-	block_device_t* current_top = kmalloc(sizeof(block_device_t));
-	#endif
-
 	if(rsize_64 > 0 && lba48)
 		current_top->device_size = (u32) (rsize_64*BYTES_PER_SECTOR/1024/1024);
 	else
 		current_top->device_size = (u32) (rsize*BYTES_PER_SECTOR/1024/1024);
 
 	current->lba48_support = lba48;
-	current->master = master;
-	current->base_port = base_port;
 	current->sectors_per_block = spb;
 
 	current_top->device_struct = (void*) current;
@@ -194,28 +199,43 @@ static block_device_t* ata_identify_drive(u32 base_port, bool master)
 	return current_top;
 }
 
-static block_device_t* atapi_identify_drive(u32 base_port, bool master)
+static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, bool master, u8 irq, pci_device_t* controller)
 {
+	//prepare data structs
+	#ifdef MEMLEAK_DBG
+	atapi_device_t* current = kmalloc(sizeof(atapi_device_t), "ATAPI Device struct");
+	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATAPI Block Device struct");
+	#else
+	atapi_device_t* current = kmalloc(sizeof(atapi_device_t));
+	block_device_t* current_top = kmalloc(sizeof(block_device_t));
+	#endif
+
+	//fill basic informations
+	current->master = master;
+	current->base_port = base_port;
+	current->control_port = control_port;
+	current->controller = controller;
+	current->irq = irq;
+
 	u8 status;
 
 	//select drive
-	DATA_PORT = base_port;
-	outb(DEVICE_PORT, master ? 0xA0 : 0xB0); //0xB0 = slave
+	outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
 	//identify
-	outb(SECTOR_COUNT_PORT, 0);
-	outb(LBA_LOW_PORT, 0);
-	outb(LBA_MID_PORT, 0);
-	outb(LBA_HI_PORT, 0);
-	outb(COMMAND_PORT, 0xA1); //identify atapi cmd
+	outb(SECTOR_COUNT_PORT(current), 0);
+	outb(LBA_LOW_PORT(current), 0);
+	outb(LBA_MID_PORT(current), 0);
+	outb(LBA_HI_PORT(current), 0);
+	outb(COMMAND_PORT(current), 0xA1); //identify atapi cmd
 
-	status = inb(COMMAND_PORT);
+	status = inb(COMMAND_PORT(current));
 	if(status == 0x0)
 	{
 		return 0; //no device (strange and should never happen)
 	}
 
 	//wait for drive busy/drive error
-	status = ata_pio_poll_status();
+	status = ata_pio_poll_status((ata_device_t*) current);
 
 	if(status & 0x01)
 	{
@@ -227,22 +247,14 @@ static block_device_t* atapi_identify_drive(u32 base_port, bool master)
 	u16 i; bool lba48 = false; u16 unknown_data = 0;
 	for(i = 0;i < BYTES_PER_SECTOR/2; i++)
 	{
-		u16 data = inw(DATA_PORT);
+		u16 data = inw(DATA_PORT(current));
 		if(i == 0) unknown_data = data; //TEMP
 		if(i == 83) lba48 = (data >> 9 << 15 ? 1 : 0);
 	}
 
-	#ifdef MEMLEAK_DBG
-	atapi_device_t* current = kmalloc(sizeof(atapi_device_t), "ATAPI Device struct");
-	block_device_t* current_top = kmalloc(sizeof(block_device_t), "ATAPI Block Device struct");
-	#else
-	atapi_device_t* current = kmalloc(sizeof(atapi_device_t));
-	block_device_t* current_top = kmalloc(sizeof(block_device_t));
-	#endif
 	current->lba48_support = lba48;
-	current->master = master;
-	current->base_port = base_port;
 	current->media_type = unknown_data;
+
 	
 	current_top->device_type = ATAPI_DEVICE;
 	current_top->device_struct = (void*) current;
@@ -292,22 +304,21 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 	}
 
 	//select drive and write sector addr (4 upper bits)
-	DATA_PORT = drive->base_port;
-	outb(DEVICE_PORT, (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
 
 	//clean previous error msgs
-	outb(ERROR_PORT, 0);
+	outb(ERROR_PORT(drive), 0);
 
 	//number of sectors to write (always 1 for now)
-	outb(SECTOR_COUNT_PORT, scount);
+	outb(SECTOR_COUNT_PORT(drive), scount);
 
 	//write sector addr (24 bits left)
-	outb(LBA_LOW_PORT, (sector & 0x000000FF));
-	outb(LBA_MID_PORT, (sector & 0x0000FF00) >> 8);
-	outb(LBA_HI_PORT, (sector & 0x00FF0000) >> 16);
+	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
+	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
+	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
 
 	//command write
-	outb(COMMAND_PORT, 0x30);
+	outb(COMMAND_PORT(drive), 0x30);
 
 	//actually write the data
 	u32 i;
@@ -318,7 +329,7 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 			//output cached
 			u16 wdata = cached_f[i];
 			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 		else 
 		{
@@ -331,7 +342,7 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 			if(i+1 < count+offset)
 				wdata |= (u16) (((u16) data[i+1-offset]) << 8);
 				
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 	}
 	//we need to write to FULL SECTOR (or it will error)
@@ -342,13 +353,13 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 		{
 			u16 wdata = cached_f[i];
 			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 		else
 		{
 			u16 wdata = cached_l[i];
 			wdata |= (u16) (((u16) cached_l[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 	}
 
@@ -356,9 +367,9 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 	if((last_sector != sector) && (count % 512)) kfree(cached_l);
 
 	//then flush drive
-	outb(COMMAND_PORT, 0xE7);
+	outb(COMMAND_PORT(drive), 0xE7);
 	
-	u8 status = ata_pio_poll_status();
+	u8 status = ata_pio_poll_status(drive);
 	
 	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_28"); //temp debug
 	return DISK_SUCCESS;
@@ -379,27 +390,26 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 	if(scount > 255) return DISK_FAIL_INTERNAL; //fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
 
 	//select drive and write sector addr (4 upper bits)
-	DATA_PORT = drive->base_port;
-	outb(DEVICE_PORT, (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
 
 	//clean previous error msgs
-	outb(ERROR_PORT, 0);
+	outb(ERROR_PORT(drive), 0);
 
 	//number of sectors to read
-	outb(SECTOR_COUNT_PORT, scount);
+	outb(SECTOR_COUNT_PORT(drive), scount);
 
 	//kprintf("ATA_PIO_READ_28 : %u sectors, off %u\n", scount, offset);
 
 	//write sector addr (24 bits left)
-	outb(LBA_LOW_PORT, (sector & 0x000000FF));
-	outb(LBA_MID_PORT, (sector & 0x0000FF00) >> 8);
-	outb(LBA_HI_PORT, (sector & 0x00FF0000) >> 16);
+	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
+	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
+	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
 
 	//command read
-	outb(COMMAND_PORT, 0xC4); //0x20: read, 0xC4: read multiple
+	outb(COMMAND_PORT(drive), 0xC4); //0x20: read, 0xC4: read multiple
 
 	//wait for drive to be ready
-	u8 status = ata_pio_poll_status();
+	u8 status = ata_pio_poll_status(drive);
 	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 
 	//actually read the data
@@ -407,10 +417,10 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 	u32 i;
 	for(i = 0; i < (count+offset); i+=2)
 	{
-		if(i+1<offset) inw(DATA_PORT); 
+		if(i+1<offset) inw(DATA_PORT(drive)); 
 		else 
 		{
-			u16 wdata = inw(DATA_PORT);
+			u16 wdata = inw(DATA_PORT(drive));
 			if(i>=offset)
 				data[i-offset] = (u8) wdata & 0x00FF;
 			if(i+1 < count+offset)
@@ -419,7 +429,7 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 		data_read+=2;
 		if(data_read % (512*32))
 		{
-			u8 status = ata_pio_poll_status();
+			u8 status = ata_pio_poll_status(drive);
 			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 		}
 	}
@@ -429,7 +439,7 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 	//we need to read from FULL SECTOR (or it will error)
 	while((data_read % BYTES_PER_SECTOR) != 0)
 	{
-		inw(DATA_PORT);
+		inw(DATA_PORT(drive));
 		data_read+=2;
 	}
 
@@ -451,32 +461,31 @@ static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	if(scount > 255) return DISK_FAIL_INTERNAL;//fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
 
 	//select drive
-	DATA_PORT = drive->base_port;
-	outb(DEVICE_PORT, (drive->master ? 0x40 : 0x50));
+	outb(DEVICE_PORT(drive), (drive->master ? 0x40 : 0x50));
 
 	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT, scount); //always 1 sector for now
+	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
 
 	//split address in 8-bits values
 	u8* addr = (u8*) ((u64*)&sector);
 	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT, addr[3]);
-	outb(LBA_MID_PORT, addr[4]);
-	outb(LBA_HI_PORT, addr[5]);
+	outb(LBA_LOW_PORT(drive), addr[3]);
+	outb(LBA_MID_PORT(drive), addr[4]);
+	outb(LBA_HI_PORT(drive), addr[5]);
 	
 	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT, 1); //always 1 sector for now
+	outb(SECTOR_COUNT_PORT(drive), 1); //always 1 sector for now
 	
 	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT, addr[0]);
-	outb(LBA_MID_PORT, addr[1]);
-	outb(LBA_HI_PORT, addr[2]);
+	outb(LBA_LOW_PORT(drive), addr[0]);
+	outb(LBA_MID_PORT(drive), addr[1]);
+	outb(LBA_HI_PORT(drive), addr[2]);
 
 	//command extended read
-	outb(COMMAND_PORT, 0x29); //0x24 = READ_SECTOR_EXT (ext = 48) //0x29 : READ MULTIPLE EXT ?
+	outb(COMMAND_PORT(drive), 0x29); //0x24 = READ_SECTOR_EXT (ext = 48) //0x29 : READ MULTIPLE EXT ?
 
 	//wait for drive to be ready
-	u8 status = ata_pio_poll_status();
+	u8 status = ata_pio_poll_status(drive);
 
 	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_48"); //temp debug
 
@@ -485,10 +494,10 @@ static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	u64 i;
 	for(i = 0; i < (count+offset); i+=2)
 	{
-		if(i+1<offset) inw(DATA_PORT); 
+		if(i+1<offset) inw(DATA_PORT(drive)); 
 		else 
 		{
-			u16 wdata = inw(DATA_PORT);
+			u16 wdata = inw(DATA_PORT(drive));
 			if(i>=offset)
 				data[i-offset] = (u8) wdata & 0x00FF;
 			if(i+1 < count+offset)
@@ -497,7 +506,7 @@ static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 		data_read+=2;
 		if(data_read % (512*32))
 		{
-			u8 status = ata_pio_poll_status();
+			u8 status = ata_pio_poll_status(drive);
 			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 		}
 	}
@@ -505,7 +514,7 @@ static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	//we need to read from FULL SECTOR (or it will error)
 	while((data_read % BYTES_PER_SECTOR) != 0)
 	{
-		inw(DATA_PORT);
+		inw(DATA_PORT(drive));
 		data_read+=2;
 	}
 
@@ -552,29 +561,28 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 	}
 
 	//select drive
-	DATA_PORT = drive->base_port;
-	outb(DEVICE_PORT, (drive->master ? 0x40 : 0x50));
+	outb(DEVICE_PORT(drive), (drive->master ? 0x40 : 0x50));
 
 	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT, scount); //always 1 sector for now
+	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
 
 	//split address in 8-bits values
 	u8* addr = (u8*) ((u64*)&sector);
 	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT, addr[3]);
-	outb(LBA_MID_PORT, addr[4]);
-	outb(LBA_HI_PORT, addr[5]);
+	outb(LBA_LOW_PORT(drive), addr[3]);
+	outb(LBA_MID_PORT(drive), addr[4]);
+	outb(LBA_HI_PORT(drive), addr[5]);
 	
 	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT, 1); //always 1 sector for now
+	outb(SECTOR_COUNT_PORT(drive), 1); //always 1 sector for now
 	
 	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT, addr[0]);
-	outb(LBA_MID_PORT, addr[1]);
-	outb(LBA_HI_PORT, addr[2]);
+	outb(LBA_LOW_PORT(drive), addr[0]);
+	outb(LBA_MID_PORT(drive), addr[1]);
+	outb(LBA_HI_PORT(drive), addr[2]);
 
 	//command extended write
-	outb(COMMAND_PORT, 0x34);
+	outb(COMMAND_PORT(drive), 0x34);
 
 	//actually write the data
 	u64 i;
@@ -585,7 +593,7 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 			//output cached
 			u16 wdata = cached_f[i];
 			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 		else 
 		{
@@ -598,7 +606,7 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 			if(i+1 < count+offset)
 				wdata |= (u16) (((u16) data[i+1-offset]) << 8);
 				
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 	}
 
@@ -610,13 +618,13 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 		{
 			u16 wdata = cached_f[i];
 			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 		else
 		{
 			u16 wdata = cached_l[i];
 			wdata |= (u16) (((u16) cached_l[i+1]) << 8);
-			outw(DATA_PORT, wdata);
+			outw(DATA_PORT(drive), wdata);
 		}
 	}
 
@@ -624,9 +632,9 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 	if((last_sector != sector) && (count % 512)) kfree(cached_l);
 
 	//then flush drive (actually verify that this part works for 48-bits LBA)
-	outb(COMMAND_PORT, 0xE7);
+	outb(COMMAND_PORT(drive), 0xE7);
 	
-	u8 status = ata_pio_poll_status();
+	u8 status = ata_pio_poll_status(drive);
 	
 	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_48"); //temp debug
 	return DISK_SUCCESS;
@@ -648,12 +656,12 @@ u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* driv
 			return ata_pio_write_28((u32) sector, offset, data, (u32) count, drive);
 }
 
-static u8 ata_pio_poll_status()
+static u8 ata_pio_poll_status(ata_device_t* drive)
 {
-	u8 status = inb(COMMAND_PORT);
+	u8 status = inb(COMMAND_PORT(drive));
 	u32 times = 0;
 	while(((status & 0x80) == 0x80) && ((status & 0x01) != 0x01) && ((status & 0x20) != 0x20) && times < 0xFFFFF)
-		{status = inb(COMMAND_PORT); times++;}
+		{status = inb(COMMAND_PORT(drive)); times++;}
 
 	//TEMP
 	if(status == 0x20) {kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}

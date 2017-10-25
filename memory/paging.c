@@ -143,6 +143,32 @@ static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory)
 }
 
 //if we need to access some defined point of physical memory (like the ACPI table)
+void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory)
+{
+    u32 bvaddr = virt_addr;
+    aligndown(virt_addr, 4096);
+    size += (bvaddr-virt_addr);
+    alignup(size, 4096);
+
+    u32 add = 0;
+
+    if((!(virt_addr % 0x400000)) && size > 0x400000)
+    {
+        while(size > 0x400000)
+        {
+            map_page_table(physical+add, virt_addr+add, page_directory);
+            size -= 0x400000;
+            add += 0x400000;
+        }
+    }
+    
+    while(size)
+    {
+        map_page(physical+add, virt_addr+add, page_directory);
+        size -= 4096;
+        add += 4096;
+    }
+}
 //void* map_physical(u32 phys_addr, u32 size);
 //vois unmap_physical(void* pointer, u32 size);
 /*void map_physical(p_block_t* tm, u32 virt_addr)
@@ -207,11 +233,14 @@ u32 get_physical(u32 virt_addr, u32* page_directory)
     u32 pt_index = virt_addr >> 12 & 0x03FF;
     u32* page_table = (u32*) page_directory[pd_index];
     if(!page_table) return 0;
-    if((((u32)page_table) << 24 >> 31) == 1) return (((u32) page_table) >> 12 << 12);
-    page_table = (u32*) (((u32)page_table) >> 12 << 12);
-    u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
-    if(*page) return (((u32)page) >> 12 << 12);
-    else return 0;
+    if((((u32)page_table) << 24 >> 31) == 1) {return (((u32) *page_table) >> 12 << 12)+(virt_addr%0x400000);}
+    else
+    {
+        page_table = (u32*) (((u32)page_table) >> 12 << 12);
+        u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
+        if(*page) return (((u32)*page) >> 12 << 12) + (virt_addr%4096);
+        else return 0;
+    }
 }
 
 bool is_mapped(u32 virt_addr, u32* page_directory)

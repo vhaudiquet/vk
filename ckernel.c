@@ -55,15 +55,17 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     scheduler_add_process(init_kernel_process()); //Add kernel process as current_process (kernel init is not done yet)
     scheduler_add_process(init_idle_process()); //Add idle_process to the queue, so that if there is no process the kernel don't crash
 
-    //DEBUG : printing kernel stack bottom / top
+    //DEBUG : printing kernel stack bottom / top ; code start/end
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
+    //kprintf("%lKernel code : 0x%X - 0x%X\n", 3, &_kernel_start, &_kernel_end);
 
     kprintf("Getting kernel execution context...");
     //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
     
     //enable interrupts (scheduler go go go)
-    asm("sti");
+    scheduler_start();
+    //asm("sti");
 
     //getting live / root dir infos
     u8 root_drive = 0;

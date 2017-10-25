@@ -15,45 +15,89 @@
 */
 
 #include "storage.h"
+#include "memory/mem.h"
+#include "tasking/task.h"
+#include "internal/internal.h"
+#include "error/error.h"
 
 #define BYTES_PER_SECTOR 512
 
+typedef struct PRD
+{
+    u32 data_pointer;
+    u16 byte_count;
+    u16 reserved;
+} __attribute__((packed)) prd_t;
+
 //PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary,  1 per ATA bus
-static u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
     if(sector & 0xF0000000) return DISK_FAIL_OUT;
 
+    //kprintf("ATA_DMA_READ: sector 0x%X ; count %u B\n", sector, count);
+
     /*prepare a PRDT (Physical Region Descriptor Table)*/
-    //u32 prdt_phys = reserve_block(prdt_size, PHYS_KERNELF_BLOCK_TYPE);
-    //map_physical(prdt_phys, virtual, kernel_page_dir);
+    u32 virtual = 0xE0800000;
+    u32 prdt_phys = reserve_block(sizeof(prd_t)+4, PHYS_KERNELF_BLOCK_TYPE);
+    u32 prdt_phys_aligned = prdt_phys; alignup(prdt_phys_aligned, sizeof(u32));
+    map_flexible(sizeof(prd_t), prdt_phys_aligned, virtual, kernel_page_directory);
+    prd_t* prd = (prd_t*) virtual;
+    prd->data_pointer = get_physical((u32) data, current_process->page_directory);
+    kprintf("%lphysical pointer : 0x%X\n", 2, prd->data_pointer);
+    prd->byte_count = (u16)((u16) count*512);
+    prd->reserved = 0x8000;
 
     /*Send the physical PRDT addr to Bus Master PRDT Register*/
+    u32 bar4 = pci_read_device(drive->controller, BAR4);
+    
+    //temp
+    if(!(bar4 & 1)) fatal_kernel_error("BAR4 is not I/O ports but memory mapped !", "ATA_DMA_READ_28");
+
+    bar4 = (bar4 & 0xFFFFFFFC) + (drive->master ? 0 : 8);
+    kprintf("bar4 = 0x%X\n", bar4);
+    outl(bar4+4, prdt_phys_aligned);
 
     /*set read bit in the Bus Master Command Register*/
+    u8 command = inb(bar4);
+    outb(bar4, command & 0b11110111);
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
+    u8 status = inb((bar4)+2);
+    outb(bar4+2, status | 0b00000110);
 
     /*Select drive*/
+	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
 
     /*Send LBA and sector count*/
-
     //calculate sector count
 	u32 scount = count / BYTES_PER_SECTOR;
 	if(count % BYTES_PER_SECTOR) scount++;
-
 	//calculate sector offset
 	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
+    if(scount > 255) return DISK_FAIL_INTERNAL;
+    
+    //clean previous error msgs
+    outb(ERROR_PORT(drive), 0);
 
-	if(scount > 255) return DISK_FAIL_INTERNAL;
+    outb(SECTOR_COUNT_PORT(drive), scount);
+
+    outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
+	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
+	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
 
     /*send DMA transfer command*/
+    outb(COMMAND_PORT(drive), 0xC8); //28bits DMA read : 0xC8
 
     /*Set the Start/Stop bit in Bus Master Command Register*/
+    outb(bar4, command | 1);
 
     /*Wait for interrupt*/
+    kprintf("%lWaiting for irq %u...\n", 3, drive->irq);
+    scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, drive->irq);
 
     /*Reset Start/Stop bit*/
+    outb(bar4, command & 0b11111110);
 
     /*Read controller and drive status to see if transfer went well*/
-
+    return DISK_SUCCESS; //lel it went well, of course... no need to check... why would it go wrong ?
 }

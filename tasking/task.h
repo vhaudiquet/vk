@@ -62,8 +62,10 @@ typedef struct THREAD
 } thread_t;
 
 //SCHEDULER
+extern bool scheduler_started;
 extern process_t* current_process;
 void scheduler_init();
+void scheduler_start();
 void schedule();
 
 //add/remove from queue
