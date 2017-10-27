@@ -23,7 +23,7 @@
 /*
 * For now, i have less than 10 syscalls, and they are all in this file
 * Then i may need to expand the file or to rewrite it
-* For now it contains the system calls, that i use almost only to debug the kernel
+* For now it contains the system calls, that i use only to debug the kernel
 * (the idea is to build a stable and powerfull kernel, and then creates a way for userland to call each kernel service)
 */
 
@@ -40,7 +40,7 @@ bool ptr_validate(u32 ptr, u32* page_directory)
 void syscall_global(u32 syscall_number, u32 ebx, u32 edx)
 {
     u32 snbr = (u32) syscall_number >> 16;
-    u16 ss = syscall_number << 16 >> 16;
+    u16 ss = syscall_number & 0xFFFF;//<< 16 >> 16;
     switch(snbr)
     {
         case 0:
@@ -60,8 +60,8 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
     {
         case 1:
         {
-            u8 ch = ebx << 24 >> 24;
-            u8 color = edx << 24 >> 24;
+            u8 ch = ebx & 0xFF;//<< 24 >> 24;
+            u8 color = edx & 0xFF;//<< 24 >> 24;
             vga_text_putc(ch, color);
             break;
         }
@@ -70,7 +70,7 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
             if(ptr_validate(ebx, current_process->page_directory))
             {
                 u8* str = (u8*) ebx;
-                u8 color = edx << 24 >> 24;
+                u8 color = edx & 0xFF;//<< 24 >> 24;
                 vga_text_puts(str, color);
             }
             break;

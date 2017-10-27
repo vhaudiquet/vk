@@ -56,19 +56,19 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
 
     //asm("mov %%ss, %%eax":"=a"(ss));
     //kprintf("schedule : ring %u (cs = 0x%X) (ss = 0x%X)\n", cs & 0x3, cs, ss);
+
     //if we are currently running idle process, lets throw it away
     /*if(current_process == idle_process)
     {
-        //kprintf("throwing idle process away...\n");
         list_entry_t* list_pointer = p_wait_list;
         list_entry_t* list_before = 0;
         u32 i = 0;
         for(i = 0; i < p_wl_size; i++)
         {
             list_before = list_pointer;
-            list_pointer = list_pointer->next;
+            //list_pointer = list_pointer->next;
         }
-        if(!i) p_wait_list = list_pointer =
+        if(!p_wl_size) p_wait_list = list_pointer =
         #ifdef MEMLEAK_DBG
         kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list list entry");
         #else
@@ -116,6 +116,8 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         else 
         {
             current_process->esp = esp+0xC;
+            //kesp saving : why ? why not ? both seems to work, i'm so confused (maybe saving it and adding 0xC create stack corruption)
+            //current_process->kesp = esp+0xC;
             //kprintf("%lSaving p esp : 0x%X\n", 1, esp);
         }
 
@@ -153,10 +155,8 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     {
         __asm__ __volatile__ ("mov %0, %%esp"::"g"(current_process->esp):"%esp");
     }
-    //else asm("mov %0, %%esp"::"g"(current_process->kesp):"%esp");
     else
     //if we return to normal execution, we let iret do the stack switch
-    //if(current_process->sregs.cs != 0x08)
     {
         __asm__ __volatile__("pushl %0\n \
              pushl %1\n"::"g"(0x23), "g"(current_process->esp));
@@ -175,7 +175,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     __asm__ __volatile__ ("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"g"(current_process->gregs.esi), "g"(current_process->gregs.edi), "g"(current_process->ebp));
     __asm__ __volatile__ ("iret"::"a"(current_process->gregs.eax), "b"(current_process->gregs.ebx), "c"(current_process->gregs.ecx), "d"(current_process->gregs.edx));
     //black magic : the end of function is dead code
-    //that cause a corruption of 0xC bytes on the stack per idle schedule (but normal processes arent affected ?)
+    //that cause a corruption of 0xC bytes on the stack, that is handled in current_process saving
 }
 #pragma GCC diagnostic pop
 
@@ -206,6 +206,7 @@ void scheduler_remove_process(process_t* process)
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)
         {
+            //scheduler_add_process(idle_process);
             scheduler_wake_process(idle_process);
         }
         //asm("int $32"); //call clock int to schedule

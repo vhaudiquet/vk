@@ -29,6 +29,7 @@ u8 pci_devices_count = 0;
 
 static void select_pci(u8 bus, u8 device, u8 function, u32 reg);
 static u32 pci_read(u8 bus, u8 device, u8 function, u32 reg);
+static void pci_write(u8 bus, u8 device, u8 function, u32 reg, u32 value);
 //unused : static void pci_write(u8 bus, u8 device, u8 function, u32 reg, u32 value);
 static bool pci_has_functions(u8 bus, u8 device);
 static void get_device_desc(u8 bus, u8 device, u8 function, pci_device_t* tr);
@@ -84,6 +85,11 @@ u32 pci_read_device(pci_device_t* dev, u32 reg)
     return pci_read(dev->bus, dev->device, dev->function, reg);
 }
 
+void pci_write_device(pci_device_t* dev, u32 reg, u32 value)
+{
+    pci_write(dev->bus, dev->device, dev->function, reg, value);
+}
+
 static void select_pci(u8 bus, u8 device, u8 function, u32 reg)
 {
     if(device > 32 || function > 8) fatal_kernel_error("Trying to select invalid PCI address", "SELECT_PCI");
@@ -100,11 +106,11 @@ static u32 pci_read(u8 bus, u8 device, u8 function, u32 reg)
     return result >> (8 * (reg % 4));
 }
 
-//static void pci_write(u8 bus, u8 device, u8 function, u32 reg, u32 value)
-//{
-//    select_pci(bus, device, function, reg);
-//    outl(PCI_DATA_PORT, value);
-//}
+static void pci_write(u8 bus, u8 device, u8 function, u32 reg, u32 value)
+{
+    select_pci(bus, device, function, reg);
+    outl(PCI_DATA_PORT, value);
+}
 
 static bool pci_has_functions(u8 bus, u8 device)
 {

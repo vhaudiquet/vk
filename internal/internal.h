@@ -51,5 +51,6 @@ extern u8 pci_devices_count;
 
 void pci_install();
 u32 pci_read_device(pci_device_t* dev, u32 reg);
+void pci_write_device(pci_device_t* dev, u32 reg, u32 value);
 
 #endif

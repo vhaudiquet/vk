@@ -5,7 +5,7 @@ AFLAGS=--32
 CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -g -I.
 LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
-QEMU=qemu-system-i386
+QEMU=qemu-system-i386#kvm
 
 all: $(EXEC)
 
@@ -24,7 +24,7 @@ hddboot: kernel
 	sudo umount /dev/loop1
 	sudo losetup -d /dev/loop1
 	rm ../kernel.elf
-	qemu-system-i386 -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
+	$(QEMU) -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
 
 isoboot: iso
 	$(QEMU) -boot d -cdrom ../os.iso -drive id=disk,file=../disk.img,index=0,media=disk,format=raw

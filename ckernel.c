@@ -133,7 +133,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         //u8 part_index = (u8) (aroot_dir[3] - 49);
         //char h = *aroot_dir;
 
-        //kprintf("Mounting root dir to drive %cd%c%u...", h, drive_index+'a', part_index+1);
+        kprintf("Mounting root directory...");
 
         block_device_t* dev = block_devices[root_drive];
         if(!dev) fatal_kernel_error("Could not find root drive !", "INSTALLED_KERNEL_LOADING");
@@ -142,7 +142,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
             vga_text_failmsg();
             fatal_kernel_error("Could not mount root dir.", "INSTALLED_KERNEL_LOADING");
         }
-        //vga_text_okmsg();
+        vga_text_okmsg();
     }
 
     //running /sys/init
@@ -174,11 +174,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     kprintf("[INIT] Init task loaded in memory at 0x%X\n", init_process->eip);
 
     scheduler_add_process(init_process);
-
-    //adding debug process to see if the scheduler really works on real multitasking
-    //file_descriptor_t* dbg_task_file = open_file("/sys/dbg.elf");
-    //process_t* dbg_process = create_process(dbg_task_file);
-    //scheduler_add_process(dbg_process);
 
     //enabling interrupts
     //asm("sti");
