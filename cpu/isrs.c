@@ -86,9 +86,9 @@ void irq_handler(u32 irq_number)
 	switch(irq_number)
 	{
 		case 1: {keyboard_interrupt(); break;} //Keyboard interrupt
-		case 14: kprintf("%lPrimary ATA interrupt\n", 3); break; //we dont care about ATA interrupts for now, as we are using ATA PIO mode and polling the status
-		case 15: kprintf("%lSecondary ATA interrupt\n", 3); break;
-		default : kprintf("%lUNHANDLED IRQ %d\n", 2, irq_number); break;
+		case 14: {kprintf("%lPrimary ATA interrupt\n", 3); break;}
+		case 15: {kprintf("%lSecondary ATA interrupt\n", 3); break;}
+		default : {kprintf("%lUNHANDLED IRQ %d\n", 2, irq_number); break;}
 	}
 	if(irq_number) scheduler_irq_wakeup(irq_number);
 }

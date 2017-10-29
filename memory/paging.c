@@ -142,6 +142,54 @@ static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory)
 
 }
 
+static void unmap_page(u32 virt_addr, u32* page_directory)
+{
+    if(virt_addr % 4096) fatal_kernel_error("Trying to unmap a non-aligned virtual address", "UNMAP_PAGE");
+
+    u32 pd_index = virt_addr >> 22;
+    u32 pt_index = virt_addr >> 12 & 0x03FF;
+    
+    u32* page_table = (u32*) page_directory[pd_index];
+    if(!page_table)
+        return;
+    else
+    {
+        //checking that page table is used as a page table and not as a 4MiB page
+        if((((u32)page_table) << 24 >> 31) == 1) fatal_kernel_error("Trying to unmap page, but page table is mapped", "UNMAP_PAGE");
+        page_table = (u32*) (((u32)page_table) >> 12 << 12);
+    }
+
+    u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
+    if(!(*page)) fatal_kernel_error("Trying to unmap a non-mapped virtual address", "UNMAP_PAGE");
+
+    *page = 0;
+
+    //flush, update or do something with the cache
+}
+
+static void unmap_page_table(u32 virt_addr, u32* page_directory)
+{
+    if(virt_addr % 0x400000) fatal_kernel_error("Trying to unmap a non-aligned virtual address", "UNMAP_PAGE_TABLE");
+
+    u32 pd_index = virt_addr >> 22;
+
+    u32* page_table = (u32*) page_directory[pd_index];
+    if(!page_table) fatal_kernel_error("Trying to unmap an unmapped page table", "UNMAP_PAGE_TABLE");
+
+    if(cpu_pse)
+    {
+        page_directory[pd_index] = 0;
+    }
+    else
+    {
+        pt_free(page_table + KERNEL_VIRTUAL_BASE);
+        page_directory[pd_index] = 0;
+    }
+
+    //flush, update, or do something with the cache
+
+}
+
 //if we need to access some defined point of physical memory (like the ACPI table)
 void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory)
 {
@@ -165,6 +213,33 @@ void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory)
     while(size)
     {
         map_page(physical+add, virt_addr+add, page_directory);
+        size -= 4096;
+        add += 4096;
+    }
+}
+
+void unmap_flexible(u32 size, u32 virt_addr, u32* page_directory)
+{
+    u32 bvaddr = virt_addr;
+    aligndown(virt_addr, 4096);
+    size += (bvaddr-virt_addr);
+    alignup(size, 4096);
+
+    u32 add = 0;
+
+    if((!(virt_addr % 0x400000)) && size > 0x400000)
+    {
+        while(size > 0x400000)
+        {
+            unmap_page_table(virt_addr+add, page_directory);
+            size -= 0x400000;
+            add += 0x400000;
+        }
+    }
+    
+    while(size)
+    {
+        unmap_page(virt_addr+add, page_directory);
         size -= 4096;
         add += 4096;
     }

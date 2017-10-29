@@ -5,7 +5,8 @@ AFLAGS=--32
 CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -g -I.
 LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
-QEMU=qemu-system-i386#kvm
+QEMU=kvm
+VBVMNAME=VK
 
 all: $(EXEC)
 
@@ -16,7 +17,22 @@ run: kernel
 	$(QEMU) -kernel ../kernel.elf -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
 	rm ../kernel.elf
 
-hddboot: kernel
+hddboot: hddimage
+	$(QEMU) -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
+
+isoboot: iso
+	$(QEMU) -boot d -cdrom ../os.iso -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
+	rm ../os.iso
+
+virtualbox: hddimage
+	-VBoxManage storageattach $(VBVMNAME) --storagectl "IDE" --device 0 --port 0 --type hdd --medium none
+	-VBoxManage closemedium disk ../disk.vdi --delete
+	-rm ../disk.vdi
+	VBoxManage convertdd ../disk.img ../disk.vdi
+	VBoxManage storageattach $(VBVMNAME) --storagectl "IDE" --device 0 --port 0 --type hdd --medium ../disk.vdi
+	VBoxManage startvm $(VBVMNAME)
+
+hddimage: kernel
 	sudo losetup /dev/loop1 ../disk.img -o 1048576
 	sudo mount /dev/loop1 /mnt
 	sudo cp ../kernel.elf /mnt/boot/kernel.elf
@@ -24,15 +40,11 @@ hddboot: kernel
 	sudo umount /dev/loop1
 	sudo losetup -d /dev/loop1
 	rm ../kernel.elf
-	$(QEMU) -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
-
-isoboot: iso
-	$(QEMU) -boot d -cdrom ../os.iso -drive id=disk,file=../disk.img,index=0,media=disk,format=raw
-	rm ../os.iso
 
 kernelc: kernel
-	cp ../kernel.elf /media/valentin/MULTIBOOT/files/kernel/kernel.elf
+	cp ../kernel.elf /media/valentin/MULTISYSTEM/kernel.elf
 	rm ../kernel.elf
+	umount /media/valentin/MULTISYSTEM
 
 isoc: iso
 	cp ../os.iso /media/valentin/MULTIBOOT/multiboot/ISOS/os.iso

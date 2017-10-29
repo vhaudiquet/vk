@@ -59,13 +59,12 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
     //kprintf("%lKernel code : 0x%X - 0x%X\n", 3, &_kernel_start, &_kernel_end);
 
+    //start scheduler
+    scheduler_start();
+
     kprintf("Getting kernel execution context...");
     //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
-    
-    //enable interrupts (scheduler go go go)
-    scheduler_start();
-    //asm("sti");
 
     //getting live / root dir infos
     u8 root_drive = 0;
@@ -73,6 +72,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     u8 mode = aboot_hint_present;
     if(!mode)
     {
+        if(block_device_count == 0) {vga_text_failmsg(); fatal_kernel_error("No block device detected", "KERNEL_CONTEXT_GUESSING");}
         //the kernel will try to guess what mode is needed (relatively to boot_device)
         if(mbt->flags & 0b10)
         {

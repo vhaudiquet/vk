@@ -27,7 +27,8 @@
         add $4, %esp # clear index to restore stack
         push %ax # save ax
         mov $0x20, %al
-        out %al, $0x20 # -> tells the PIC that it's OK, we've handled the interrupt, you can send more
+        out %al, $0xA0 # -> tells the SLAVE PIC that interrupt handled
+        out %al, $0x20 # -> tells the MASTER PIC that it's OK, we've handled the interrupt, you can send more
         pop %ax # restore ax
         iret
 .endm

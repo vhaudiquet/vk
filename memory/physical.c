@@ -98,6 +98,7 @@ u32 get_free_mem()
 
 u32 reserve_block(u32 size, u8 type)
 {
+    alignup(size, 4096);
     p_block_t* curr = first_block;
     while(curr)
     {

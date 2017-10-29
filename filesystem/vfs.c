@@ -57,7 +57,10 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     }
 
     u32 offset = drive->partitions[partition]->start_lba;
-    block_read_flexible(offset, 0, buff, 512, drive);
+    if(block_read_flexible(offset, 0, buff, 512, drive) != DISK_SUCCESS)
+    {
+        kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
+    }
     
     //FAT8 and 16 signature offset kprintf("s: %s\n", buff+54);
     if(((*(buff+66) == 0x28) | (*(buff+66) == 0x29)) && (strcfirst("FAT32", (char*) buff+82) == 5))
@@ -65,6 +68,7 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
         kfree(buff);
         return FS_TYPE_FAT32;
     }
+    else kprintf("%lUnknown file system type.\n", 3);
 
     kfree(buff);
     return 0;
@@ -83,7 +87,10 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
             break;
         }
     }
-    mount(path, fs_type, fs);
+    if(fs)
+        mount(path, fs_type, fs);
+    else return 0;
+    
     return fs_type;
 }
 

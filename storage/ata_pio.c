@@ -40,8 +40,8 @@ extern void _irq14();
 extern void _irq15();
 void ata_install()
 {
-	bool std_primary_initialized = false;
-	bool std_secondary_initialized = false;
+	//bool std_primary_initialized = false;
+	//bool std_secondary_initialized = false;
 
 	//finding AHCI controllers that may be in ATA emulation mode and initialize them too
 	pci_device_t* curr = pci_first;
@@ -50,24 +50,25 @@ void ata_install()
 		if(curr->class_id == 0x01)
 		{
 			//bar0: primary ata data port
-			u16 port = pci_read_device(curr, BAR0) & 0b1111111111111100;// >> 2 << 2;
+			u16 port = pci_read_device(curr, BAR0) & 0xFFFC;// >> 2 << 2;
 			if((port == 0x0) | (port == 0x1)) port = 0x1F0;
 			//bar1: primary ata control port
-			u16 control_port = pci_read_device(curr, BAR1) & 0b1111111111111100;
-			if((control_port == 0x0) | (control_port == 0x1)) control_port = 0x3F6;
+			u16 control_port =(u16) ((pci_read_device(curr, BAR1) & 0xFFFC)+2);
+			if((control_port == 0x2) | (control_port == 0x3)) control_port = 0x3F6;
 			//bar2: secondary ata data port
-			u16 port_s = pci_read_device(curr, BAR2) & 0b1111111111111100;
+			u16 port_s = pci_read_device(curr, BAR2) & 0xFFFC;
 			if((port_s == 0x0) | (port_s == 0x1)) port_s = 0x170;
 			//bar3: secondary ata control port
-			u16 control_port_s = pci_read_device(curr, BAR3) & 0b1111111111111100;
-			if((control_port_s == 0x0) | (control_port_s == 0x1)) control_port_s = 0x376;
-
+			u16 control_port_s = (u16) ((pci_read_device(curr, BAR3) & 0xFFFC)+2);
+			if((control_port_s == 0x2) | (control_port_s == 0x3)) control_port_s = 0x376;
+			//kprintf("Controls : 0x%X 0x%X\n", control_port, control_port_s);
+			
 			//pci interrupt
 			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
 			if(!in){in = 14;}
 
-			if(curr->subclass_id == 0x01)
-			{
+			//if(curr->subclass_id == 0x01)
+			//{
 				kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
 				block_device_t* primary_master = ata_identify_drive(port, control_port, true, in, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
@@ -78,19 +79,20 @@ void ata_install()
 				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, false, (u8) (in+1), curr);
 				if(secondary_slave) {block_devices[block_device_count] = secondary_slave; block_device_count++;}
 				//TEMP IDT
-				if((primary_master != 0) | (primary_slave != 0)) init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);
-				if((secondary_master != 0) | (secondary_slave != 0)) init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);
-				if((port == PRIMARY_ATA) | (port_s == PRIMARY_ATA)) std_primary_initialized = true;
-				if((port == SECONDARY_ATA) | (port_s == SECONDARY_ATA)) std_secondary_initialized = true;
-			}
-			else if(curr->subclass_id == 0x06)
-			{
-				kprintf("%lFound unsupported AHCI ATA controller\n", 2);
-			}
+				if((primary_master != 0) | (primary_slave != 0)) {init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);}
+				if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
+				//if((port == PRIMARY_ATA) | (port_s == PRIMARY_ATA)) std_primary_initialized = true;
+				//if((port == SECONDARY_ATA) | (port_s == SECONDARY_ATA)) std_secondary_initialized = true;
+			//}
+			//else if(curr->subclass_id == 0x06)
+			//{
+			//	kprintf("%lFound unsupported AHCI ATA controller\n", 2);
+			//}
 		}
 		curr = curr->next;
 	}
 
+	/* Useless : if they are here, they are here in PCI ; if they are not, no need to init
 	//installing standard PRIMARY_ATA and SECONDARY_ATA ports
 	if(!std_primary_initialized)
 	{
@@ -109,6 +111,7 @@ void ata_install()
 		block_device_t* slave = ata_identify_drive(SECONDARY_ATA, 0x376,false, 15, 0);
 		if(slave) {block_devices[block_device_count] = slave; block_device_count++;}
 	}
+	*/
 }
 
 static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool master, u8 irq, pci_device_t* controller)
@@ -239,7 +242,7 @@ static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, boo
 
 	if(status & 0x01)
 	{
-		fatal_kernel_error("Unknown ATAPI error", "ATAPI_IDENTIFY");//TEMP
+		//fatal_kernel_error("Unknown ATAPI error", "ATAPI_IDENTIFY");//TEMP
 		return 0;
 	}
 
@@ -380,6 +383,8 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 	//verify that sector is really a 28-bits integer (the fatal error is temp)
 	if(sector & 0xF0000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to read an unadressable sector", "READ_28");
 
+	kprintf("ATA_PIO_READ_28: sector 0x%X ; count %u B\n", sector, count);
+
 	//calculate sector count
 	u32 scount = count / BYTES_PER_SECTOR;
 	if(count % BYTES_PER_SECTOR) scount++;
@@ -397,8 +402,6 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 
 	//number of sectors to read
 	outb(SECTOR_COUNT_PORT(drive), scount);
-
-	//kprintf("ATA_PIO_READ_28 : %u sectors, off %u\n", scount, offset);
 
 	//write sector addr (24 bits left)
 	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
@@ -427,8 +430,9 @@ static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_devic
 				data[i+1-offset] = (u8) (wdata >> 8) & 0x00FF;
 		}
 		data_read+=2;
-		if(data_read % (512*32))
+		if(!(data_read % (512*2)))
 		{
+			//kprintf("repoll... (%u)\n", data_read);
 			u8 status = ata_pio_poll_status(drive);
 			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
 		}
@@ -504,7 +508,7 @@ static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 				data[i+1-offset] = (u8) (wdata >> 8) & 0x00FF;
 		}
 		data_read+=2;
-		if(data_read % (512*32))
+		if(!(data_read % (512*2)))//if(data_read % (512*32))
 		{
 			u8 status = ata_pio_poll_status(drive);
 			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
@@ -664,8 +668,9 @@ static u8 ata_pio_poll_status(ata_device_t* drive)
 		{status = inb(COMMAND_PORT(drive)); times++;}
 
 	//TEMP
-	if(status == 0x20) {kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
+	if(status & 0x20) {kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
 	if(times == 0xFFFFF) {kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2);return 0x01;}
+	if(status & 0x1) {kprintf("%lDRIVE ERR !\n", 2); return 0x01;}
 	return status;
 }
 
@@ -682,7 +687,8 @@ static void ata_read_partitions(block_device_t* drive)
 	#else
 	master_boot_record_t* mbr = kmalloc(sizeof(master_boot_record_t));
 	#endif
-	ata_pio_read_28(0, 0, ((u8*) mbr), 512, current);
+	if(ata_pio_read_28(0, 0, ((u8*) mbr), 512, current) != DISK_SUCCESS)
+		fatal_kernel_error("Could not read drive MBR", "ATA_READ_PARTITIONS"); //TEMP, return then
 
 	if(mbr->magic_number != 0xAA55) fatal_kernel_error("Invalid MBR", "ATA_READ_PARTITIONS"); //TEMP, return then
 

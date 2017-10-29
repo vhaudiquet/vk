@@ -41,8 +41,10 @@ void scheduler_init()
 
 void scheduler_start()
 {
+    kprintf("Starting scheduler...");
     scheduler_started = true;
     asm("sti");
+    vga_text_okmsg();
 }
 
 process_t* toswitch = 0;
