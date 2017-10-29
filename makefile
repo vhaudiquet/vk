@@ -5,7 +5,7 @@ AFLAGS=--32
 CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -g -I.
 LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
-QEMU=kvm
+QEMU=kvm#qemu-system-i386
 VBVMNAME=VK
 
 all: $(EXEC)

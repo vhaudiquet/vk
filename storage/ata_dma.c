@@ -61,7 +61,7 @@ u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* dr
     bar4 = (bar4 & 0xFFFFFFFC) + (drive->master ? 0 : 8);
     
     //TEMP : Reset start/stop bit
-    outb(bar4, inb(bar4) & ~1);
+    //outb(bar4, inb(bar4) & ~1);
 
     //kprintf("%lbar4 = 0x%X\n", 3, bar4);
     outl(bar4+4, prdt_phys_aligned);
@@ -70,7 +70,7 @@ u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* dr
     outb(bar4, inb(bar4) | 8); // Set read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
-    outb(bar4 + 2, inb(bar4 + 2) & ~(0x04 | 0x02)); //Clear interrupt and error flags
+    outb(bar4 + 2, inb(bar4 + 2) & (0x04 | 0x02)); //Clear interrupt and error flags
 
     /*Select drive*/
 	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
@@ -95,26 +95,18 @@ u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* dr
     /*send DMA transfer command*/
     outb(COMMAND_PORT(drive), 0xC8); //28bits DMA read : 0xC8
 
-    u8 statuss = inb(COMMAND_PORT(drive));
-    u32 times = 0;
-    //0x20 = drive fault ; 0x1 = err ; 0x80 = BSY
-	while(((statuss & 0x80) == 0x80) && ((statuss & 0x01) != 0x01) && ((statuss & 0x20) != 0x20) && times < 0xFFFFF)
-		{statuss = inb(COMMAND_PORT(drive)); times++;}
-    if(statuss & 0x20) {kprintf("%lDRIVE FAULT !\n", 2); return DISK_FAIL_BUSY;}
-	if(times == 0xFFFFF) {kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2); return DISK_FAIL_BUSY;}
-    if(statuss & 0x1) {kprintf("%lERR!\n", 2); return DISK_FAIL_BUSY;}
-
-    //kprintf("%lWaiting for irq %u...\n", 3, drive->irq);
+    kprintf("%lWaiting for irq %u...\n", 3, drive->irq);
 
     /*Set the Start/Stop bit in Bus Master Command Register*/
     outb(bar4, inb(bar4) | 1); // Set start/stop bit
 
     /*Wait for interrupt*/
     scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, 14);
+
     kprintf("%lInterrupt received !\n", 3);
     
     /*Reset Start/Stop bit*/
-    outb(bar4, inb(bar4) & ~0x1); // Clear start/stop bit
+    outb(bar4, inb(bar4) & ~1); // Clear start/stop bit
 
     free_block(prdt_phys);
 

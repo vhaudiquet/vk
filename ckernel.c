@@ -52,15 +52,13 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     install_block_devices(); //Setup block devices (ATA, ATAPI,...)
 
     scheduler_init(); //Init scheduler
-    scheduler_add_process(init_kernel_process()); //Add kernel process as current_process (kernel init is not done yet)
+    init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
     scheduler_add_process(init_idle_process()); //Add idle_process to the queue, so that if there is no process the kernel don't crash
+    scheduler_start();
 
     //DEBUG : printing kernel stack bottom / top ; code start/end
     //kprintf("%lKernel stack : 0x%X - 0x%X\n", 3, stack_pointer-8192, stack_pointer);
     //kprintf("%lKernel code : 0x%X - 0x%X\n", 3, &_kernel_start, &_kernel_end);
-
-    //start scheduler
-    scheduler_start();
 
     kprintf("Getting kernel execution context...");
     //argument interpretation doesn't work... ?

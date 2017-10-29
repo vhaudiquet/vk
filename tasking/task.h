@@ -31,8 +31,8 @@ void* elf_load(file_descriptor_t* file, u32* page_directory);
 typedef struct PROCESS
 {
     g_regs_t gregs;
-    //s_regs_t sregs;
-    u32 cs;
+    s_regs_t sregs;
+    //u32 cs;
     u32 eip;
     u32 esp;
     u32 ebp;
@@ -75,6 +75,7 @@ void scheduler_remove_process(process_t* process);
 //sleep/awake
 #define SLEEP_WAIT_IRQ 1
 #define SLEEP_PAUSED 2
+#define SLEEP_TIME 3
 
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u8 sleep_data);
 void scheduler_wake_process(process_t* process);

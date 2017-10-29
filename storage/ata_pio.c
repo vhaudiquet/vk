@@ -43,7 +43,6 @@ void ata_install()
 	//bool std_primary_initialized = false;
 	//bool std_secondary_initialized = false;
 
-	//finding AHCI controllers that may be in ATA emulation mode and initialize them too
 	pci_device_t* curr = pci_first;
 	while(curr != pci_last)
 	{
@@ -67,9 +66,9 @@ void ata_install()
 			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
 			if(!in){in = 14;}
 
-			//if(curr->subclass_id == 0x01)
-			//{
-				kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
+			if(curr->subclass_id == 0x01)
+			{
+				//kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
 				block_device_t* primary_master = ata_identify_drive(port, control_port, true, in, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
 				block_device_t* primary_slave = ata_identify_drive(port, control_port, false, in, curr);
@@ -83,11 +82,11 @@ void ata_install()
 				if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
 				//if((port == PRIMARY_ATA) | (port_s == PRIMARY_ATA)) std_primary_initialized = true;
 				//if((port == SECONDARY_ATA) | (port_s == SECONDARY_ATA)) std_secondary_initialized = true;
-			//}
-			//else if(curr->subclass_id == 0x06)
-			//{
-			//	kprintf("%lFound unsupported AHCI ATA controller\n", 2);
-			//}
+			}
+			else if(curr->subclass_id == 0x06)
+			{
+				kprintf("%lFound unsupported AHCI ATA controller\n", 2);
+			}
 		}
 		curr = curr->next;
 	}
@@ -664,7 +663,7 @@ static u8 ata_pio_poll_status(ata_device_t* drive)
 {
 	u8 status = inb(COMMAND_PORT(drive));
 	u32 times = 0;
-	while(((status & 0x80) == 0x80) && ((status & 0x01) != 0x01) && ((status & 0x20) != 0x20) && times < 0xFFFFF)
+	while(((status & 0x80) == 0x80) && ((status & 0x8) != 0x8) && ((status & 0x01) != 0x01) && ((status & 0x20) != 0x20) && times < 0xFFFFF)
 		{status = inb(COMMAND_PORT(drive)); times++;}
 
 	//TEMP

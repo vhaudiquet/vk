@@ -25,8 +25,8 @@
 typedef struct ASLEEP_PROCESS_D
 {
     process_t* process;
+    u32 sleep_data;
     u8 sleep_reason;
-    u8 sleep_data;
 } asleep_data_t;
 
 bool scheduler_started = false;
@@ -60,7 +60,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     //kprintf("schedule : ring %u (cs = 0x%X) (ss = 0x%X)\n", cs & 0x3, cs, ss);
 
     //if we are currently running idle process, lets throw it away
-    /*if(current_process == idle_process)
+    if(current_process == idle_process)
     {
         list_entry_t* list_pointer = p_wait_list;
         list_entry_t* list_before = 0;
@@ -68,7 +68,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         for(i = 0; i < p_wl_size; i++)
         {
             list_before = list_pointer;
-            //list_pointer = list_pointer->next;
+            list_pointer = list_pointer->next;
         }
         if(!p_wl_size) p_wait_list = list_pointer =
         #ifdef MEMLEAK_DBG
@@ -94,12 +94,12 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         pdata->sleep_data = 0;
         list_pointer->element = pdata;
         p_wl_size++;
-    }*/
+    }
     //else save the context of current process and put in back in queue
     else if(current_process)
     {
         //save context of current process
-        current_process->cs  = cs;
+        current_process->sregs.cs  = cs;
         current_process->eip = eip;
         current_process->gregs.eax = eax;
         current_process->gregs.ecx = ecx;
@@ -108,9 +108,13 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         current_process->ebp = ebp;
         current_process->gregs.esi = esi;
         current_process->gregs.edi = edi;
+        current_process->sregs.gs = gs;
+        current_process->sregs.fs = fs;
+        current_process->sregs.es = es;
+        current_process->sregs.ds = ds;
 
         //if system call, theses are not pushed on the stack
-        if (current_process->cs != 0x08) 
+        if (current_process->sregs.cs != 0x08) 
         {
             current_process->esp = esp_2;
             //current_process->sregs.ss = ss;
@@ -143,17 +147,17 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     outb(0x20, 0x20);
 
     //DEBUG
-    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X %s\n", 3, current_process->eip, current_process->cs, current_process->esp, current_process == idle_process ? "(idle)" : "");
+    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X %s\n", 3, current_process->eip, current_process->sregs.cs, current_process->esp, current_process == idle_process ? "(idle)" : "");
     //kprintf("%leax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", 3, current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
 
     //restore segments register
     asm("mov %0, %%ds \n \
-    mov %0, %%es \n \
-	mov %0, %%fs \n \
-    mov %0, %%gs \n"::"r"((current_process->cs == 0x08 ? 0x10 : 0x23)));
+    mov %1, %%es \n \
+	mov %2, %%fs \n \
+    mov %3, %%gs \n"::"r"(current_process->sregs.ds), "r"(current_process->sregs.es), "r"(current_process->sregs.fs), "r"(current_process->sregs.gs));
 
     //if we return to a system call, we directly restore the stack
-    if(current_process->cs == 0x08) 
+    if(current_process->sregs.cs == 0x08) 
     {
         __asm__ __volatile__ ("mov %0, %%esp"::"g"(current_process->esp):"%esp");
     }
@@ -171,7 +175,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
          and $0xffffbfff, %%eax \n \
          push %%eax        \n \
          pushl %0 \n \
-         pushl %1 \n"::"g"(current_process->cs), "g"(current_process->eip):"%eax");
+         pushl %1 \n"::"g"(current_process->sregs.cs), "g"(current_process->eip):"%eax");
 
     //restore general registers (esi, edi, ebp, eax, ebx, ecx, edx)
     __asm__ __volatile__ ("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"g"(current_process->gregs.esi), "g"(current_process->gregs.edi), "g"(current_process->ebp));
@@ -183,11 +187,12 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
 
 void scheduler_add_process(process_t* process)
 {
-    if(!current_process)
-    {
-        current_process = process;
-    }
-    else queue_add(p_ready_queue, process);
+    //if(!current_process)
+    //{
+    //    current_process = process;
+    //}
+    //else 
+    queue_add(p_ready_queue, process);
 }
 
 void scheduler_remove_process(process_t* process)
@@ -200,10 +205,10 @@ void scheduler_remove_process(process_t* process)
         //and we are good
         current_process->gregs.eax = current_process->gregs.ebx = current_process->gregs.ecx = current_process->gregs.edx = 0;
         current_process->gregs.edi = current_process->gregs.esi = current_process->ebp = 0;
-        //current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
-        current_process->cs = 0x08;
+        current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
+        current_process->sregs.cs = 0x08;
         asm("mov %%esp, %%eax":"=a"(current_process->esp));
-        current_process->eip = (u32) (scheduler_remove_process+0xc5);//(0xc0107bb5);
+        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(0xc0107bb5);
 
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)
@@ -271,11 +276,13 @@ void scheduler_wake_process(process_t* process)
             scheduler_add_process(pdata->process);
             kfree(pdata);
             p_wl_size--;
+            return;
         }
         list_before = list_pointer;
         list_pointer = list_pointer->next;
     }
     //not found, failed
+    kprintf("%lwake: %lwake failed, not found\n", 3, 2);
 }
 
 void scheduler_irq_wakeup(u32 irq)
