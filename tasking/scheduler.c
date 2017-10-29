@@ -208,7 +208,7 @@ void scheduler_remove_process(process_t* process)
         current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
         current_process->sregs.cs = 0x08;
         asm("mov %%esp, %%eax":"=a"(current_process->esp));
-        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(0xc0107bb5);
+        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(c0108133);
 
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)

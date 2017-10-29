@@ -168,14 +168,22 @@ isr_common:
 
 .global SYSCALL_H
 SYSCALL_H:
-    # cli
-    # pusha
+    pusha
+    push %ds
+    push %es
+    push %fs
+    push %gs
     pushl %edx
     pushl %ebx
     pushl %eax
     call syscall_global
-    popl %eax
-    popl %ebx
-    popl %edx
-    # popa
+    # popl %eax
+    # popl %ebx
+    # popl %edx
+    add $0xC, %esp
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+    popa
     iret
