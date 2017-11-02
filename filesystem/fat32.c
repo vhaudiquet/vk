@@ -962,6 +962,13 @@ static u8 fat32fs_read_fat(fat32fs_t* fs)
 
 	//memset(fs->fat_table, 1, fat_size);
 	//kprintf("%vreading fat from sector %u (size %uB)\n", 0b01110001, fat_sector, fat_size);
+	u8 attempts = 0;
+	while(block_read_flexible(fat_sector, 0, (u8*) fs->fat_table, fat_size, fs->drive) != DISK_SUCCESS)
+	{	
+		attempts++;
+		if(attempts > 2) return 1;
+	}
+	/*
 	u32 size2 = fat_size;
 	for(u32 i = 0; i < fat_size;i+=(512*255))
 	{
@@ -987,6 +994,7 @@ static u8 fat32fs_read_fat(fat32fs_t* fs)
 		}
 		fat_sector+=255;
 	}
+	*/
 	return 0;
 	//FAT DUMP (debug)
 	/*u32 used_clusters = 0;

@@ -93,6 +93,7 @@ typedef struct ata_device
 	struct pci_device* controller;
 	u16 base_port;
 	u16 control_port;
+	u16 bar4;
 	u16 sectors_per_block;
 	u8 irq;
 	bool master;
@@ -103,6 +104,7 @@ typedef struct atapi_device
 	struct pci_device* controller;
 	u16 base_port;
 	u16 control_port;
+	u16 bar4;
 	u16 media_type;
 	u8 irq;
 	bool master;

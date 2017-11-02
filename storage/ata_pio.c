@@ -31,8 +31,8 @@
 #define BYTES_PER_SECTOR 512
 
 static u8 ata_pio_poll_status(ata_device_t* drive);
-static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool master, u8 interrupt, pci_device_t* controller);
-static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, bool master, u8 interrupt, pci_device_t* controller);
+static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 interrupt, pci_device_t* controller);
+static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 interrupt, pci_device_t* controller);
 static void ata_read_partitions(block_device_t* drive);
 static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
@@ -61,7 +61,9 @@ void ata_install()
 			u16 control_port_s = (u16) ((pci_read_device(curr, BAR3) & 0xFFFC)+2);
 			if((control_port_s == 0x2) | (control_port_s == 0x3)) control_port_s = 0x376;
 			//kprintf("Controls : 0x%X 0x%X\n", control_port, control_port_s);
-			
+
+			u16 bar4 = pci_read_device(curr, BAR4) & 0xFFFC;
+
 			//pci interrupt
 			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
 			if(!in){in = 14;}
@@ -69,13 +71,13 @@ void ata_install()
 			if(curr->subclass_id == 0x01)
 			{
 				//kprintf("%lFound ATA controller ; port = 0x%X (irq %d)\n", 3, port, in);
-				block_device_t* primary_master = ata_identify_drive(port, control_port, true, in, curr);
+				block_device_t* primary_master = ata_identify_drive(port, control_port, bar4, true, in, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
-				block_device_t* primary_slave = ata_identify_drive(port, control_port, false, in, curr);
+				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, in, curr);
 				if(primary_slave) {block_devices[block_device_count] = primary_slave; block_device_count++;}
-				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, true, (u8) (in+1), curr);
+				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), true, (u8) (in+1), curr);
 				if(secondary_master) {block_devices[block_device_count] = secondary_master; block_device_count++;}
-				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, false, (u8) (in+1), curr);
+				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), false, (u8) (in+1), curr);
 				if(secondary_slave) {block_devices[block_device_count] = secondary_slave; block_device_count++;}
 				//TEMP IDT
 				if((primary_master != 0) | (primary_slave != 0)) {init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);}
@@ -113,7 +115,7 @@ void ata_install()
 	*/
 }
 
-static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool master, u8 irq, pci_device_t* controller)
+static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 irq, pci_device_t* controller)
 {
 	//prepare data structs
 	#ifdef MEMLEAK_DBG
@@ -128,6 +130,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool 
 	current->master = master;
 	current->base_port = base_port;
 	current->control_port = control_port;
+	current->bar4 = bar4;
 	current->controller = controller;
 	current->irq = irq;
 
@@ -165,7 +168,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool 
 	{
 		u8 t0 = inb(LBA_MID_PORT(current));
 		u8 t1 = inb(LBA_HI_PORT(current));
-		if(t0 == 0x14 && t1 == 0xEB) {return atapi_identify_drive(base_port, control_port, master, irq, controller);}
+		if(t0 == 0x14 && t1 == 0xEB) {return atapi_identify_drive(base_port, control_port, bar4, master, irq, controller);}
 		else if(t0 == 0x3C && t1 == 0xC3) kprintf("%l(ata id: is a sata device)\n", 3); //TEMP
 		else kprintf("%l(ata id: unknown error)\n", 3); //TEMP
 		return 0;
@@ -201,7 +204,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, bool 
 	return current_top;
 }
 
-static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, bool master, u8 irq, pci_device_t* controller)
+static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 irq, pci_device_t* controller)
 {
 	//prepare data structs
 	#ifdef MEMLEAK_DBG
@@ -216,6 +219,7 @@ static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, boo
 	current->master = master;
 	current->base_port = base_port;
 	current->control_port = control_port;
+	current->bar4 = bar4;
 	current->controller = controller;
 	current->irq = irq;
 
@@ -645,6 +649,7 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 
 u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
+	if(!count) return DISK_SUCCESS;
 	if(sector > U32_MAX && drive->lba48_support)
 		return ata_pio_read_48(sector, offset, data, count, drive);
 	else
