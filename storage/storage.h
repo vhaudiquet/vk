@@ -112,9 +112,9 @@ typedef struct atapi_device
 } atapi_device_t;
 void ata_install();
 u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 
-u8 ata_dma_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
 //GLOBAL ATA
 //extern u32 DATA_PORT;

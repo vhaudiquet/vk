@@ -34,7 +34,6 @@ static u8 ata_pio_poll_status(ata_device_t* drive);
 static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 interrupt, pci_device_t* controller);
 static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 interrupt, pci_device_t* controller);
 static void ata_read_partitions(block_device_t* drive);
-static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
 extern void _irq14();
 extern void _irq15();
@@ -134,6 +133,8 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	current->controller = controller;
 	current->irq = irq;
 
+	pci_write_device(current->controller, 0x04, pci_read_device(current->controller, 0x04)|7);
+
 	//select drive
 	outb(DEVICE_PORT(current), 0xA0); //always master there, to see if there is a device on the cable or not
 	u8 status = inb(COMMAND_PORT(current));
@@ -223,6 +224,8 @@ static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, u16
 	current->controller = controller;
 	current->irq = irq;
 
+	pci_write_device(current->controller, 0x04, pci_read_device(current->controller, 0x04)|7);
+
 	u8 status;
 
 	//select drive
@@ -269,6 +272,118 @@ static block_device_t* atapi_identify_drive(u16 base_port, u16 control_port, u16
 	return current_top;
 }
 
+static void ata_cmd_pio_read_28(u32 sector, u32 scount, ata_device_t* drive)
+{
+	//kprintf("ATA_PIO_READ_28: sector 0x%X ; count %u sectors\n", sector, scount);
+
+	//select drive and write sector addr (4 upper bits)
+	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+
+	//clean previous error msgs
+	outb(ERROR_PORT(drive), 0);
+
+	//number of sectors to read
+	outb(SECTOR_COUNT_PORT(drive), scount);
+
+	//write sector addr (24 bits left)
+	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
+	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
+	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
+
+	//command read
+	outb(COMMAND_PORT(drive), 0xC4); //0x20: read, 0xC4: read multiple
+}
+
+static void ata_cmd_pio_read_48(u64 sector, u32 scount, ata_device_t* drive)
+{
+	//select drive
+	outb(DEVICE_PORT(drive), (drive->master ? 0x40 : 0x50));
+
+	//write sector count top bytes
+	outb(SECTOR_COUNT_PORT(drive), 0);
+
+	//split address in 8-bits values
+	u8* addr = (u8*) ((u64*)&sector);
+	//write address high bytes to the 3 ports
+	outb(LBA_LOW_PORT(drive), addr[3]);
+	outb(LBA_MID_PORT(drive), addr[4]);
+	outb(LBA_HI_PORT(drive), addr[5]);
+	
+	//write sector count low bytes
+	outb(SECTOR_COUNT_PORT(drive), scount);
+	
+	//write address low bytes to the 3 ports
+	outb(LBA_LOW_PORT(drive), addr[0]);
+	outb(LBA_MID_PORT(drive), addr[1]);
+	outb(LBA_HI_PORT(drive), addr[2]);
+
+	//command extended read
+	outb(COMMAND_PORT(drive), 0x29); //0x24 = READ_SECTOR_EXT (ext = 48) //0x29 : READ MULTIPLE EXT ?
+}
+
+u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+{
+	if(!count) return DISK_SUCCESS;
+
+	//calculate sector count
+	u32 scount = (u32) (count / BYTES_PER_SECTOR);
+	if(count % BYTES_PER_SECTOR) scount++;
+
+	//calculate sector offset
+	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
+
+	if(scount > 255) return DISK_FAIL_INTERNAL;
+
+	if(sector > U32_MAX)
+	{
+		if(!drive->lba48_support) return DISK_FAIL_OUT;
+		//verify that sector is really 48-bits integer
+		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+		ata_cmd_pio_read_48(sector, scount, drive);
+	}
+	else
+	{
+		//verify that sector is really a 28-bits integer
+		if(sector & 0xF0000000) return DISK_FAIL_OUT;
+		ata_cmd_pio_read_28((u32) sector, (u32) scount, drive);
+	}
+
+	//wait for drive to be ready
+	u8 status = ata_pio_poll_status(drive);
+	if(status & 0x1) return DISK_FAIL_BUSY;
+
+	//actually read the data
+	u32 data_read = 0;
+	u32 i;
+	for(i = 0; i < (count+offset); i+=2)
+	{
+		if(i+1<offset) inw(DATA_PORT(drive)); 
+		else 
+		{
+			u16 wdata = inw(DATA_PORT(drive));
+			if(i>=offset)
+				data[i-offset] = (u8) wdata & 0x00FF;
+			if(i+1 < count+offset)
+				data[i+1-offset] = (u8) (wdata >> 8) & 0x00FF;
+		}
+		data_read+=2;
+		if(!(data_read % (512*2)))
+		{
+			u8 status = ata_pio_poll_status(drive);
+			if(status & 0x1) return DISK_FAIL_BUSY;
+		}
+	}
+
+	//we need to read from FULL SECTOR (or it will error)
+	while((data_read % BYTES_PER_SECTOR) != 0)
+	{
+		inw(DATA_PORT(drive));
+		data_read+=2;
+	}
+
+	return DISK_SUCCESS;
+}
+
 static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
 	//kprintf("writing sector %d at off %d for %d bytes into buffer at 0x%X\n", sector, offset, count, data);
@@ -291,7 +406,7 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 		#else
 		kmalloc(BYTES_PER_SECTOR);
 		#endif
-		ata_pio_read_28(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
+		ata_pio_read_flexible(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
 	}
 
 	//calculate last sector offset
@@ -306,7 +421,7 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 		#else
 		kmalloc(BYTES_PER_SECTOR);
 		#endif
-		ata_pio_read_28(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
+		ata_pio_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
 	}
 
 	//select drive and write sector addr (4 upper bits)
@@ -381,153 +496,6 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 	return DISK_SUCCESS;
 }
 
-static u8 ata_pio_read_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
-{
-	//verify that sector is really a 28-bits integer (the fatal error is temp)
-	if(sector & 0xF0000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to read an unadressable sector", "READ_28");
-
-	kprintf("ATA_PIO_READ_28: sector 0x%X ; count %u B\n", sector, count);
-
-	//calculate sector count
-	u32 scount = count / BYTES_PER_SECTOR;
-	if(count % BYTES_PER_SECTOR) scount++;
-
-	//calculate sector offset
-	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
-
-	if(scount > 255) return DISK_FAIL_INTERNAL; //fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
-
-	//select drive and write sector addr (4 upper bits)
-	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
-
-	//clean previous error msgs
-	outb(ERROR_PORT(drive), 0);
-
-	//number of sectors to read
-	outb(SECTOR_COUNT_PORT(drive), scount);
-
-	//write sector addr (24 bits left)
-	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
-	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
-	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
-
-	//command read
-	outb(COMMAND_PORT(drive), 0xC4); //0x20: read, 0xC4: read multiple
-
-	//wait for drive to be ready
-	u8 status = ata_pio_poll_status(drive);
-	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
-
-	//actually read the data
-	u32 data_read = 0;
-	u32 i;
-	for(i = 0; i < (count+offset); i+=2)
-	{
-		if(i+1<offset) inw(DATA_PORT(drive)); 
-		else 
-		{
-			u16 wdata = inw(DATA_PORT(drive));
-			if(i>=offset)
-				data[i-offset] = (u8) wdata & 0x00FF;
-			if(i+1 < count+offset)
-				data[i+1-offset] = (u8) (wdata >> 8) & 0x00FF;
-		}
-		data_read+=2;
-		if(!(data_read % (512*2)))
-		{
-			//kprintf("repoll... (%u)\n", data_read);
-			u8 status = ata_pio_poll_status(drive);
-			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
-		}
-	}
-
-	//kprintf("%lbytes read : %u", 3, data_read);
-
-	//we need to read from FULL SECTOR (or it will error)
-	while((data_read % BYTES_PER_SECTOR) != 0)
-	{
-		inw(DATA_PORT(drive));
-		data_read+=2;
-	}
-
-	return DISK_SUCCESS;
-}
-
-static u8 ata_pio_read_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
-{
-	//verify that sector is really 48-bits integer (the fatal error is temp)
-	if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to read an unadressable sector", "READ_48");
-
-	//calculate sector count
-	u32 scount = (u32) (count / BYTES_PER_SECTOR);
-	if(count % BYTES_PER_SECTOR) scount++;
-
-	//calculate sector offset
-	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
-
-	if(scount > 255) return DISK_FAIL_INTERNAL;//fatal_kernel_error("Trying to read more than 255 sectors", "READ_28");
-
-	//select drive
-	outb(DEVICE_PORT(drive), (drive->master ? 0x40 : 0x50));
-
-	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
-
-	//split address in 8-bits values
-	u8* addr = (u8*) ((u64*)&sector);
-	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[3]);
-	outb(LBA_MID_PORT(drive), addr[4]);
-	outb(LBA_HI_PORT(drive), addr[5]);
-	
-	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT(drive), 1); //always 1 sector for now
-	
-	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[0]);
-	outb(LBA_MID_PORT(drive), addr[1]);
-	outb(LBA_HI_PORT(drive), addr[2]);
-
-	//command extended read
-	outb(COMMAND_PORT(drive), 0x29); //0x24 = READ_SECTOR_EXT (ext = 48) //0x29 : READ MULTIPLE EXT ?
-
-	//wait for drive to be ready
-	u8 status = ata_pio_poll_status(drive);
-
-	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_48"); //temp debug
-
-	//actually read the data
-	u32 data_read = 0;
-	u64 i;
-	for(i = 0; i < (count+offset); i+=2)
-	{
-		if(i+1<offset) inw(DATA_PORT(drive)); 
-		else 
-		{
-			u16 wdata = inw(DATA_PORT(drive));
-			if(i>=offset)
-				data[i-offset] = (u8) wdata & 0x00FF;
-			if(i+1 < count+offset)
-				data[i+1-offset] = (u8) (wdata >> 8) & 0x00FF;
-		}
-		data_read+=2;
-		if(!(data_read % (512*2)))//if(data_read % (512*32))
-		{
-			u8 status = ata_pio_poll_status(drive);
-			if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while reading", "READ_28"); //temp debug
-		}
-	}
-	
-	//we need to read from FULL SECTOR (or it will error)
-	while((data_read % BYTES_PER_SECTOR) != 0)
-	{
-		inw(DATA_PORT(drive));
-		data_read+=2;
-	}
-
-	return DISK_SUCCESS;
-}
-
 static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	//verify that sector is really a 48-bits integer (the fatal error is temp)
@@ -549,7 +517,7 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 		#else
 		kmalloc(BYTES_PER_SECTOR);
 		#endif
-		ata_pio_read_48(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
+		ata_pio_read_flexible(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
 	}
 
 	//calculate last sector offset
@@ -564,7 +532,7 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 		#else
 		kmalloc(BYTES_PER_SECTOR);
 		#endif
-		ata_pio_read_48(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
+		ata_pio_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
 	}
 
 	//select drive
@@ -647,15 +615,6 @@ static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_devi
 	return DISK_SUCCESS;
 }
 
-u8 ata_pio_read(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
-{
-	if(!count) return DISK_SUCCESS;
-	if(sector > U32_MAX && drive->lba48_support)
-		return ata_pio_read_48(sector, offset, data, count, drive);
-	else
-		return ata_pio_read_28((u32) sector, offset, data, (u32) count, drive);
-}
-
 u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 		if(sector > U32_MAX && drive->lba48_support)
@@ -672,9 +631,9 @@ static u8 ata_pio_poll_status(ata_device_t* drive)
 		{status = inb(COMMAND_PORT(drive)); times++;}
 
 	//TEMP
-	if(status & 0x20) {kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
-	if(times == 0xFFFFF) {kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2);return 0x01;}
-	if(status & 0x1) {kprintf("%lDRIVE ERR !\n", 2); return 0x01;}
+	if(status & 0x20) return 1;//{kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
+	if(times == 0xFFFFF) return 1;//{kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2);return 0x01;}
+	if(status & 0x1) return 1;//{kprintf("%lDRIVE ERR !\n", 2); return 0x01;}
 	return status;
 }
 
@@ -691,7 +650,7 @@ static void ata_read_partitions(block_device_t* drive)
 	#else
 	master_boot_record_t* mbr = kmalloc(sizeof(master_boot_record_t));
 	#endif
-	if(ata_pio_read_28(0, 0, ((u8*) mbr), 512, current) != DISK_SUCCESS)
+	if(ata_pio_read_flexible(0, 0, ((u8*) mbr), 512, current) != DISK_SUCCESS)
 		fatal_kernel_error("Could not read drive MBR", "ATA_READ_PARTITIONS"); //TEMP, return then
 
 	if(mbr->magic_number != 0xAA55) fatal_kernel_error("Invalid MBR", "ATA_READ_PARTITIONS"); //TEMP, return then
