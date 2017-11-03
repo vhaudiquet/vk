@@ -102,7 +102,7 @@ typedef struct ata_device
 } ata_device_t;
 //global functions
 void ata_install();
-u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 
 //ata driver internal functions
@@ -111,6 +111,8 @@ void ata_read_partitions(block_device_t* drive);
 u8 ata_pio_poll_status(ata_device_t* drive);
 u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive);
 
 #define DATA_PORT(drive) drive->base_port
 #define ERROR_PORT(drive) drive->base_port+1
@@ -123,5 +125,6 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
 #define CONTROL_PORT(drive) drive->control_port
 
 #define BYTES_PER_SECTOR 512
+#define ATAPI_SECTOR_SIZE 2048
 
 #endif

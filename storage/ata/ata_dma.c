@@ -91,24 +91,27 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
 {
     if(!count) return DISK_SUCCESS;
     
+    u32 bps = ((drive->flags & ATA_FLAG_ATAPI) ? ATAPI_SECTOR_SIZE : BYTES_PER_SECTOR);
+
     /* Calculate sector count */
     //calculate sector count
-    u32 scount = count / BYTES_PER_SECTOR;
-    if(count % BYTES_PER_SECTOR) scount++;
+    u32 scount = count / bps;
+    if(count % bps) scount++;
     
     //calculate sector offset
-    while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
+    while(offset>=bps) {offset-=bps; sector++; scount--;}
     if(scount > 127) return DISK_FAIL_INTERNAL;
+    if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return DISK_FAIL_INTERNAL;
 
     /*prepare a PRDT (Physical Region Descriptor Table)*/
     //PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary,  1 per ATA bus
     u32 virtual = 0xE0800000;
-    u32 prdt_phys = reserve_block(sizeof(prd_t)+4+scount*512, PHYS_KERNELF_BLOCK_TYPE);
+    u32 prdt_phys = reserve_block(sizeof(prd_t)+4+scount*bps, PHYS_KERNELF_BLOCK_TYPE);
     u32 prdt_phys_aligned = prdt_phys; alignup(prdt_phys_aligned, sizeof(u32));
-    map_flexible(sizeof(prd_t)+scount*512, prdt_phys_aligned, virtual, kernel_page_directory);
+    map_flexible(sizeof(prd_t)+scount*bps, prdt_phys_aligned, virtual, kernel_page_directory);
     prd_t* prd = (prd_t*) virtual;
     prd->data_pointer = prdt_phys_aligned+sizeof(prd_t);
-    prd->byte_count = (u16) (scount*512);//count;
+    prd->byte_count = (u16) (scount*bps);//count;
     prd->reserved = 0x8000;
 
     /*Send the physical PRDT addr to Bus Master PRDT Register*/
@@ -123,7 +126,12 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
     /*Clear err/interrupt bits in Bus Master Status Register*/
     outb(drive->bar4 + 2, inb(drive->bar4 + 2) | 0x04 | 0x02); //Clear interrupt and error flags   
 
-    if(sector > U32_MAX)
+    if(drive->flags & ATA_FLAG_ATAPI)
+    {
+        if(sector & 0xF0000000) return DISK_FAIL_OUT;
+        if(atapi_cmd_dma_read_28((u32) sector, drive) != DISK_SUCCESS) return DISK_FAIL_BUSY;
+    }
+    else if(sector > U32_MAX)
     {
         if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
         if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
@@ -139,7 +147,7 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
     outb(drive->bar4, inb(drive->bar4) | 1); // Set start/stop bit
     
     /*Wait for interrupt*/
-    scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, 14);
+    scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, drive->irq);
     
     //kprintf("%lInterrupt received !\n", 3);
         

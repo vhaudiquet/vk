@@ -36,8 +36,6 @@ typedef struct ATA_IDENTIFY
 
 static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 irq, pci_device_t* controller);
 
-extern void _irq14(); //TEMP
-extern void _irq15(); //TEMP
 void ata_install()
 {
     pci_device_t* curr = pci_first;
@@ -61,22 +59,22 @@ void ata_install()
 			u16 bar4 = pci_read_device(curr, BAR4) & 0xFFFC;
 
 			//pci interrupt
-			u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
-			if(!in){in = 14;}
+			//u8 in = ((u8) (((u16)(curr->interrupt << 8)) >> 8)); //wtf ?
+			//if(!in){in = 14;}
 
 			if(curr->subclass_id == 0x01)
 			{
-				block_device_t* primary_master = ata_identify_drive(port, control_port, bar4, true, in, curr);
+				block_device_t* primary_master = ata_identify_drive(port, control_port, bar4, true, 14, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
-				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, in, curr);
+				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, 14, curr);
 				if(primary_slave) {block_devices[block_device_count] = primary_slave; block_device_count++;}
-				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), true, (u8) (in+1), curr);
+				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), true, (u8) (15), curr);
 				if(secondary_master) {block_devices[block_device_count] = secondary_master; block_device_count++;}
-				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), false, (u8) (in+1), curr);
+				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), false, (u8) (15), curr);
 				if(secondary_slave) {block_devices[block_device_count] = secondary_slave; block_device_count++;}
 				//TEMP IDT
-				if((primary_master != 0) | (primary_slave != 0)) {init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);}
-				if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
+				//if((primary_master != 0) | (primary_slave != 0)) {init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);}
+				//if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
             }
             //Note : DEBUG message
 			//else if(curr->subclass_id == 0x06)
@@ -204,7 +202,18 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 {
     if(drive->flags & ATA_FLAG_ATAPI)
     {
-        return DISK_FAIL_INTERNAL;
+        u8 err = DISK_SUCCESS;
+		u32 a = 0; u32 as = 0;
+		while(count > 31*ATAPI_SECTOR_SIZE)
+		{
+			err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+			count -= 31*ATAPI_SECTOR_SIZE;
+			a += 31*ATAPI_SECTOR_SIZE;
+			as += 31;
+			offset = 0;
+			if(err != DISK_SUCCESS) return err;
+		}
+		return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
     }
     else
     {
@@ -212,11 +221,11 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
         {
             u8 err = DISK_SUCCESS;
             u32 a = 0; u32 as = 0;
-            while(count > 255*512)
+            while(count > 255*BYTES_PER_SECTOR)
             {
-                err = ata_pio_read_flexible(sector+as, offset, data+a, 255*512, drive);
-                count -= 255*512;
-                a += 255*512;
+                err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+                count -= 255*BYTES_PER_SECTOR;
+                a += 255*BYTES_PER_SECTOR;
                 as += 255;
                 offset = 0;
                 if(err != DISK_SUCCESS) return err;
@@ -227,11 +236,11 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
         {
             u8 err = DISK_SUCCESS;
             u32 a = 0; u32 as = 0;
-            while(count > 127*512)
+            while(count > 127*BYTES_PER_SECTOR)
             {
-                err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*512, drive);
-                count -= 127*512;
-                a += 127*512;
+                err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*BYTES_PER_SECTOR, drive);
+                count -= 127*BYTES_PER_SECTOR;
+                a += 127*BYTES_PER_SECTOR;
                 as += 127;
                 offset = 0;
                 if(err != DISK_SUCCESS) return err;
@@ -239,4 +248,9 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
             return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
         }
     }
+}
+
+u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+{
+	return ata_pio_write_flexible(sector, offset, data, count, drive);
 }

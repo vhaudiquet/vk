@@ -16,5 +16,38 @@
 
 #include "../storage.h"
 
-#define ATAPI_SECTOR_SIZE 2048
+u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
+{
+    outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xA0 : 0xB0)); //select drive
+    ata_io_wait(drive); //wait for drive selection
 
+    outb(ERROR_PORT(drive), 1); //set feature DMA
+
+    //send buffer size (0 cause DMA)
+    outb(LBA_MID_PORT(drive), 0);
+    outb(LBA_HI_PORT(drive), 0);
+
+    outb(COMMAND_PORT(drive), 0xA0); //send PACKET command
+
+    u8 status = ata_pio_poll_status(drive); //poll status
+    if(status & 1) return DISK_FAIL_BUSY;
+
+    u8 atapi_read_sectors[] = 
+    {
+        0xA8, /* ATAPI_READ_SECTORS */
+        0, 
+        ((sector >> 24) & 0x0F), 
+        ((sector >> 16) & 0xFF), 
+        ((sector >> 8) & 0xFF), 
+        (sector & 0xFF), 
+        0, 0, 0, 1, 0, 0
+    };
+
+    u8 i = 0;
+    for(i = 0; i<6;i++)
+    {
+        outw(DATA_PORT(drive), ((u16*)&atapi_read_sectors)[i]);
+    }
+
+    return DISK_SUCCESS;
+}

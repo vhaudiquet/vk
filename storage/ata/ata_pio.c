@@ -136,46 +136,8 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 	return DISK_SUCCESS;
 }
 
-static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+static void ata_cmd_pio_write_28(u32 sector, u32 scount, ata_device_t* drive)
 {
-	//kprintf("writing sector %d at off %d for %d bytes into buffer at 0x%X\n", sector, offset, count, data);
-	//verify that sector is really a 28-bits integer (the fatal error is temp)
-	if(sector & 0xF0000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_28");
-
-	//calculate sector count
-	u32 scount = count / BYTES_PER_SECTOR;
-	if(count % BYTES_PER_SECTOR) scount++;
-
-	//calculate sector offset
-	while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
-	
-	u8* cached_f = 0;
-	if(offset | (count%512)) //cache starting sector (before any out cmd)
-	{
-		cached_f = 
-		#ifdef MEMLEAK_DBG
-		kmalloc(BYTES_PER_SECTOR, "ATA write28 first sector caching");
-		#else
-		kmalloc(BYTES_PER_SECTOR);
-		#endif
-		ata_pio_read_flexible(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
-	}
-
-	//calculate last sector offset
-	u32 last_sector = sector+((count/512)*512); //does that actually works ?
-
-	u8* cached_l = 0;
-	if((last_sector != sector) && (count % 512)) //cache last sector
-	{
-		cached_l = 
-		#ifdef MEMLEAK_DBG
-		kmalloc(BYTES_PER_SECTOR, "ATA write28 last sector caching");
-		#else
-		kmalloc(BYTES_PER_SECTOR);
-		#endif
-		ata_pio_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
-	}
-
 	//select drive and write sector addr (4 upper bits)
 	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
 	ata_io_wait(drive); //wait for drive selection
@@ -193,9 +155,87 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 
 	//command write
 	outb(COMMAND_PORT(drive), 0x30);
+}
 
+static void ata_cmd_pio_write_48(u64 sector, u32 scount, ata_device_t* drive)
+{
+	//select drive
+	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0x40 : 0x50));
+	ata_io_wait(drive); //wait for drive selection
+
+	//write sector count top bytes
+	outb(SECTOR_COUNT_PORT(drive), 0); //always 1 sector for now
+
+	//split address in 8-bits values
+	u8* addr = (u8*) ((u64*)&sector);
+	//write address high bytes to the 3 ports
+	outb(LBA_LOW_PORT(drive), addr[3]);
+	outb(LBA_MID_PORT(drive), addr[4]);
+	outb(LBA_HI_PORT(drive), addr[5]);
+	
+	//write sector count low bytes
+	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
+	
+	//write address low bytes to the 3 ports
+	outb(LBA_LOW_PORT(drive), addr[0]);
+	outb(LBA_MID_PORT(drive), addr[1]);
+	outb(LBA_HI_PORT(drive), addr[2]);
+
+	//command extended write
+	outb(COMMAND_PORT(drive), 0x34);
+}
+
+u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+{
+	//calculate sector count
+	u32 scount = (u32)(count / BYTES_PER_SECTOR);
+	if(count % BYTES_PER_SECTOR) scount++;
+
+	//calculate sector offset
+	while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
+	
+	u8* cached_f = 0;
+	if(offset | (count%512)) //cache starting sector (before any out cmd)
+	{
+		cached_f = 
+		#ifdef MEMLEAK_DBG
+		kmalloc(BYTES_PER_SECTOR, "ATA write first sector caching");
+		#else
+		kmalloc(BYTES_PER_SECTOR);
+		#endif
+		ata_pio_read_flexible(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
+	}
+
+	//calculate last sector offset
+	u64 last_sector = sector+((count/512)*512); //does that actually works ?
+
+	u8* cached_l = 0;
+	if((last_sector != sector) && (count % 512)) //cache last sector
+	{
+		cached_l = 
+		#ifdef MEMLEAK_DBG
+		kmalloc(BYTES_PER_SECTOR, "ATA write last sector caching");
+		#else
+		kmalloc(BYTES_PER_SECTOR);
+		#endif
+		ata_pio_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
+	}
+
+	if(sector > U32_MAX)
+	{
+		if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
+		//verify that sector is really a 48-bits integer
+		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+		ata_cmd_pio_write_48(sector, scount, drive);
+	}
+	else
+	{
+		if(sector & 0xF0000000) return DISK_FAIL_OUT;
+		ata_cmd_pio_write_28((u32) sector, (u32) scount, drive);
+	}
+	
 	//actually write the data
-	u32 i;
+	u64 i;
 	for(i = 0; i < count+offset; i +=2)
 	{
 		if(i+1<offset)
@@ -247,134 +287,6 @@ static u8 ata_pio_write_28(u32 sector, u32 offset, u8* data, u32 count, ata_devi
 	
 	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_28"); //temp debug
 	return DISK_SUCCESS;
-}
-
-static u8 ata_pio_write_48(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
-{
-	//verify that sector is really a 48-bits integer (the fatal error is temp)
-	if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;//fatal_kernel_error("Trying to write to a unadressable sector", "WRITE_48");
-
-	//calculating sector count
-	u32 scount = (u32) (count / BYTES_PER_SECTOR);
-	if(count % BYTES_PER_SECTOR) scount++;
-
-	//calculate sector offset
-	while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
-
-	u8* cached_f = 0;
-	if(offset) //cache starting sector (before any out cmd)
-	{
-		cached_f = 
-		#ifdef MEMLEAK_DBG
-		kmalloc(BYTES_PER_SECTOR, "ATA write48 first sector caching");
-		#else
-		kmalloc(BYTES_PER_SECTOR);
-		#endif
-		ata_pio_read_flexible(sector, 0, cached_f, BYTES_PER_SECTOR, drive);
-	}
-
-	//calculate last sector offset
-	u64 last_sector = sector+((count/512)*512); //does that actually works ?
-
-	u8* cached_l = 0;
-	if((last_sector != sector) && (count % 512)) //cache last sector
-	{
-		cached_l = 
-		#ifdef MEMLEAK_DBG
-		kmalloc(BYTES_PER_SECTOR, "ATA write48 last sector caching");
-		#else
-		kmalloc(BYTES_PER_SECTOR);
-		#endif
-		ata_pio_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
-	}
-
-	//select drive
-	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0x40 : 0x50));
-	ata_io_wait(drive); //wait for drive selection
-
-	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
-
-	//split address in 8-bits values
-	u8* addr = (u8*) ((u64*)&sector);
-	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[3]);
-	outb(LBA_MID_PORT(drive), addr[4]);
-	outb(LBA_HI_PORT(drive), addr[5]);
-	
-	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT(drive), 1); //always 1 sector for now
-	
-	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[0]);
-	outb(LBA_MID_PORT(drive), addr[1]);
-	outb(LBA_HI_PORT(drive), addr[2]);
-
-	//command extended write
-	outb(COMMAND_PORT(drive), 0x34);
-
-	//actually write the data
-	u64 i;
-	for(i = 0; i < count+offset; i +=2)
-	{
-		if(i+1<offset)
-		{
-			//output cached
-			u16 wdata = cached_f[i];
-			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT(drive), wdata);
-		}
-		else 
-		{
-			//output data
-			u16 wdata;
-			if(i>=offset)
-				wdata = data[i-offset];
-			else wdata = cached_f[i];
-
-			if(i+1 < count+offset)
-				wdata |= (u16) (((u16) data[i+1-offset]) << 8);
-				
-			outw(DATA_PORT(drive), wdata);
-		}
-	}
-
-	//we need to write to FULL SECTOR (or it will error)
-	for(i = count+offset + ((count+offset) % 2); i < BYTES_PER_SECTOR*scount; i+=2)
-	{
-		//output cached
-		if(last_sector == sector)
-		{
-			u16 wdata = cached_f[i];
-			wdata |= (u16) (((u16) cached_f[i+1]) << 8);
-			outw(DATA_PORT(drive), wdata);
-		}
-		else
-		{
-			u16 wdata = cached_l[i];
-			wdata |= (u16) (((u16) cached_l[i+1]) << 8);
-			outw(DATA_PORT(drive), wdata);
-		}
-	}
-
-	if(offset) kfree(cached_f);
-	if((last_sector != sector) && (count % 512)) kfree(cached_l);
-
-	//then flush drive (actually verify that this part works for 48-bits LBA)
-	outb(COMMAND_PORT(drive), 0xE7);
-	
-	u8 status = ata_pio_poll_status(drive);
-	
-	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_48"); //temp debug
-	return DISK_SUCCESS;
-}
-
-u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
-{
-		if(sector > U32_MAX && (drive->flags & ATA_FLAG_LBA48))
-			return ata_pio_write_48(sector, offset, data, count, drive);
-		else
-			return ata_pio_write_28((u32) sector, offset, data, (u32) count, drive);
 }
 
 u8 ata_pio_poll_status(ata_device_t* drive)

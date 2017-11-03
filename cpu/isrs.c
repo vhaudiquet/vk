@@ -86,9 +86,9 @@ void irq_handler(u32 irq_number)
 	switch(irq_number)
 	{
 		case 1: {keyboard_interrupt(); break;} //Keyboard interrupt
-		case 14: break;//{kprintf("%lPrimary ATA interrupt\n", 3); break;}
-		case 15: {kprintf("%lSecondary ATA interrupt\n", 3); break;}
-		default : {kprintf("%lUNHANDLED IRQ %u\n", 2, irq_number); break;}
+		//case 14: break;//{kprintf("%lPrimary ATA interrupt\n", 3); break;}
+		//case 15: {kprintf("%lSecondary ATA interrupt\n", 3); break;}
+		default : break;//{kprintf("%lUNHANDLED IRQ %u\n", 2, irq_number); break;}
 	}
 	if(irq_number) scheduler_irq_wakeup(irq_number);
 }

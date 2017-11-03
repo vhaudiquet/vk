@@ -44,7 +44,7 @@ u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_devic
 {
     if(drive->device_type == ATA_DEVICE)
     {
-        return ata_pio_write(sector, offset, data, count, (ata_device_t*) drive->device_struct);
+        return ata_write_flexible(sector, offset, data, count, (ata_device_t*) drive->device_struct);
     }
     return DISK_FAIL_INTERNAL;
 }

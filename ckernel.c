@@ -121,6 +121,12 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         mount("/", FS_TYPE_RAMFS, rfs);
         kprintf("%lramfs mounted '/'\n", 3);
         kprintf("live dir : %s\n", aroot_dir);
+
+        block_device_t* dev = block_devices[root_drive];
+        u8* data = kmalloc(2048);
+        block_read_flexible(0x10, 0, data, 2048, dev);
+        kprintf("cd= %s\n", (data+1));
+
         //need to mount /sys but no ATAPI/USB driver yet
         fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");
     }
