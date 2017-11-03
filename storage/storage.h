@@ -58,7 +58,6 @@ typedef struct master_boot_record
 
 //BLOCK DEVICES ABSTRACTION LAYER
 #define ATA_DEVICE 1
-#define ATAPI_DEVICE 2
 
 #define HARD_DISK_DRIVE 1
 #define CD_DRIVE 2
@@ -88,6 +87,9 @@ u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_devic
 void install_block_devices();
 
 //ATA devices
+#define ATA_FLAG_MASTER 1
+#define ATA_FLAG_LBA48 2
+#define ATA_FLAG_ATAPI 4
 typedef struct ata_device
 {
 	struct pci_device* controller;
@@ -96,28 +98,20 @@ typedef struct ata_device
 	u16 bar4;
 	u16 sectors_per_block;
 	u8 irq;
-	bool master;
-	bool lba48_support;
+	u8 flags;
 } ata_device_t;
-typedef struct atapi_device
-{
-	struct pci_device* controller;
-	u16 base_port;
-	u16 control_port;
-	u16 bar4;
-	u16 media_type;
-	u8 irq;
-	bool master;
-	bool lba48_support;
-} atapi_device_t;
+//global functions
 void ata_install();
 u8 ata_pio_write(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 
+//ata driver internal functions
+void ata_io_wait(ata_device_t* drive);
+void ata_read_partitions(block_device_t* drive);
+u8 ata_pio_poll_status(ata_device_t* drive);
+u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 
-//GLOBAL ATA
-//extern u32 DATA_PORT;
 #define DATA_PORT(drive) drive->base_port
 #define ERROR_PORT(drive) drive->base_port+1
 #define SECTOR_COUNT_PORT(drive) drive->base_port+2
@@ -128,13 +122,6 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
 #define COMMAND_PORT(drive) drive->base_port+7
 #define CONTROL_PORT(drive) drive->control_port
 
-//#define ERROR_PORT DATA_PORT+1
-//#define SECTOR_COUNT_PORT DATA_PORT+2
-//#define LBA_LOW_PORT DATA_PORT+3
-//#define LBA_MID_PORT DATA_PORT+4
-//#define LBA_HI_PORT DATA_PORT+5
-//#define DEVICE_PORT DATA_PORT+6 //talk to master or slave ++LBA_TOP if 48 bits
-//#define COMMAND_PORT DATA_PORT+7
-//#define CONTROL_PORT DATA_PORT+0x206
+#define BYTES_PER_SECTOR 512
 
 #endif

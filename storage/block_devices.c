@@ -35,36 +35,7 @@ u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device
 {
     if(drive->device_type == ATA_DEVICE)
     {
-        if((!scheduler_started))// | (count <= 512))
-        {
-            u8 err = DISK_SUCCESS;
-            u32 a = 0; u32 as = 0;
-            while(count > 255*512)
-            {
-                err = ata_pio_read_flexible(sector+as, offset, data+a, 255*512, (ata_device_t*) drive->device_struct);
-                count -= 255*512;
-                a += 255*512;
-                as += 255;
-                offset = 0;
-                if(err != DISK_SUCCESS) return err;
-            }
-            return ata_pio_read_flexible(sector+as, offset, data+a, count, (ata_device_t*) drive->device_struct);
-        }
-        else
-        {
-            u8 err = DISK_SUCCESS;
-            u32 a = 0; u32 as = 0;
-            while(count > 127*512)
-            {
-                err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*512, (ata_device_t*) drive->device_struct);
-                count -= 127*512;
-                a += 127*512;
-                as += 127;
-                offset = 0;
-                if(err != DISK_SUCCESS) return err;
-            }
-            return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, (ata_device_t*) drive->device_struct);
-        }
+        return ata_read_flexible(sector, offset, data, count, drive->device_struct);
     }
     return DISK_FAIL_INTERNAL;
 }

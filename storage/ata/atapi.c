@@ -14,7 +14,7 @@
     along with VK.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "storage.h"
+#include "../storage.h"
 
 #define ATAPI_SECTOR_SIZE 2048
 

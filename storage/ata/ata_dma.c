@@ -14,7 +14,7 @@
     along with VK.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "storage.h"
+#include "../storage.h"
 #include "memory/mem.h"
 #include "tasking/task.h"
 #include "internal/internal.h"
@@ -34,7 +34,8 @@ static void ata_cmd_dma_read_28(u32 sector, u32 scount, ata_device_t* drive)
     //kprintf("ATA_DMA_READ_28: sector 0x%X ; count %u sectors\n", sector, scount);
 
     /*Select drive*/
-	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+    ata_io_wait(drive); //wait for drive selection
 
     /*Send LBA and sector count*/
     
@@ -56,7 +57,8 @@ static void ata_cmd_dma_read_48(u64 sector, u32 scount, ata_device_t* drive)
     //kprintf("ATA_DMA_READ_48: sector 0x%X ; count %u sectors\n", sector, scount);
 
     /*Select drive*/
-	outb(DEVICE_PORT(drive), (drive->master ? 0xE0 : 0xF0));
+	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0));
+    ata_io_wait(drive); //wait for drive selection
     
     /*Send LBA and sector count*/
     
@@ -123,7 +125,7 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
 
     if(sector > U32_MAX)
     {
-        if(!drive->lba48_support) return DISK_FAIL_OUT;
+        if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
         if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
         ata_cmd_dma_read_48(sector, scount, drive);
     }
