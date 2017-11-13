@@ -55,7 +55,6 @@ void unhandled_interrupt()
 #include "idt.h"
 void idt_install(void)
 {
-	kprintf("[CPU] Installing IDT...");
 	//Initializing ALL interrupts to UNHANDLED
 	int i;
 	for (i = 0; i < IDT_SIZE; i++)
@@ -127,6 +126,4 @@ void idt_install(void)
 
 	//Loading register IDTR
 	asm("lidt (IDT_POINTER)\n");
-
-	vga_text_okmsg();
 }

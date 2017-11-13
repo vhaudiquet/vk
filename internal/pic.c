@@ -21,7 +21,7 @@
 //Remaps pic interrupts (0-15) to 32-47
 void pic_install()
 {
-	kprintf("[PIC] Installing PIC...");
+	kprintf("Installing PIC...");
 	//send INIT command to PIC1 and PIC2
 	outb(0x20, 0x11);
 	outb(0xA0, 0x11);

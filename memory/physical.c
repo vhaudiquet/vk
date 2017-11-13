@@ -28,8 +28,6 @@ u32 detected_memory_below32;
 
 void physmem_get(multiboot_info_t* mbt)
 {
-    kprintf("[MEM] Getting physical memory map...");
-
     //Parse memory map from GRUB
     memory_map_t* mmap = (memory_map_t*) (mbt->mmap_addr+KERNEL_VIRTUAL_BASE);
     p_block_t* prev = 0;
@@ -80,8 +78,6 @@ void physmem_get(multiboot_info_t* mbt)
     reserve_specific(0x100000, 0x300000, PHYS_KERNEL_BLOCK_TYPE);
     //Mark the kernel heap page as used
     reserve_specific(KHEAP_PHYS_START, KHEAP_BASE_SIZE, PHYS_KERNEL_BLOCK_TYPE);
-
-    vga_text_okmsg();
 }
 
 u32 get_free_mem()

@@ -37,7 +37,7 @@ static void pci_check_bus(u32 bus);
 
 void pci_install()
 {
-    kprintf("[PCI] Installing PCI devices...");
+    kprintf("Installing PCI devices...");
     pci_check_bus(0);
     kfree(pci_last);
     vga_text_okmsg();

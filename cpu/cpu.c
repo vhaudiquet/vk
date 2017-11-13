@@ -40,35 +40,26 @@ void cpu_vendor_id()
 
 void cpu_features()
 {
-    kprintf("[CPU] Detecting CPU features...");
     if(CPU_MAX_CPUID == 0)
     {
-        vga_text_failmsg();
-        //kprintf("\n[CPU] %lCPUID not supported. Could not get CPU features...\n", 2);
         return;
     }
 
     asm("cpuid":"=c"(cpu_f_ecx),"=d"(cpu_f_edx):"a"(1));
-    vga_text_okmsg();
 
     //Special
     cpu_pse = (bool) (cpu_f_edx << 28 >> 31);
 
-    kprintf("[CPU] Detecting extended features...");
     if(CPU_MAX_CPUID >= 7)
     {
         asm("cpuid":"=b"(cpu_ef_ebx),"=c"(cpu_ef_ecx):"a"(7),"c"(0));
-        vga_text_okmsg();
     }
-    else vga_text_skipmsg();//kprintf("[CPU] CPUID extended features not supported.\n");
 
     asm("cpuid":"=a"(cpu_max_ecpuid):"a"(0x80000000):);
     if(cpu_max_ecpuid > 0x80000000)
     {
         cpu_e_support = true;
-        //kprintf("[CPU] %lCPUID extended instructions supported.\n", 1);
     }
-    //else kprintf("[CPU] CPUID extended instructions not supported.\n");
 }
 
 void cpu_detect(void)

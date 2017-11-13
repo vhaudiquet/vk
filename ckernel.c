@@ -38,14 +38,20 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
     //init
     vga_setup(); //Setup VGA : set video_mode to 80x25 TEXT, get display type, set and clean VRAM, disable cursor
+    
+    kprintf("Installing CPU...");
     gdt_install(stack_pointer); //Install GDT : Null segment, Kernel code, Kernel data, User code, User data, TSS
     idt_install(); //TODO : ISRs ! (actually the handle isn't that bad but could be reaaally better)
     cpu_detect(); //TODO : Special handle INVALID_OPCODE
+    vga_text_okmsg();
+
+    kprintf("Setting up memory...");
     kheap_install(); //Install kernel heap (allows kmalloc(), kfree(), krealloc())
     physmem_get(mbt); //Setup physical memory map
     install_page_heap(); //Install page heap (allows pt_alloc(), pt_free()) (page tables / directories must be 4096 aligned)
     finish_paging(); //Enables page size extension
     kvmheap_install(); //Install Virtual Memory heap
+    vga_text_okmsg();
 
     pic_install(); //Install PIC : remaps IRQ
 

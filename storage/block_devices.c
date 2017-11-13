@@ -23,7 +23,7 @@ u16 block_device_count = 0;
 
 void install_block_devices()
 {
-    kprintf("[STO] Installing block devices...");
+    kprintf("Installing block devices...");
 
     block_devices = kmalloc(sizeof(void*)*10);
     ata_install();

@@ -72,8 +72,6 @@ static void tss_write(u32 index, u16 ss0, u32 esp0)
 
 void gdt_install(void* stack_pointer)
 {
-    kprintf("[CPU] Installing GDT...");
-
     //Setting up GDT limit and base address
     GDT_POINTER.limit = GDT_SIZE * sizeof(gdt_desc_t);
 	GDT_POINTER.base = (u32*) &GDT_ENTRIES;
@@ -102,6 +100,4 @@ void gdt_install(void* stack_pointer)
     //flush TSS
     asm("   mov $0x2B, %ax \n \
             ltr %ax \n  ");
-
-    vga_text_okmsg();
 }

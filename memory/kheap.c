@@ -36,7 +36,6 @@ static void kheap_expand();
 
 void kheap_install()
 {
-    kprintf("[MEM] Installing kernel heap...");
     //mapping memory manually, as we have heap yet
     u32 pd_index = KHEAP_BASE_START >> 22;
     unsigned int i;
@@ -52,7 +51,6 @@ void kheap_install()
     base_block->magic = BLOCK_HEADER_MAGIC;
     base_block->size = KHEAP_BASE_END - (((u32) base_block) + sizeof(block_header_t));
     base_block->status = 0;
-    vga_text_okmsg();
 }
 
 #ifdef MEMLEAK_DBG

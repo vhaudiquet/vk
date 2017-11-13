@@ -34,14 +34,10 @@ static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory);
 
 void finish_paging()
 {
-    kprintf("[MEM] Finishing paging...");
-
     if(cpu_pse)
         asm("mov %cr4, %eax \n \
             or $0x10, %eax \n \
             mov %eax, %cr4 \n");
-
-    vga_text_okmsg();
 }
 
 void pd_switch(u32* pd)

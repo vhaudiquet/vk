@@ -35,8 +35,6 @@ u32 kpheap_page_table[1024] __attribute__((aligned(4096)));
 
 void install_page_heap()
 {
-    kprintf("[MEM] Installing page heap...");
-
     u32 KPHEAP_PHYS_BASE = reserve_specific(0x400000, 0x400000, 0xA);
     u32 pd_index = KPHEAP_VIRT_BASE >> 22;
     unsigned int i;
@@ -46,8 +44,6 @@ void install_page_heap()
     }
 
     kernel_page_directory[pd_index] = (((u32) kpheap_page_table) - KERNEL_VIRTUAL_BASE) | 3;
-
-    vga_text_okmsg();
 }
 
 u32* pt_alloc()
