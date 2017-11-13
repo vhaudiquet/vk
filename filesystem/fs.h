@@ -22,6 +22,7 @@
 #define FS_TYPE_RAMFS 1
 #define FS_TYPE_FAT32 2
 #define FS_TYPE_EXT2 3
+#define FS_TYPE_ISO9660 4
 
 #define FILE_ATTR_DIR 0x1
 #define FILE_ATTR_HIDDEN 0x2
@@ -85,5 +86,14 @@ file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs);
 u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
+
+//ISO9660 specific
+typedef struct iso9660fs
+{
+    block_device_t* drive;
+    file_descriptor_t root_dir;
+} iso9660fs_t;
+iso9660fs_t* iso9660fs_init(block_device_t* drive);
+list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
 
 #endif

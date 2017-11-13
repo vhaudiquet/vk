@@ -107,12 +107,24 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 
 //ata driver internal functions
 void ata_io_wait(ata_device_t* drive);
+void ata_cmd_28(u32 sector, u32 scount, u8 cmd, ata_device_t* drive);
+void ata_cmd_48(u64 sector, u32 scount, u8 cmd, ata_device_t* drive);
 void ata_read_partitions(block_device_t* drive);
 u8 ata_pio_poll_status(ata_device_t* drive);
 u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive);
+
+#define ATA_CMD_PIO_READ_MULTIPLE_28 0xC4
+#define ATA_CMD_PIO_READ_MULTIPLE_48 0x29
+#define ATA_CMD_DMA_READ_28 0xC8
+#define ATA_CMD_DMA_READ_48 0x25
+#define ATA_CMD_PIO_WRITE_MULTIPLE_28 0x30
+#define ATA_CMD_PIO_WRITE_MULTIPLE_48 0x34
+#define ATA_CMD_DMA_WRITE_28 0xCA
+#define ATA_CMD_DMA_WRITE_48 0x35
 
 #define DATA_PORT(drive) drive->base_port
 #define ERROR_PORT(drive) drive->base_port+1

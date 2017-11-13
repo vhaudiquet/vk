@@ -89,4 +89,10 @@ bool is_mapped(u32 virt_addr, u32* page_directory);
 u32 get_physical(u32 virt_addr, u32* page_directory);
 //void map_physical(p_block_t* tm, u32 virt_addr);
 
+//Virtual memory heap
+#define FREE_KVM_START 0xE0800000
+void kvmheap_install();
+u32 kvm_reserve_block(u32 size);
+void kvm_free_block(u32 base_addr);
+
 #endif

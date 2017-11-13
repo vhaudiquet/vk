@@ -22,57 +22,6 @@
 #include "../storage.h"
 #include "memory/mem.h"
 
-static void ata_cmd_pio_read_28(u32 sector, u32 scount, ata_device_t* drive)
-{
-	//kprintf("ATA_PIO_READ_28: sector 0x%X ; count %u sectors\n", sector, scount);
-
-	//select drive and write sector addr (4 upper bits)
-	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
-	ata_io_wait(drive); //wait for drive selection
-
-	//clean previous error msgs
-	outb(ERROR_PORT(drive), 0);
-
-	//number of sectors to read
-	outb(SECTOR_COUNT_PORT(drive), scount);
-
-	//write sector addr (24 bits left)
-	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
-	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
-	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
-
-	//command read
-	outb(COMMAND_PORT(drive), 0xC4); //0x20: read, 0xC4: read multiple
-}
-
-static void ata_cmd_pio_read_48(u64 sector, u32 scount, ata_device_t* drive)
-{
-	//select drive
-	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0x40 : 0x50));
-	ata_io_wait(drive); //wait for drive selection
-
-	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT(drive), 0);
-
-	//split address in 8-bits values
-	u8* addr = (u8*) ((u64*)&sector);
-	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[3]);
-	outb(LBA_MID_PORT(drive), addr[4]);
-	outb(LBA_HI_PORT(drive), addr[5]);
-	
-	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT(drive), scount);
-	
-	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[0]);
-	outb(LBA_MID_PORT(drive), addr[1]);
-	outb(LBA_HI_PORT(drive), addr[2]);
-
-	//command extended read
-	outb(COMMAND_PORT(drive), 0x29); //0x24 = READ_SECTOR_EXT (ext = 48) //0x29 : READ MULTIPLE EXT ?
-}
-
 u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	if(!count) return DISK_SUCCESS;
@@ -91,13 +40,13 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 		if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
 		//verify that sector is really 48-bits integer
 		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
-		ata_cmd_pio_read_48(sector, scount, drive);
+		ata_cmd_48(sector, scount, ATA_CMD_PIO_READ_MULTIPLE_48, drive);
 	}
 	else
 	{
 		//verify that sector is really a 28-bits integer
 		if(sector & 0xF0000000) return DISK_FAIL_OUT;
-		ata_cmd_pio_read_28((u32) sector, (u32) scount, drive);
+		ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_PIO_READ_MULTIPLE_28, drive);
 	}
 
 	//wait for drive to be ready
@@ -134,55 +83,6 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 	}
 
 	return DISK_SUCCESS;
-}
-
-static void ata_cmd_pio_write_28(u32 sector, u32 scount, ata_device_t* drive)
-{
-	//select drive and write sector addr (4 upper bits)
-	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
-	ata_io_wait(drive); //wait for drive selection
-
-	//clean previous error msgs
-	outb(ERROR_PORT(drive), 0);
-
-	//number of sectors to write (always 1 for now)
-	outb(SECTOR_COUNT_PORT(drive), scount);
-
-	//write sector addr (24 bits left)
-	outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
-	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
-	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
-
-	//command write
-	outb(COMMAND_PORT(drive), 0x30);
-}
-
-static void ata_cmd_pio_write_48(u64 sector, u32 scount, ata_device_t* drive)
-{
-	//select drive
-	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0x40 : 0x50));
-	ata_io_wait(drive); //wait for drive selection
-
-	//write sector count top bytes
-	outb(SECTOR_COUNT_PORT(drive), 0); //always 1 sector for now
-
-	//split address in 8-bits values
-	u8* addr = (u8*) ((u64*)&sector);
-	//write address high bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[3]);
-	outb(LBA_MID_PORT(drive), addr[4]);
-	outb(LBA_HI_PORT(drive), addr[5]);
-	
-	//write sector count low bytes
-	outb(SECTOR_COUNT_PORT(drive), scount); //always 1 sector for now
-	
-	//write address low bytes to the 3 ports
-	outb(LBA_LOW_PORT(drive), addr[0]);
-	outb(LBA_MID_PORT(drive), addr[1]);
-	outb(LBA_HI_PORT(drive), addr[2]);
-
-	//command extended write
-	outb(COMMAND_PORT(drive), 0x34);
 }
 
 u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
@@ -226,12 +126,12 @@ u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 		if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
 		//verify that sector is really a 48-bits integer
 		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
-		ata_cmd_pio_write_48(sector, scount, drive);
+		ata_cmd_48(sector, scount, ATA_CMD_PIO_WRITE_MULTIPLE_48, drive);
 	}
 	else
 	{
 		if(sector & 0xF0000000) return DISK_FAIL_OUT;
-		ata_cmd_pio_write_28((u32) sector, (u32) scount, drive);
+		ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_PIO_WRITE_MULTIPLE_28, drive);
 	}
 	
 	//actually write the data

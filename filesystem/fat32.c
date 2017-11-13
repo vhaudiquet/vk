@@ -66,7 +66,7 @@ typedef struct BPB
 
 #define FAT_NAME_MAX 13
 
-typedef struct DIR_ENTRY
+typedef struct FAT32_DIR_ENTRY
 {
 	u8 name[8]; //if name[0] (== 0x00 : end of directory) (== 0x05 : name[0] = 0xE5) (== 0xE5 : file deleted) (== 0x2E '.' ou '..')
 	u8 extension[3];
@@ -81,7 +81,7 @@ typedef struct DIR_ENTRY
 	u16 last_modification_date;
 	u16 first_cluster_low; //the low 16 bits of this entry's first cluster number
 	u32 file_size; //in bytes
-} __attribute__((packed)) dir_entry_t;
+} __attribute__((packed)) fat32_dir_entry_t;
 
 typedef struct LFN_ENTRY
 {
@@ -200,13 +200,13 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 
 	//here we have the full dir size, and we allocate an equivalent buffer
 	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
-	dir_entry_t* dirents = 
+	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:list_dir dirents buffer");
 	#else
 	kmalloc((u32) dir_size);
 	#endif
-	dir_entry_t* buffer = dirents;
+	fat32_dir_entry_t* buffer = dirents;
 
 	//reading all clusters inside this buffer
 	u32 i = 0;
@@ -235,7 +235,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 	char* lfn_name = 0;
 	u32 lfn_offset = 0;
 	//u8 lfn_checksum = 0;
-	for(i = 0;i<dir_size/sizeof(dir_entry_t);i++)
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
 	{
 		//kprintf("entry %s -- ", *(dirents[i].name) == 0x0 ? "end" : *(dirents[i].name) == 0xE5 ? "deleted" : dirents[i].attributes == FAT_ATTR_LFN ? "lfn" : "8.3");
 		if(*(dirents[i].name) == 0x0) {falses_entries++; break;}
@@ -504,13 +504,13 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 
 	//here we have the full dir size, and we allocate an equivalent buffer
 	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
-	dir_entry_t* dirents = 
+	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:create_file dir entries buffer");
 	#else
 	kmalloc((u32) dir_size);
 	#endif
-	dir_entry_t* buffer = dirents;
+	fat32_dir_entry_t* buffer = dirents;
 
 	//reading all clusters inside this buffer
 	u32 i = 0;
@@ -541,7 +541,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	char* lfn_name = 0;
 	u32 lfn_offset = 0;
 	u32 unused_entries = 0;
-	for(i = 0;i<dir_size/sizeof(dir_entry_t);i++)
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
 	{
 		if(*(dirents[i].name) == 0x0) {break;}
 		if(*(dirents[i].name) == 0xE5) {unused_entries++; continue;}
@@ -622,7 +622,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	u32 file_cluster = fat32fs_gm_free_clusters(1, fs);
 
 	//verify is the dir can actually handle those entries
-	if(i+needed_lfns < dir_size/sizeof(dir_entry_t))
+	if(i+needed_lfns < dir_size/sizeof(fat32_dir_entry_t))
 	{
 		*(dirents[i+needed_lfns+1].name) = 0x0;
 		buffer = dirents;
@@ -768,13 +768,13 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 
 	//here we have the full dir size, and we allocate an equivalent buffer
 	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
-	dir_entry_t* dirents = 
+	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:resize_dirent dir entries buffer");
 	#else
 	kmalloc((u32) dir_size);
 	#endif
-	dir_entry_t* buffer = dirents;
+	fat32_dir_entry_t* buffer = dirents;
 
 	//reading all clusters inside this buffer
 	u32 i = 0;
@@ -790,7 +790,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	bool found = false;
 	char* lfn_name = 0;
 	u32 lfn_offset = 0;
-	for(i = 0;i<dir_size/sizeof(dir_entry_t);i++)
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
 	{
 		//parsing the LFN entries
 		if(*(dirents[i].name) == 0x0) {break;}

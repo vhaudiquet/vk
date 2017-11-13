@@ -117,7 +117,7 @@ u32 reserve_block(u32 size, u8 type)
             newblock->type = 1;
             newblock->next = next;
             newblock->prev = curr;
-            next->prev = newblock;
+            if(next) next->prev = newblock;
             curr->size = size;
             curr->next = newblock;
             curr->type = type;
@@ -218,7 +218,7 @@ void free_block(u32 base_addr)
             {
                 m->size += curr->size;
                 m->next = curr->next;
-                m->next->prev = m;
+                if(m->next) m->next->prev = m;
                 kfree(curr);
                 curr = m;
                 m = m->prev;
@@ -228,7 +228,7 @@ void free_block(u32 base_addr)
             {
                 curr->size += m->size;
                 curr->next = m->next;
-                curr->next->prev = curr;
+                if(curr->next) curr->next->prev = curr;
                 kfree(m);
                 m = curr->next;
             }

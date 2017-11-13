@@ -198,7 +198,7 @@ static void merge_free_blocks()
 
 static void kheap_expand()
 {
-    if(KHEAP_BASE_END >= 0xE0800000) fatal_kernel_error("Kernel heap full ! How ?", "KHEAP_EXPAND");
+    if(KHEAP_BASE_END >= FREE_KVM_START) fatal_kernel_error("Kernel heap full ! How ?", "KHEAP_EXPAND");
     
     map_memory(0x400000, KHEAP_BASE_END, kernel_page_directory);
     block_header_t* base_block = (block_header_t*) KHEAP_BASE_END;

@@ -45,6 +45,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     physmem_get(mbt); //Setup physical memory map
     install_page_heap(); //Install page heap (allows pt_alloc(), pt_free()) (page tables / directories must be 4096 aligned)
     finish_paging(); //Enables page size extension
+    kvmheap_install(); //Install Virtual Memory heap
 
     pic_install(); //Install PIC : remaps IRQ
 
@@ -123,9 +124,13 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         kprintf("live dir : %s\n", aroot_dir);
 
         block_device_t* dev = block_devices[root_drive];
-        u8* data = kmalloc(2048);
-        block_read_flexible(0x10, 0, data, 2048, dev);
-        kprintf("cd= %s\n", (data+1));
+        //u8* data = kmalloc(2048);
+        //block_read_flexible(0x10, 0, data, 2048, dev);
+        //kprintf("cd= %s\n", (data+1));
+        //kprintf("cd= %s\n", (data+8));
+        iso9660fs_t* fs = iso9660fs_init(dev);
+        u32 dsize = 0;
+        iso9660fs_read_dir(&fs->root_dir, &dsize);
 
         //need to mount /sys but no ATAPI/USB driver yet
         fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");

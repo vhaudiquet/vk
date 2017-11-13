@@ -190,6 +190,58 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	return current_top;
 }
 
+void ata_cmd_28(u32 sector, u32 scount, u8 cmd, ata_device_t* drive)
+{
+	/*Select drive*/
+	outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xE0 : 0xF0) | ((sector & 0x0F000000) >> 24));
+    ata_io_wait(drive); //wait for drive selection
+
+    /*Send LBA and sector count*/
+    
+    //clean previous error msgs (is it really usefull ?)
+    outb(ERROR_PORT(drive), 0);
+
+	//send sector count
+    outb(SECTOR_COUNT_PORT(drive), scount);
+
+	//send LBA
+    outb(LBA_LOW_PORT(drive), (sector & 0x000000FF));
+	outb(LBA_MID_PORT(drive), (sector & 0x0000FF00) >> 8);
+	outb(LBA_HI_PORT(drive), (sector & 0x00FF0000) >> 16);
+
+    /*send command*/
+    outb(COMMAND_PORT(drive), cmd);
+}
+
+void ata_cmd_48(u64 sector, u32 scount, u8 cmd, ata_device_t* drive)
+{
+		/*Select drive*/
+		outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0x40 : 0x50));
+		ata_io_wait(drive); //wait for drive selection
+	
+		/*Send LBA and sector count*/
+		//write sector count top bytes
+		outb(SECTOR_COUNT_PORT(drive), 0); //always 1 sector for now
+	
+		//split address in 8-bits values
+		u8* addr = (u8*) ((u64*)&sector);
+		//write address high bytes to the 3 ports
+		outb(LBA_LOW_PORT(drive), addr[3]);
+		outb(LBA_MID_PORT(drive), addr[4]);
+		outb(LBA_HI_PORT(drive), addr[5]);
+		
+		//write sector count low bytes
+		outb(SECTOR_COUNT_PORT(drive), scount);
+		
+		//write address low bytes to the 3 ports
+		outb(LBA_LOW_PORT(drive), addr[0]);
+		outb(LBA_MID_PORT(drive), addr[1]);
+		outb(LBA_HI_PORT(drive), addr[2]);
+	
+		/*send command*/
+		outb(COMMAND_PORT(drive), cmd);
+}
+
 void ata_io_wait(ata_device_t* drive)
 {
 	inb(CONTROL_PORT(drive));
@@ -252,5 +304,41 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 
 u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
-	return ata_pio_write_flexible(sector, offset, data, count, drive);
+    if(drive->flags & ATA_FLAG_ATAPI)
+    {
+        return DISK_FAIL_INTERNAL;
+    }
+    else
+    {
+        if(!scheduler_started)
+        {
+            u8 err = DISK_SUCCESS;
+            u32 a = 0; u32 as = 0;
+            while(count > 255*BYTES_PER_SECTOR)
+            {
+                err = ata_pio_write_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+                count -= 255*BYTES_PER_SECTOR;
+                a += 255*BYTES_PER_SECTOR;
+                as += 255;
+                offset = 0;
+                if(err != DISK_SUCCESS) return err;
+            }
+            return ata_pio_write_flexible(sector+as, offset, data+a, count, drive);
+        }
+        else
+        {
+            u8 err = DISK_SUCCESS;
+            u32 a = 0; u32 as = 0;
+            while(count > 127*BYTES_PER_SECTOR)
+            {
+                err = ata_dma_write_flexible((u32) sector+as, offset, data+a, (u32) 127*BYTES_PER_SECTOR, drive);
+                count -= 127*BYTES_PER_SECTOR;
+                a += 127*BYTES_PER_SECTOR;
+                as += 127;
+                offset = 0;
+                if(err != DISK_SUCCESS) return err;
+            }
+            return ata_dma_write_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+        }
+    }
 }
