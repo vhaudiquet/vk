@@ -1,5 +1,6 @@
 /*  
     This file is part of VK.
+    Copyright (C) 2017 Valentin Haudiquet
 
     VK is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -54,7 +55,7 @@ typedef struct ISO9660_DIR_ENTRY
 	u16 volume_sequence_msb;
 
 	u8 name_len;
-    char name;
+    char name[];
 } __attribute__((packed)) iso9660_dir_entry_t;
 
 typedef struct ISO_9660_DATE_TIME
@@ -151,16 +152,22 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     if(block_read_flexible(lba, 0, (u8*) dirent, length, fs->drive) != DISK_SUCCESS)
         return 0;
     
-    u32 i = 0; u32 saved = 0;
-    while(length){kprintf("%l%u ", i == saved ? 3:0, *((u8*)dirent+i));if(i==saved){saved += *((u8*)dirent+i);}i++;length-=4;}
+    //u32 i = 0; u32 saved = 0;
+    //while(length){kprintf("%l%u ", i == saved ? 3:0, *((u8*)dirent+i));if(i==saved){saved += *((u8*)dirent+i);}i++;length-=4;}
     *size = 0;
     iso9660_dir_entry_t* db = dirent;
     while(length)
     {
         u32 cl = (u32) db->length + db->ext_length;
-        if(!cl) {db++; length--; kprintf("%u ", *((u8*)db)); kprintf("(0x%X) %u\n", db, db->length); continue;}
+        if(!cl) 
+        {
+            db++; length--; 
+            //kprintf("%u ", *((u8*)db)); 
+            //kprintf("(0x%X) %u\n", db, db->length); 
+            continue;
+        }
         kprintf("db->length = %u , ext:%u ==> ", db->length, db->ext_length);
-        kprintf("%lFile %s ; lba %u ; size %u B ; flags 0x%X\n", 3, &db->name, db->extent_start_lsb, db->extent_size_lsb, db->flags);
+        kprintf("%lFile %s ; lba %u ; size %u B ; flags 0x%X\n", 3, db->name, db->extent_start_lsb, db->extent_size_lsb, db->flags);
         db+=cl;
         length -= cl;
         (*size)++;
@@ -174,7 +181,7 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
 {
     //copy name
     dest->name = kmalloc(dirent->name_len);
-    strncpy(dest->name, &dirent->name, dirent->name_len);
+    strncpy(dest->name, dirent->name, dirent->name_len);
 
     //set infos
     dest->file_system = fs;

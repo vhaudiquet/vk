@@ -1,5 +1,6 @@
 /*  
     This file is part of VK.
+    Copyright (C) 2017 Valentin Haudiquet
 
     VK is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -190,11 +191,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
     scheduler_add_process(init_process);
 
-    //enabling interrupts
-    //asm("sti");
-
     scheduler_remove_process(kernel_process);
+
     //loop infinetely
-    //(actually this is dead code, because as soon as the interrupts gets enabled, the scheduler switch to init process)
+    //(actually this is dead code, because kernel process is removed, and the scheduler switch to init process)
     while(1) asm("hlt");
 }
