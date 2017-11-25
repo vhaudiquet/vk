@@ -138,6 +138,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         iso9660fs_t* fs = iso9660fs_init(dev);
         u32 dsize = 0;
         iso9660fs_read_dir(&fs->root_dir, &dsize);
+        //kprintf("dir read.\n");
 
         //need to mount /sys but no ATAPI/USB driver yet
         fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");

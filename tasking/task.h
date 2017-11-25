@@ -77,6 +77,7 @@ void scheduler_remove_process(process_t* process);
 #define SLEEP_WAIT_IRQ 1
 #define SLEEP_PAUSED 2
 #define SLEEP_TIME 3
+#define SLEEP_WAIT_MUTEX 4
 
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u8 sleep_data);
 void scheduler_wake_process(process_t* process);

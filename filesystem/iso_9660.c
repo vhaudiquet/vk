@@ -145,36 +145,33 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     iso9660fs_t* fs = dir->file_system;
     u64 lba = dir->fsdisk_loc;
     u32 length = (u32) dir->length;
-    kprintf("length: %u B ; loc= lba %u\n", length, lba);
+    //kprintf("length: %u B ; loc= lba %u\n", length, lba);
     iso9660_dir_entry_t* dirent = kmalloc(length);
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
     if(block_read_flexible(lba, 0, (u8*) dirent, length, fs->drive) != DISK_SUCCESS)
         return 0;
     
-    //u32 i = 0; u32 saved = 0;
-    //while(length){kprintf("%l%u ", i == saved ? 3:0, *((u8*)dirent+i));if(i==saved){saved += *((u8*)dirent+i);}i++;length-=4;}
+    list_entry_t* tr = kmalloc(sizeof(list_entry_t));
+    list_entry_t* ptr = tr;
     *size = 0;
-    iso9660_dir_entry_t* db = dirent;
+    u32 i = 0;
     while(length)
     {
-        u32 cl = (u32) db->length + db->ext_length;
-        if(!cl) 
-        {
-            db++; length--; 
-            //kprintf("%u ", *((u8*)db)); 
-            //kprintf("(0x%X) %u\n", db, db->length); 
-            continue;
-        }
-        kprintf("db->length = %u , ext:%u ==> ", db->length, db->ext_length);
-        kprintf("%lFile %s ; lba %u ; size %u B ; flags 0x%X\n", 3, db->name, db->extent_start_lsb, db->extent_size_lsb, db->flags);
-        db+=cl;
-        length -= cl;
+        iso9660_dir_entry_t* cd = ((u8*)dirent+i);
+        file_descriptor_t* fd = kmalloc(sizeof(file_descriptor_t));
+        iso9660_get_fd(fd, dirent+i, fs);
+        //kprintf("%s %X %u\n", fd->name, cd, length);
+        ptr->element = fd;
+        ptr->next = kmalloc(sizeof(list_entry_t));
+        ptr = ptr->next;
+        i+= cd->length;
+        length-= cd->length;
         (*size)++;
-        if(!cl) break;
     }
+    kfree(ptr);
 
-    return 0;
+    return tr;
 }
 
 static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, iso9660fs_t* fs)

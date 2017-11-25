@@ -193,6 +193,8 @@ u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_devic
     /*Set the Start/Stop bit in Bus Master Command Register*/
     outb(drive->bar4, inb(drive->bar4) | 1); // Set start/stop bit
     
+    //kprintf("%lWaiting for interrupt...", 3);
+
     /*Wait for interrupt*/
     scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, drive->irq);
     
