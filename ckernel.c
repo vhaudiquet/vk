@@ -127,7 +127,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         //mount root dir in ramfs
         ramfs_t* rfs = ramfs_init(0x100000);
         mount("/", FS_TYPE_RAMFS, rfs);
-        kprintf("%lramfs mounted '/'\n", 3);
+        kprintf("%lramfs mounted '/' (base_addr = 0x%X)\n", 3, rfs->base_addr);
         kprintf("live dir : %s\n", aroot_dir);
 
         block_device_t* dev = block_devices[root_drive];
@@ -138,7 +138,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         iso9660fs_t* fs = iso9660fs_init(dev);
         u32 dsize = 0;
         iso9660fs_read_dir(&fs->root_dir, &dsize);
-        //kprintf("dir read.\n");
 
         //need to mount /sys but no ATAPI/USB driver yet
         fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");

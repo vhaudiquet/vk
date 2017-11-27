@@ -121,7 +121,7 @@ typedef struct ISO9660_PATH_TABLE_ENTRY
     u8 name[];
 } __attribute__((packed)) iso9660_path_table_entry_t;
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, iso9660fs_t* fs);
+static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, iso9660fs_t* fs);
 
 iso9660fs_t* iso9660fs_init(block_device_t* drive)
 {
@@ -135,7 +135,9 @@ iso9660fs_t* iso9660fs_init(block_device_t* drive)
 
     //making root_dir file descriptor
     iso9660_dir_entry_t* rd = (iso9660_dir_entry_t*) pvd.root_directory;
-    iso9660_get_fd(&tr->root_dir, rd, tr);
+    iso9660_get_fd(&tr->root_dir, rd, 0, tr);
+    kfree(tr->root_dir.name);
+    tr->root_dir.name = 0;
 
     return tr;
 }
@@ -146,43 +148,76 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     u64 lba = dir->fsdisk_loc;
     u32 length = (u32) dir->length;
     //kprintf("length: %u B ; loc= lba %u\n", length, lba);
-    iso9660_dir_entry_t* dirent = kmalloc(length);
+    u8* dirent_data = kmalloc(length);
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
-    if(block_read_flexible(lba, 0, (u8*) dirent, length, fs->drive) != DISK_SUCCESS)
+    if(block_read_flexible(lba, 0, dirent_data, length, fs->drive) != DISK_SUCCESS)
         return 0;
     
     list_entry_t* tr = kmalloc(sizeof(list_entry_t));
     list_entry_t* ptr = tr;
     *size = 0;
-    u32 i = 0;
+
+    u32 offset = (u32) dirent_data;
+    u32 index = 0;
     while(length)
     {
-        iso9660_dir_entry_t* cd = ((u8*)dirent+i);
+        iso9660_dir_entry_t* dirptr = (iso9660_dir_entry_t*) offset;
+        if(dirptr->length == 0) 
+        {
+            offset++;
+            length--;
+            continue;
+        }
+        
         file_descriptor_t* fd = kmalloc(sizeof(file_descriptor_t));
-        iso9660_get_fd(fd, dirent+i, fs);
-        //kprintf("%s %X %u\n", fd->name, cd, length);
+        
+        if(index == 0)
+        {
+            //current dir (.)
+            fd->name = 0;
+            fd_copy(fd, dir);
+            fd->name = kmalloc(2); *(fd->name+1) = 0; strcpy(fd->name, ".");
+        }
+        else if(index == 1)
+        {
+            //parent dir (..)
+            fd->name = 0;
+            if(dir->parent_directory) 
+                fd_copy(fd, dir->parent_directory); 
+            else 
+                fd_copy(fd, dir); 
+            
+            fd->name = kmalloc(3); *(fd->name+2) = 0; strcpy(fd->name, "..");
+        }
+        else
+            iso9660_get_fd(fd, dirptr, dir, fs);
+        
+        //kprintf("%s\n", fd->name);
         ptr->element = fd;
         ptr->next = kmalloc(sizeof(list_entry_t));
         ptr = ptr->next;
-        i+= cd->length;
-        length-= cd->length;
+        offset+= dirptr->length;
+        length-= dirptr->length;
         (*size)++;
+        index++;
     }
     kfree(ptr);
 
     return tr;
 }
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, iso9660fs_t* fs)
+static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, iso9660fs_t* fs)
 {
     //copy name
-    dest->name = kmalloc(dirent->name_len);
+    dest->name = kmalloc((u32) dirent->name_len+1);
+    *(dest->name+dirent->name_len) = 0;
     strncpy(dest->name, dirent->name, dirent->name_len);
+    if(dirent->name_len > 2) if(*(dest->name+dirent->name_len-2) == ';') *(dest->name+dirent->name_len-2) = 0;
 
     //set infos
     dest->file_system = fs;
-    dest->parent_directory = 0;
+    dest->parent_directory = parent;
     dest->fs_type = FS_TYPE_ISO9660;
     dest->fsdisk_loc = dirent->extent_start_lsb;
     dest->length = dirent->extent_size_lsb;
