@@ -72,7 +72,6 @@ ramfs_t* ramfs_init(u32 size)
     tr->root_directory.name = 0;
     tr->root_directory.file_system = tr;
     tr->root_directory.parent_directory = 0;
-    tr->root_directory.fs_type = FS_TYPE_RAMFS;
     tr->root_directory.fsdisk_loc = (((u32) ramfs_addr) + tr->list_size);
     tr->root_directory.attributes = FILE_ATTR_DIR;
     tr->root_directory.length = 0;
@@ -128,7 +127,6 @@ list_entry_t* ramfs_read_dir(file_descriptor_t* dir, u32* size)
             #endif
             strncpy(tf->name, crfd->name, nlen);
             tf->file_system = fs;
-            tf->fs_type = FS_TYPE_RAMFS;
             tf->fsdisk_loc = crfd->addr;
             tf->length = crfd->length;
             tf->attributes = crfd->attributes;
@@ -412,7 +410,6 @@ file_descriptor_t* ramfs_create_file(u8* name, u8 attributes, file_descriptor_t*
                 #endif
                 strncpy(tf->name, crfd->name, nlen);
                 tf->file_system = fs;
-                tf->fs_type = FS_TYPE_RAMFS;
                 tf->fsdisk_loc = crfd->addr;
                 tf->length = crfd->length;
                 tf->attributes = crfd->attributes;

@@ -125,22 +125,21 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     if(mode == KERNEL_MODE_LIVE)
     {
         //mount root dir in ramfs
-        ramfs_t* rfs = ramfs_init(0x100000);
-        mount("/", FS_TYPE_RAMFS, rfs);
-        kprintf("%lramfs mounted '/' (base_addr = 0x%X)\n", 3, rfs->base_addr);
-        kprintf("live dir : %s\n", aroot_dir);
+        //ramfs_t* rfs = ramfs_init(0x100000);
+        //mount("/", FS_TYPE_RAMFS, rfs);
+        //kprintf("%lramfs mounted '/' (base_addr = 0x%X)\n", 3, rfs->base_addr);
+        //kprintf("live dir : %s\n", aroot_dir);
 
+        //mounting /sys on the live CD*
+        kprintf("Mounting system directory...");
         block_device_t* dev = block_devices[root_drive];
-        //u8* data = kmalloc(2048);
-        //block_read_flexible(0x10, 0, data, 2048, dev);
-        //kprintf("cd= %s\n", (data+1));
-        //kprintf("cd= %s\n", (data+8));
-        iso9660fs_t* fs = iso9660fs_init(dev);
-        u32 dsize = 0;
-        iso9660fs_read_dir(&fs->root_dir, &dsize);
-
-        //need to mount /sys but no ATAPI/USB driver yet
-        fatal_kernel_error("mode currently not supported", "LIVE_KERNEL_LOADING");
+        if(!dev) fatal_kernel_error("Could not find system drive !", "LIVE_KERNEL_LOADING");
+        if(!mount_volume("/", dev, (u8) 0))
+        {
+            vga_text_failmsg();
+            fatal_kernel_error("Could not mount system directory.", "LIVE_KERNEL_LOADING");
+        }
+        vga_text_okmsg();
     }
     else if(mode == KERNEL_MODE_INSTALLED)
     {
@@ -153,10 +152,10 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
         block_device_t* dev = block_devices[root_drive];
         if(!dev) fatal_kernel_error("Could not find root drive !", "INSTALLED_KERNEL_LOADING");
-        if(!mount_volume("/", dev, (u8) (part_index-1)))
+        if(!mount_volume("/", dev, (u8) (part_index)))
         {
             vga_text_failmsg();
-            fatal_kernel_error("Could not mount root dir.", "INSTALLED_KERNEL_LOADING");
+            fatal_kernel_error("Could not mount root directory.", "INSTALLED_KERNEL_LOADING");
         }
         vga_text_okmsg();
     }

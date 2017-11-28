@@ -97,12 +97,12 @@ typedef struct LFN_ENTRY
 } __attribute__((packed)) lfn_entry_t;
 
 //FAT32 utils : 'this file only' methods
-static u64 fat32fs_cluster_to_lba(fat32fs_t* fs, u32 cluster);
-static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32* size);
-static u8 fat32fs_read_fat(fat32fs_t* fs);
-static void fat32fs_write_fat(fat32fs_t* fs);
-static u32 fat32fs_get_free_cluster(fat32fs_t* fs);
-static u32 fat32fs_gm_free_clusters(u32 nbr, fat32fs_t* fs);
+static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
+static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
+static u8 fat32fs_read_fat(file_system_t* fs);
+static void fat32fs_write_fat(file_system_t* fs);
+static u32 fat32fs_get_free_cluster(file_system_t* fs);
+static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs);
 static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize);
 static u8 fat32fs_lfn_checksum (u8* pFcbName);
 static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
@@ -110,7 +110,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
 /*
 * Initialize a new FAT32 filesystem on a volume
 */
-fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
+file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 {
 	//read the fat32 BPB
 	bpb_t* bpb = 
@@ -119,7 +119,10 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 	#else
 	kmalloc(sizeof(bpb_t));
 	#endif
-	u32 offset = drive->partitions[partition]->start_lba;
+
+	u32 offset;
+	if(partition) offset = drive->partitions[partition-1]->start_lba;
+	else offset = 0;
 
 	u8 attempts = 0;
 	while(block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive) != DISK_SUCCESS)
@@ -132,15 +135,26 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 	if(*bpb->system_id_string != 'F' || *(bpb->system_id_string+1) != 'A' || *(bpb->system_id_string+2) != 'T' || *(bpb->system_id_string+3) != '3' || *(bpb->system_id_string+4) != '2')
 	{fatal_kernel_error("Not a valid FAT32 fs !", "FAT32FS_INIT"); return 0;} //TEMP FATAL
 
-	//setup the fat32fs_t struct that represents the fat32fs
-	fat32fs_t* tr = 
+	//setup the file_system_t and fat32fs_specific_t struct that represents the fat32fs
+	file_system_t* tr = 
 	#ifdef MEMLEAK_DBG
-	kmalloc(sizeof(fat32fs_t), "FAT32FS struct");
+	kmalloc(sizeof(file_system_t), "FAT32FS struct");
 	#else
-	kmalloc(sizeof(fat32fs_t));
+	kmalloc(sizeof(file_system_t));
 	#endif
-	tr->bpb = bpb;
-	tr->bpb_offset = offset;
+
+	fat32fs_specific_t* spe = 
+	#ifdef MEMLEAK_DBG
+	kmalloc(sizeof(fat32fs_specific_t), "FAT32FS struct");
+	#else
+	kmalloc(sizeof(fat32fs_specific_t));
+	#endif
+	tr->specific = spe;
+
+	spe->bpb = bpb;
+	spe->bpb_offset = offset;
+	
+	tr->fs_type = FS_TYPE_FAT32;
 	tr->drive = drive;
 	tr->partition = partition;
 
@@ -151,7 +165,7 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 	tr->root_dir.length = 0;
 
 	//reading the FAT and caching it in memory
-	tr->fat_table = 
+	spe->fat_table = 
 	#ifdef MEMLEAK_DBG
 	kmalloc(bpb->fat_size * bpb->bytes_per_sector, "FAT Table");
 	#else
@@ -160,14 +174,12 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 	if(fat32fs_read_fat(tr))
 	{
 		kfree(bpb);
-		kfree(tr->fat_table);
+		kfree(spe->fat_table);
 		kfree(tr);
 		return 0;
 	}
 
 	fat32fs_get_free_cluster(tr);
-
-	//kprintf("%lTotal clusters : %u\n", 3, (tr->bpb->total_sectors ? ((tr->bpb->total_sectors-tr->bpb->reserved_sectors-tr->bpb->fat_size*tr->bpb->fats_number)/tr->bpb->sectors_per_cluster) : ((tr->bpb->large_total_sectors-tr->bpb->reserved_sectors-tr->bpb->fat_size*tr->bpb->fats_number)/tr->bpb->sectors_per_cluster)));
 
 	//returing the fat32 fs struct, setup done
 	return tr;
@@ -176,10 +188,13 @@ fat32fs_t* fat32fs_init(block_device_t* drive, u8 partition)
 /*
 * Free the ressources used by a FAT32 filesystem that needs to be removed
 */
-void fat32fs_close(fat32fs_t* fs)
+void fat32fs_close(file_system_t* fs)
 {
-	kfree(fs->bpb);
-	kfree(fs->fat_table);
+	if(fs->fs_type != FS_TYPE_FAT32) return;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	kfree(spe->bpb);
+	kfree(spe->fat_table);
+	kfree(fs->specific);
 	kfree(fs);
 }
 
@@ -190,17 +205,17 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 {
 	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to read a file as a directory", "FAT32FS_READ_EDIR"); //TEMP
 
-	fat32fs_t* fs = (fat32fs_t*) dir->file_system;
+	file_system_t* fs = dir->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 	u32 cluster = (u32) dir->fsdisk_loc;
-	//DEPRECATEDif cluster number is 0, assume that we want to read root dir
-	//DEPRECATEDif(cluster == 0) cluster = (u32) fs->root_dir.fsdisk_loc;
+
 	//get the cluster chain for this directory
 	u64 cluss = 0;
 	list_entry_t* cluslist = fat32fs_get_cluster_chain(cluster, fs, (u32*) &cluss);
 	list_entry_t* clusbuffer = cluslist;
 
 	//here we have the full dir size, and we allocate an equivalent buffer
-	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
 	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:list_dir dirents buffer");
@@ -214,9 +229,9 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 	}
 
 	//freeing the cluster list, we dont need it, we read them already
@@ -310,7 +325,6 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 		//kprintf("%lfname : %s\n", 3, tf->name);
 
 		tf->file_system = fs;
-		tf->fs_type = FS_TYPE_FAT32;
 
 		u32 file_cluster = (((u32)dirents[i].first_cluster_high) << 16) | ((u32)dirents[i].first_cluster_low);
 		file_cluster &= 0x0FFFFFFF;
@@ -356,7 +370,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 /*
 * Get a file_descriptor from a path, "opening" the file
 */
-file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
+/*file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
 {
 	//The path should be relative to the mount point (excluded) of this fat32fs
 	// Step 1 : Split the path on '/'
@@ -433,6 +447,7 @@ file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
 	fd_list_free(cdir, dirsize);
 	return 0;
 }
+*/
 
 /*
 * Read the data of a file previously opened by fat32fs_open_file()
@@ -440,10 +455,10 @@ file_descriptor_t* fat32fs_open_file(char* path, fat32fs_t* fs)
 u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 {
 	u64 offset = file->offset;
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 
-	fat32fs_t* fs = (fat32fs_t*) file->file_system;
-	//kprintf("cluster : %u ; rsize : %u\n", fs->bpb->sectors_per_cluster*512, ((u32) count+offset));
-	if(count+offset < fs->bpb->sectors_per_cluster*512)
+	if(count+offset < spe->bpb->sectors_per_cluster*512)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, (u32) file->fsdisk_loc);
 		return block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
@@ -452,23 +467,21 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 	//alright, we want to read more than 1 cluster, so we'll need to get the whole cluster chain
 	u32 cluster = (u32) file->fsdisk_loc;
 	u64 cluss = 0;
-	//kprintf("%lfcluster : 0x%X\n", 3, cluster);
+
 	list_entry_t* cluslist = fat32fs_get_cluster_chain(cluster, fs, (u32*) &cluss);
 	list_entry_t* clusbuffer = cluslist;
 
-	while(offset >= fs->bpb->sectors_per_cluster*512) {clusbuffer=clusbuffer->next; offset = (u64) (offset - ((u64) (fs->bpb->sectors_per_cluster*512)));}
+	while(offset >= spe->bpb->sectors_per_cluster*512) {clusbuffer=clusbuffer->next; offset = (u64) (offset - ((u64) (spe->bpb->sectors_per_cluster*512)));}
 
 	//reading all needed clusters inside this buffer
-	//kprintf("%lclusters : %d but file size : %d\n", 3, (u32) cluss, (u32) file->length);
 	u64 cluss2 = cluss;
 	while(count > 0 && cluss2 > 0)
 	{
-		//kprintf("%lreading element at 0x%X\n", 3, clusbuffer->element);
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		if(count >= fs->bpb->sectors_per_cluster*512)
+		if(count >= spe->bpb->sectors_per_cluster*512)
 		{
-			block_read_flexible(pos, (u32) offset, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
-			count = ((u32)(count - ((u64)fs->bpb->sectors_per_cluster*512)));
+			block_read_flexible(pos, (u32) offset, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+			count = ((u32)(count - ((u64)spe->bpb->sectors_per_cluster*512)));
 			if(offset) offset = 0;
 		}
 		else
@@ -478,7 +491,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 			break;
 		}
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 		cluss2--;
 	}
 
@@ -494,7 +507,9 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 */
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir)
 {
-	fat32fs_t* fs = (fat32fs_t*) dir->file_system;
+	file_system_t* fs = dir->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
 	//get the parent directory cluster
 	u32 dir_cluster = (u32) dir->fsdisk_loc;
 
@@ -504,7 +519,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	list_entry_t* clusbuffer = cluslist;
 
 	//here we have the full dir size, and we allocate an equivalent buffer
-	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
 	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:create_file dir entries buffer");
@@ -518,9 +533,9 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 	}
 
 	//getting the 'end of directory' entry and checking for name conflicts
@@ -658,8 +673,8 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 		#endif
 		clusbuffer->next->element = nclv;
 		
-		fs->fat_table[*last_cluster] = new_cluster;
-		dir_size += (u64) fs->bpb->sectors_per_cluster * 512;
+		spe->fat_table[*last_cluster] = new_cluster;
+		dir_size += (u64) spe->bpb->sectors_per_cluster * 512;
 		cluss++;
 		buffer = dirents = krealloc(dirents, (u32) dir_size);
 		*(dirents[i+needed_lfns+1].name) = 0x0;
@@ -710,9 +725,9 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		block_write_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 	}
 
 	//free the cluster list
@@ -740,7 +755,6 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	strcpy(tr->name, (char*) name);
 	tr->attributes = attributes;
 	tr->file_system = fs;
-	tr->fs_type = FS_TYPE_FAT32;
 	tr->fsdisk_loc = file_cluster;
 	tr->length = 0;
 	tr->offset = 0;
@@ -757,7 +771,8 @@ void fat32fs_rename(file_descriptor_t* file, u8* newname)
 
 static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 {
-	fat32fs_t* fs = (fat32fs_t*) file->file_system;
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 
 	//get the parent directory cluster
 	u32 dir_cluster = (u32) file->parent_directory->fsdisk_loc;
@@ -768,7 +783,7 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	list_entry_t* clusbuffer = cluslist;
 
 	//here we have the full dir size, and we allocate an equivalent buffer
-	u64 dir_size = cluss * fs->bpb->sectors_per_cluster * 512;
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
 	fat32_dir_entry_t* dirents = 
 	#ifdef MEMLEAK_DBG
 	kmalloc((u32) dir_size, "fat32:resize_dirent dir entries buffer");
@@ -782,9 +797,9 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		block_read_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 	}
 
 	//finding the corresponding entries
@@ -854,9 +869,9 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	for(i = 0; i < cluss; i++)
 	{
 		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
-		block_write_flexible(pos, 0, (u8*) buffer, (u64) fs->bpb->sectors_per_cluster*512, fs->drive);
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
 		clusbuffer = clusbuffer->next;
-		buffer += (fs->bpb->sectors_per_cluster*512);
+		buffer += (spe->bpb->sectors_per_cluster*512);
 	}
 
 	//free the cluster list
@@ -870,7 +885,8 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	u64 count_bckp = count;
 	u32 cluster = (u32) file->fsdisk_loc;
 	u64 offset = file->offset;
-	fat32fs_t* fs = (fat32fs_t*) file->file_system;
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 
 	//get the cluster chain for this file
 	u64 cluss = 0;
@@ -879,11 +895,11 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 
 	//get the first cluster to write
 	u32 fclus_tw = 0;
-	while(offset > fs->bpb->sectors_per_cluster*512) {offset = (u64) (offset - ((u64) fs->bpb->sectors_per_cluster*512)); fclus_tw++;}
+	while(offset > spe->bpb->sectors_per_cluster*512) {offset = (u64) (offset - ((u64) spe->bpb->sectors_per_cluster*512)); fclus_tw++;}
 
 	//get the last cluster to write
 	u32 lclus_tw = fclus_tw;
-	while(count > fs->bpb->sectors_per_cluster*512) {count = (u64) (count - ((u64) fs->bpb->sectors_per_cluster*512)); lclus_tw++;}
+	while(count > spe->bpb->sectors_per_cluster*512) {count = (u64) (count - ((u64) spe->bpb->sectors_per_cluster*512)); lclus_tw++;}
 
 	if(lclus_tw > cluss)
 	{
@@ -918,7 +934,7 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 		
 		cluss++;
 
-		fs->fat_table[*last_cluster] = fnc;
+		spe->fat_table[*last_cluster] = fnc;
 
 		fat32fs_write_fat(fs);
 	}
@@ -931,9 +947,9 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	for(i = fclus_tw; i <= lclus_tw; i++)
 	{
 		if(i == fclus_tw)
-			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), (u32) offset, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
+			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), (u32) offset, buffer, (i == lclus_tw ? count : ((u64) spe->bpb->sectors_per_cluster*512)), fs->drive);
 		else
-			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), 0, buffer, (i == lclus_tw ? count : ((u64) fs->bpb->sectors_per_cluster*512)), fs->drive);
+			block_write_flexible(fat32fs_cluster_to_lba(fs, *((u32*)clusbuffer->element)), 0, buffer, (i == lclus_tw ? count : ((u64) spe->bpb->sectors_per_cluster*512)), fs->drive);
 		
 		clusbuffer = clusbuffer->next;	
 	}
@@ -950,78 +966,40 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	return 0;
 }
 
-static u64 fat32fs_cluster_to_lba(fat32fs_t* fs, u32 cluster)
+static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster)
 {
-	return ((u64) ((int64_t) (fs->bpb_offset + fs->bpb->reserved_sectors + (fs->bpb->fats_number*fs->bpb->fat_size) + (cluster * fs->bpb->sectors_per_cluster)) - (2*fs->bpb->sectors_per_cluster)));
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	return ((u64) ((int64_t) (spe->bpb_offset + spe->bpb->reserved_sectors + (spe->bpb->fats_number*spe->bpb->fat_size) + (cluster * spe->bpb->sectors_per_cluster)) - (2*spe->bpb->sectors_per_cluster)));
 }
 
-static u8 fat32fs_read_fat(fat32fs_t* fs)
+static u8 fat32fs_read_fat(file_system_t* fs)
 {
-	u32 fat_size = fs->bpb->fat_size * fs->bpb->bytes_per_sector;
-	u32 fat_sector = fs->bpb_offset + fs->bpb->reserved_sectors;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	u32 fat_size = spe->bpb->fat_size * spe->bpb->bytes_per_sector;
+	u32 fat_sector = spe->bpb_offset + spe->bpb->reserved_sectors;
 	//note : same as part->start_lba
 
-	//memset(fs->fat_table, 1, fat_size);
-	//kprintf("%vreading fat from sector %u (size %uB)\n", 0b01110001, fat_sector, fat_size);
 	u8 attempts = 0;
-	while(block_read_flexible(fat_sector, 0, (u8*) fs->fat_table, fat_size, fs->drive) != DISK_SUCCESS)
+	while(block_read_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive) != DISK_SUCCESS)
 	{	
 		attempts++;
 		if(attempts > 2) return 1;
 	}
-	/*
-	u32 size2 = fat_size;
-	for(u32 i = 0; i < fat_size;i+=(512*255))
-	{
-		if(size2 > 512*255)
-		{
-			u8 attempts = 0;
-			while(block_read_flexible(fat_sector, 0, (u8*) fs->fat_table+i, 512*255, fs->drive) != DISK_SUCCESS)
-			{	
-				attempts++;
-				if(attempts > 2) return 1;
-			}
-			size2 -= 512*255;
-		}
-		else
-		{
-			u8 attempts = 0;
-			while(block_read_flexible(fat_sector, 0, (u8*) fs->fat_table+i, size2, fs->drive) != DISK_SUCCESS)
-			{
-				attempts++;
-				if(attempts > 2) return 1;
-			}
-			break;
-		}
-		fat_sector+=255;
-	}
-	*/
 	return 0;
-	//FAT DUMP (debug)
-	/*u32 used_clusters = 0;
-	u32 chains = 0;
-	for(u32 i = 0;i<(fs->bpb->fat_size * fs->bpb->bytes_per_sector)/4;i++)
-	{
-		if(fs->fat_table[i] != 0)
-			used_clusters++;
-		if(fs->fat_table[i] >= 0x0FFFFFF8)
-			chains++;
-			//kprintf("%v0x%x:0x%X ", 0b01110000, i, fs->fat_table[i]);
-	}
-	kprintf("Used clusters : %u (%u chains)\n", used_clusters, chains);
-	//kprintf("%v0x%x:0x%X ", 0b01110000, 0x0803, fs->fat_table[0x0803]);
-	*/
 }
 
-static void fat32fs_write_fat(fat32fs_t* fs)
+static void fat32fs_write_fat(file_system_t* fs)
 {
-	u32 fat_size = fs->bpb->fat_size * fs->bpb->bytes_per_sector;
-	u32 fat_sector = fs->bpb_offset + fs->bpb->reserved_sectors;
-	block_write_flexible(fat_sector, 0, (u8*) fs->fat_table, fat_size, fs->drive);
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	u32 fat_size = spe->bpb->fat_size * spe->bpb->bytes_per_sector;
+	u32 fat_sector = spe->bpb_offset + spe->bpb->reserved_sectors;
+	block_write_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive);
 }
 
-static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32* size)
+static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size)
 {
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
 	u32 cluster = fcluster;
 	u32 cchain = 0;
 	list_entry_t* tr = 
@@ -1035,10 +1013,8 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32*
 
 	do
 	{
-		cchain = fs->fat_table[cluster] & 0x0FFFFFFF;
+		cchain = spe->fat_table[cluster] & 0x0FFFFFFF;
 		
-		//kprintf("fat_table[0x%X] = 0x%X\n", cluster, fs->fat_table[cluster]);
-
 		u32* cl = 
 		#ifdef MEMLEAK_DBG
 		kmalloc(sizeof(u32), "fat32: cluster chain entry element (u32)");
@@ -1056,7 +1032,6 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32*
 		#endif
 		lbuf = lbuf->next;
 
-		//kprintf("%lcluster : 0x%X (pointing to 0x%X)\n", 3, cluster, cchain);
 		if(!cchain) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (->0)\n", 0b00000110);
 		else if(cchain == 1) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (reserved cluster)\n", 0b00000110);
 		else if(cchain == 0x0FFFFFF7) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (bad cluster)\n", 0b00000110);
@@ -1064,15 +1039,6 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, fat32fs_t* fs, u32*
 		cluster = cchain;
 		(*size)++;
 	} while((cchain != 0) && !(cchain >= 0x0FFFFFF8));
-
-	//FAT DUMP (debug)
-	//kprintf("%v0x%x:0x%X ", 0b01110000, 0x803, fs->fat_table[0x803]);
-	//for(u32 i = 0;i<(fs->bpb->fat_size * fs->bpb->bytes_per_sector)/4;i++)
-	//{
-		//if(fs->fat_table[i] != 0)
-			//kprintf("%v0x%x:0x%X ", 0b01110000, i, fs->fat_table[i]);
-	//}
-	
 
 	//free the last entry, unused cause empty
 	kfree(lbuf);
@@ -1164,36 +1130,41 @@ static u8 fat32fs_lfn_checksum (u8* pFcbName)
 	return (Sum);
 }
 
-static u32 fat32fs_get_free_cluster(fat32fs_t* fs)
+static u32 fat32fs_get_free_cluster(file_system_t* fs)
 {
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 	u32 active_cluster = 0;
-	u32 table_value = fs->fat_table[active_cluster] & 0x0FFFFFFF;
+	u32 table_value = spe->fat_table[active_cluster] & 0x0FFFFFFF;
 	while(table_value != 0) 
 	{
 		active_cluster++;
-		table_value = fs->fat_table[active_cluster] & 0x0FFFFFFF;
+		table_value = spe->fat_table[active_cluster] & 0x0FFFFFFF;
 	}
 	return active_cluster;
 }
 
-//this is getting the clusters in reverse order : possibly fragmenting disk ?
-static u32 fat32fs_gm_free_clusters(u32 nbr, fat32fs_t* fs)
+/*
+* this function gets and marks (as a right clusterchain) nbr clusters (that were previously free)
+* note: this is getting the clusters in reverse order : possibly fragmenting disk ?
+*/
+static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs)
 {
-	//this function gets and marks (as a right clusterchain) nbr clusters (that were previously free)
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
 	u32 active_cluster = 0;
 	u32 last_free_cluster = 0;
 
 	while(nbr)
 	{
-		u32 table_value = fs->fat_table[active_cluster] & 0x0FFFFFFF;
+		u32 table_value = spe->fat_table[active_cluster] & 0x0FFFFFFF;
 		while(table_value != 0) 
 		{
 			active_cluster++;
-			table_value = fs->fat_table[active_cluster] & 0x0FFFFFFF;
+			table_value = spe->fat_table[active_cluster] & 0x0FFFFFFF;
 		}
 		//we have found a free cluster
-		if(last_free_cluster == 0) fs->fat_table[active_cluster] = 0x0FFFFFFF;
-		else fs->fat_table[active_cluster] = last_free_cluster;
+		if(last_free_cluster == 0) spe->fat_table[active_cluster] = 0x0FFFFFFF;
+		else spe->fat_table[active_cluster] = last_free_cluster;
 		last_free_cluster = active_cluster;
 		active_cluster++;
 		nbr--;

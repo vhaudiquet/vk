@@ -108,7 +108,7 @@ void list_free_eonly(list_entry_t* list, u32 list_size)
 
 void fd_free(file_descriptor_t* fd)
 {
-    kfree(fd->name);
+    if(fd->name) kfree(fd->name);
     kfree(fd);
 }
 
@@ -128,10 +128,9 @@ void fd_list_free(list_entry_t* list, u32 list_size)
 
 void fd_copy(file_descriptor_t* dest, file_descriptor_t* src)
 {
-    if(src->name && dest->name) strcpy(dest->name, src->name);
+    if((src->name != 0) & (dest->name != 0)) strcpy(dest->name, src->name);
     else dest->name = 0;
     dest->file_system = src->file_system;
-    dest->fs_type = src->fs_type;
     dest->fsdisk_loc = src->fsdisk_loc;
     dest->attributes = src->attributes;
     dest->length = src->length;

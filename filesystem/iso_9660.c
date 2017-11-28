@@ -121,13 +121,14 @@ typedef struct ISO9660_PATH_TABLE_ENTRY
     u8 name[];
 } __attribute__((packed)) iso9660_path_table_entry_t;
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, iso9660fs_t* fs);
+static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, file_system_t* fs);
 
-iso9660fs_t* iso9660fs_init(block_device_t* drive)
+file_system_t* iso9660fs_init(block_device_t* drive)
 {
     //allocating data struct
-    iso9660fs_t* tr = kmalloc(sizeof(iso9660fs_t));
+    file_system_t* tr = kmalloc(sizeof(file_system_t));
     tr->drive = drive;
+    tr->fs_type = FS_TYPE_ISO9660;
 
     //reading primary volume descriptor
     iso9660_primary_volume_descriptor_t pvd;
@@ -144,10 +145,9 @@ iso9660fs_t* iso9660fs_init(block_device_t* drive)
 
 list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
 {
-    iso9660fs_t* fs = dir->file_system;
+    file_system_t* fs = dir->file_system;
     u64 lba = dir->fsdisk_loc;
     u32 length = (u32) dir->length;
-    //kprintf("length: %u B ; loc= lba %u\n", length, lba);
     u8* dirent_data = kmalloc(length);
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
@@ -207,20 +207,33 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     return tr;
 }
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, iso9660fs_t* fs)
+u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
+{
+    u64 offset = file->offset;
+
+    file_system_t* fs = file->file_system;
+    u64 lba = file->fsdisk_loc;
+
+    if(block_read_flexible(lba, offset, buffer, count, fs->drive) != DISK_SUCCESS)
+        return 1;
+    
+    return 0;
+}
+
+static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, file_system_t* fs)
 {
     //copy name
     dest->name = kmalloc((u32) dirent->name_len+1);
     *(dest->name+dirent->name_len) = 0;
     strncpy(dest->name, dirent->name, dirent->name_len);
     if(dirent->name_len > 2) if(*(dest->name+dirent->name_len-2) == ';') *(dest->name+dirent->name_len-2) = 0;
-
+    if(dirent->name_len > 1) {u32 len = strlen(dest->name); if(*(dest->name+len-1) == '.') *(dest->name+len-1) = 0;}
     //set infos
     dest->file_system = fs;
     dest->parent_directory = parent;
-    dest->fs_type = FS_TYPE_ISO9660;
     dest->fsdisk_loc = dirent->extent_start_lsb;
     dest->length = dirent->extent_size_lsb;
+    dest->offset = 0;
 
     //set attributes
     dest->attributes = 0;

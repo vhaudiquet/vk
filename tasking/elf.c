@@ -58,9 +58,9 @@ typedef struct elf_program_header
 
 bool elf_check(file_descriptor_t* file)
 {
-    //check if name ends with .elf
-    u32 nl = strlen(file->name);
-    if((*(file->name+nl-1) != 'f') | (*(file->name+nl-2) != 'l') | (*(file->name+nl-3) != 'e') | (*(file->name+nl-4) != '.')) return false;
+    //check if name ends with .elf (actually this is obsolete because an elf file doesnt really ends with .elf)
+    //u32 nl = strlen(file->name);
+    //if((*(file->name+nl-1) != 'f') | (*(file->name+nl-2) != 'l') | (*(file->name+nl-3) != 'e') | (*(file->name+nl-4) != '.')) return false;
     
     //read header to check it
     elf_header_t eh;

@@ -28,17 +28,13 @@
 typedef struct mount_point
 {
     char* path;
-    void* fs;
+    file_system_t* fs;
     struct mount_point* next;
-    u8 fs_type;
 } mount_point_t;
 mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp);
-
-//u8 detect_fs_type(block_device_t* drive, u8 partition) (find by signature)
-//void mount_volume(char* path, block_device_t* drive, u8 partition) (using method above)
 
 u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
@@ -51,14 +47,31 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     kmalloc(512);
     #endif
 
-    if(!drive->partitions[partition]->system_id)
-    {
-        kfree(buff);
-        return 0;
-    }
+    u8* buff2 = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(512, "detect fs type buffer 2");
+    #else
+    kmalloc(512);
+    #endif
 
-    u32 offset = drive->partitions[partition]->start_lba;
+    u32 offset;
+    if(partition)
+    {
+        if(!drive->partitions[partition-1]->system_id)
+        {
+            kfree(buff);
+            kfree(buff2);
+            return 0;
+        }
+        offset = drive->partitions[partition-1]->start_lba;
+    }
+    else offset = 0;
+
     if(block_read_flexible(offset, 0, buff, 512, drive) != DISK_SUCCESS)
+    {
+        kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
+    }
+    if(block_read_flexible(offset+0x10, 0, buff2, 512, drive) != DISK_SUCCESS)
     {
         kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
     }
@@ -67,11 +80,19 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     if(((*(buff+66) == 0x28) | (*(buff+66) == 0x29)) && (strcfirst("FAT32", (char*) buff+82) == 5))
     {
         kfree(buff);
+        kfree(buff2);
         return FS_TYPE_FAT32;
+    }
+    else if((strcfirst("CD001", (char*) buff2+1) == 5))
+    {
+        kfree(buff);
+        kfree(buff2);
+        return FS_TYPE_ISO9660;
     }
     else kprintf("%lUnknown file system type.\n", 3);
 
     kfree(buff);
+    kfree(buff2);
     return 0;
 }
 
@@ -87,17 +108,22 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
             fs = fat32fs_init(drive, partition);
             break;
         }
+        case FS_TYPE_ISO9660:
+        {
+            fs = iso9660fs_init(drive);
+            break;
+        }
     }
     if(fs)
-        mount(path, fs_type, fs);
+        mount(path, fs);
     else return 0;
     
     return fs_type;
 }
 
-void mount(char* path, u8 fs_type, void* fs)
+void mount(char* path, file_system_t* fs)
 {
-    if(fs_type == 0) fatal_kernel_error("Unknown file system type", "MOUNT");
+    if(fs->fs_type == 0) fatal_kernel_error("Unknown file system type", "MOUNT");
     if(*path != '/') fatal_kernel_error("Path must be absolute for mounting", "MOUNT"); //TEMP
     if(root_point == 0 && strlen(path) > 1) fatal_kernel_error("Root point not mounted, can't mount anything else", "MOUNT"); //TEMP
 
@@ -112,7 +138,6 @@ void mount(char* path, u8 fs_type, void* fs)
         #endif
         root_point->path = path;
         root_point->fs = fs;
-        root_point->fs_type = fs_type;
         root_point->next = 0;
         current_mount_points++;
         return;
@@ -135,7 +160,6 @@ void mount(char* path, u8 fs_type, void* fs)
     #endif
     next_point->path = path;
     next_point->fs = fs;
-    next_point->fs_type = fs_type;
     next_point->next = 0;
     
     mount_point_t* last = root_point;
@@ -148,21 +172,13 @@ void mount(char* path, u8 fs_type, void* fs)
     current_mount_points++;
 }
 
-//void umount
-
 file_descriptor_t* open_file(char* path)
 {
     //we are trying to access the root path : simplest case
     if(*path == '/' && strlen(path) == 1)
     {
-        switch(root_point->fs_type)
-        {
-            case FS_TYPE_FAT32:
-            {
-                fat32fs_t* fs = root_point->fs;
-                return &fs->root_dir;
-            } 
-        }
+        file_system_t* fs = root_point->fs;
+        return &fs->root_dir;
     }
 
     //we are already into a filesystem that contains a dir that is a mount point
@@ -182,21 +198,104 @@ file_descriptor_t* open_file(char* path)
         i++;
     }
 
-    if(best != 0) return do_open_fs(path, best);
+    if(best != 0) return do_open_fs(path+1, best);
     
     fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); //TEMP
     return 0;
 }
 
+list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
+{
+    if(directory->file_system->fs_type == FS_TYPE_FAT32)
+        return fat32fs_read_dir(directory, dirsize);
+    else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
+        return iso9660fs_read_dir(directory, dirsize);
+    else return 0;
+}
+
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 {
-    switch(mp->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            return fat32fs_open_file(path+1, (fat32fs_t*) mp->fs);
-    }
-    fatal_kernel_error("Could not find filesystem type ???", "DO_OPEN_FS");
-    return 0;
+    //The path should be relative to the mount point (excluded) of this fs
+	/* Step 1 : Split the path on '/' */
+	u32 i = 0;
+	u32 split_size = 0;
+	char** spath = strsplit(path, '/', &split_size);
+    
+    /* Step 2 : iterate from the root directory and continue on as we found dirs/files on the list (splitted) */
+	u32 dirsize = 0;
+	list_entry_t* cdir = read_directory(&mp->fs->root_dir, &dirsize);
+	if(!cdir) return 0;
+	list_entry_t* lbuf = cdir;
+	u32 j = 0;
+	file_descriptor_t* ce = 0;
+	while(i < split_size)
+	{
+		//looking for the i element in the directory
+		j = 0;
+		while(j < dirsize)
+		{
+			ce = lbuf->element;
+			//looking at each element in the directory
+			if(!ce) break;
+			// kprintf("%llooking %s for %s...\n", 3, ce->name, spath[i]);
+			if(!strcmpnc(ce->name, spath[i])) //TODO : Carefull : currently we have only case-insensitive fs (FAT32 and ISO9660, but maybe this will change)
+			{
+                //if it is the last entry we need to find, return ; else continue exploring path
+				if((i+1) == split_size)
+				{
+					file_descriptor_t* tr = 
+					#ifdef MEMLEAK_DBG
+					kmalloc(sizeof(file_descriptor_t), "open_file file descriptor struct tr");
+					#else
+					kmalloc(sizeof(file_descriptor_t));
+					#endif
+					tr->name = 
+					#ifdef MEMLEAK_DBG
+					kmalloc(strlen(ce->name)+1, "open_file tr file name");
+					#else
+					kmalloc(strlen(ce->name)+1);
+                    #endif
+					fd_copy(tr, ce);
+					fd_list_free(cdir, dirsize);
+					kfree(spath[i]);
+                    kfree(spath);
+					return tr;
+				}
+
+                //copy 'dir to explore' file descriptor
+                file_descriptor_t* nextdir = kmalloc(sizeof(file_descriptor_t));
+                nextdir->name = kmalloc(strlen(ce->name)+1);
+                fd_copy(nextdir, ce);
+
+                //free the current dir list
+				fd_list_free(cdir, dirsize);
+
+				if((ce->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return 0;
+                cdir = lbuf = read_directory(nextdir, &dirsize);
+                kfree(nextdir);
+
+				//we have found a subdirectory, explore it
+				//TODO : if this subdirectory is not a dir but a file (handled in subfonction but better handle)
+				break;
+			}
+			lbuf = lbuf->next;
+			j++;
+			//at this point, if we havent break yet, there is no such dir/file as we look for ; return 0
+			if(j == dirsize) 
+			{
+				kfree(spath[i]);
+				kfree(spath);
+				fd_list_free(cdir, dirsize);
+				return 0;
+			}
+		}
+		kfree(spath[i]);
+		i++;
+	}
+	kfree(spath[i-1]);
+	kfree(spath);
+	fd_list_free(cdir, dirsize);
+	return 0;
 }
 
 u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
@@ -207,11 +306,13 @@ u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
 	if(count+file->offset > file->length) count = file->length - file->offset; //if we want to read more, well, NO BASTARD GTFO
 	if(count == 0) {*((u8*) buffer) = 0; return 0;}
 
-    switch(file->fs_type)
+    switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
             return fat32fs_read_file(file, buffer, count);
+        case FS_TYPE_ISO9660:
+            return iso9660fs_read_file(file, buffer, count);
     }
-    fatal_kernel_error("Could not find filesystem type ???", "DO_OPEN_FS");
+    fatal_kernel_error("Could not find filesystem type ???", "READ_FILE");
     return 2;
 }
