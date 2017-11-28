@@ -129,6 +129,7 @@ file_system_t* iso9660fs_init(block_device_t* drive)
     file_system_t* tr = kmalloc(sizeof(file_system_t));
     tr->drive = drive;
     tr->fs_type = FS_TYPE_ISO9660;
+    tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE;
 
     //reading primary volume descriptor
     iso9660_primary_volume_descriptor_t pvd;
@@ -141,6 +142,12 @@ file_system_t* iso9660fs_init(block_device_t* drive)
     tr->root_dir.name = 0;
 
     return tr;
+}
+
+void iso9660fs_close(file_system_t* fs)
+{
+    if(fs->fs_type != FS_TYPE_ISO9660) return;
+    kfree(fs);
 }
 
 list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
@@ -214,7 +221,9 @@ u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
     file_system_t* fs = file->file_system;
     u64 lba = file->fsdisk_loc;
 
-    if(block_read_flexible(lba, offset, buffer, count, fs->drive) != DISK_SUCCESS)
+    while(offset > 2048) {offset -= 2048; lba++;}
+
+    if(block_read_flexible(lba, (u32) offset, buffer, count, fs->drive) != DISK_SUCCESS)
         return 1;
     
     return 0;

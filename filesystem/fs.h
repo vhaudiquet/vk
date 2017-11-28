@@ -41,11 +41,14 @@ typedef struct file_descriptor
     u64 offset; //offset (file only)
 } file_descriptor_t;
 
+#define FS_FLAG_CASE_INSENSITIVE 1
+
 typedef struct file_system
 {
     block_device_t* drive;
     u8 partition;
     u8 fs_type;
+    u8 flags;
     struct file_descriptor root_dir;
     void* specific;
 } file_system_t;
@@ -97,6 +100,8 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 
 //ISO9660 specific
 file_system_t* iso9660fs_init(block_device_t* drive);
+void iso9660fs_close(file_system_t* fs);
 list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
+u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 
 #endif

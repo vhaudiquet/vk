@@ -238,7 +238,8 @@ static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 			//looking at each element in the directory
 			if(!ce) break;
 			// kprintf("%llooking %s for %s...\n", 3, ce->name, spath[i]);
-			if(!strcmpnc(ce->name, spath[i])) //TODO : Carefull : currently we have only case-insensitive fs (FAT32 and ISO9660, but maybe this will change)
+            if(((mp->fs->flags & FS_FLAG_CASE_INSENSITIVE) & (!strcmpnc(ce->name, spath[i]))) | 
+            ((!(mp->fs->flags & FS_FLAG_CASE_INSENSITIVE)) & (!strcmp(ce->name, spath[i]))))
 			{
                 //if it is the last entry we need to find, return ; else continue exploring path
 				if((i+1) == split_size)

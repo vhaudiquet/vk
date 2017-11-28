@@ -155,6 +155,7 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 	spe->bpb_offset = offset;
 	
 	tr->fs_type = FS_TYPE_FAT32;
+	tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE;
 	tr->drive = drive;
 	tr->partition = partition;
 
