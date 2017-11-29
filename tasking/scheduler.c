@@ -20,13 +20,14 @@
 #include "cpu/cpu.h"
 
 /*
-* First SCHEDULER implementation ; schedule() is called on each clock interrupt
+* First SCHEDULER implementation ; schedule() is called on each clock interrupt (PIT is set by the BIOS to 1 interrupt / 54.9254 ms)
 */
 
 typedef struct ASLEEP_PROCESS_D
 {
     process_t* process;
-    u32 sleep_data;
+    u16 sleep_data;
+    u16 sleep_data_2;
     u8 sleep_reason;
 } asleep_data_t;
 
@@ -53,6 +54,16 @@ process_t* toswitch = 0;
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp, u32 ebx, u32 edx, u32 ecx, u32 eax, u32 eip, u32 cs, u32 flags, u32 esp_2, u32 ss)
 {
+    u32 il = 0;
+    list_entry_t* lp = p_wait_list;
+    for(il=0;il<p_wl_size;il++)
+    {
+        asleep_data_t* ad = lp->element;
+        if((ad->sleep_reason == SLEEP_TIME) | (ad->sleep_reason == SLEEP_WAIT_IRQ))
+        {if(ad->sleep_data_2 > 55) ad->sleep_data_2-= 55; else if(ad->sleep_data_2 != 0) scheduler_wake_process(ad->process);}
+        lp = lp->next;
+    }
+
     //if there is no process to schedule, we return
     toswitch = queue_take(p_ready_queue);
     if(!toswitch) return;
@@ -223,7 +234,7 @@ void scheduler_remove_process(process_t* process)
     else queue_remove(p_ready_queue, process);
 }
 
-void scheduler_wait_process(process_t* process, u8 sleep_reason, u8 sleep_data)
+void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 sleep_data_2)
 {
     list_entry_t* list_pointer = p_wait_list;
     list_entry_t* list_before = 0;
@@ -255,6 +266,7 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u8 sleep_data)
     pdata->process = process;
     pdata->sleep_reason = sleep_reason;
     pdata->sleep_data = sleep_data;
+    pdata->sleep_data_2 = sleep_data_2;
     list_pointer->element = pdata;
     //kprintf("sleeping process 0x%X ; reason %u (data %u)\n",pdata->process, pdata->sleep_reason, pdata->sleep_data);
     p_wl_size++;

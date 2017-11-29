@@ -69,7 +69,7 @@ u8 kbd_getkeycode()
     //kbd_keycode = 0;
     kbd_requested = true;
     //while(!kbd_keycode);
-    scheduler_wait_process(current_process, SLEEP_WAIT_IRQ, 1);
+    scheduler_wait_process(current_process, SLEEP_WAIT_IRQ, 1, 0);
     u8 buff = kbd_keycode;
     kbd_keycode = 0;
     return buff;
