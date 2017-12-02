@@ -175,9 +175,9 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
     current->flags = (u8)(current->flags | ((id.capabilities >> 9 << 15) ? ATA_FLAG_LBA48 : 0));
 
 	if((id.sectors_48 > 0) && (current->flags & ATA_FLAG_LBA48))
-		current_top->device_size = (u32) (id.sectors_48*BYTES_PER_SECTOR/1024/1024);
+		current_top->device_size = (u32) (id.sectors_48);
 	else
-		current_top->device_size = (u32) (id.sectors_28*BYTES_PER_SECTOR/1024/1024);
+		current_top->device_size = (u32) (id.sectors_28);
 
 	current->sectors_per_block = id.size_rw_multiple;
 

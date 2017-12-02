@@ -124,20 +124,14 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //mounting / either to RAMFS (live) or DISK (installed)
     if(mode == KERNEL_MODE_LIVE)
     {
-        //mount root dir in ramfs
-        //ramfs_t* rfs = ramfs_init(0x100000);
-        //mount("/", FS_TYPE_RAMFS, rfs);
-        //kprintf("%lramfs mounted '/' (base_addr = 0x%X)\n", 3, rfs->base_addr);
-        //kprintf("live dir : %s\n", aroot_dir);
-
-        //mounting /sys on the live CD*
-        kprintf("Mounting system directory...");
+        //mounting / on the live CD
+        kprintf("Mounting root directory...");
         block_device_t* dev = block_devices[root_drive];
-        if(!dev) fatal_kernel_error("Could not find system drive !", "LIVE_KERNEL_LOADING");
+        if(!dev) fatal_kernel_error("Could not find root drive !", "LIVE_KERNEL_LOADING");
         if(!mount_volume("/", dev, (u8) 0))
         {
             vga_text_failmsg();
-            fatal_kernel_error("Could not mount system directory.", "LIVE_KERNEL_LOADING");
+            fatal_kernel_error("Could not mount root directory.", "LIVE_KERNEL_LOADING");
         }
         vga_text_okmsg();
     }

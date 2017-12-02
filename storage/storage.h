@@ -59,6 +59,7 @@ typedef struct master_boot_record
 
 //BLOCK DEVICES ABSTRACTION LAYER
 #define ATA_DEVICE 1
+#define RAMDISK_DEVICE 2
 
 #define HARD_DISK_DRIVE 1
 #define CD_DRIVE 2
@@ -73,7 +74,7 @@ typedef struct master_boot_record
 typedef struct block_device
 {
 	void* device_struct;
-	u32 device_size;
+	u32 device_size; //size of device in sectors
 	partition_descriptor_t* partitions[4];
 	u8 device_type;
 	u8 device_class;
@@ -86,6 +87,11 @@ u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device
 u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
 
 void install_block_devices();
+
+//RAMDISK devices
+block_device_t* init_ramdisk(u32 size);
+u8 ramdisk_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* ramdisk);
+u8 ramdisk_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* ramdisk);
 
 //ATA devices
 #define ATA_FLAG_MASTER 1

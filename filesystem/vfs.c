@@ -314,6 +314,28 @@ u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
         case FS_TYPE_ISO9660:
             return iso9660fs_read_file(file, buffer, count);
     }
-    fatal_kernel_error("Could not find filesystem type ???", "READ_FILE");
     return 2;
+}
+
+u8 write_file(file_descriptor_t* file, void* buffer, u64 count)
+{
+    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
+    if(count == 0) return 0;
+
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_write_file(file, buffer, count);
+    }
+    return 2;
+}
+
+file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
+{
+    switch(dir->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_create_file(name, attributes, dir);
+    }
+    return 0;
 }

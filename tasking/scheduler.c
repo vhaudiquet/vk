@@ -60,7 +60,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     {
         asleep_data_t* ad = lp->element;
         if((ad->sleep_reason == SLEEP_TIME) | (ad->sleep_reason == SLEEP_WAIT_IRQ))
-        {if(ad->sleep_data_2 > 55) ad->sleep_data_2-= 55; else if(ad->sleep_data_2 != 0) scheduler_wake_process(ad->process);}
+        {if(ad->sleep_data_2 > 55) ad->sleep_data_2 = (u16)(ad->sleep_data_2-55); else if(ad->sleep_data_2 != 0) scheduler_wake_process(ad->process);}
         lp = lp->next;
     }
 

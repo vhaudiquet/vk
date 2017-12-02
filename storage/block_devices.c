@@ -38,6 +38,10 @@ u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device
     {
         return ata_read_flexible(sector, offset, data, count, drive->device_struct);
     }
+    else if(drive->device_type == RAMDISK_DEVICE)
+    {
+        return ramdisk_read_flexible(sector, offset, data, count, drive);
+    }
     return DISK_FAIL_INTERNAL;
 }
 
@@ -46,6 +50,10 @@ u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_devic
     if(drive->device_type == ATA_DEVICE)
     {
         return ata_write_flexible(sector, offset, data, count, (ata_device_t*) drive->device_struct);
+    }
+    else if(drive->device_type == RAMDISK_DEVICE)
+    {
+        return ramdisk_write_flexible(sector, offset, data, count, drive);
     }
     return DISK_FAIL_INTERNAL;
 }
