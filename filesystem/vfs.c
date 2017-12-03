@@ -213,6 +213,61 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
     else return 0;
 }
 
+u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
+{
+    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
+
+    if(file->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
+	if(count+file->offset > file->length) count = file->length - file->offset; //if we want to read more, well, NO BASTARD GTFO
+	if(count == 0) {*((u8*) buffer) = 0; return 0;}
+
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_read_file(file, buffer, count);
+        case FS_TYPE_ISO9660:
+            return iso9660fs_read_file(file, buffer, count);
+    }
+    return 2;
+}
+
+u8 write_file(file_descriptor_t* file, void* buffer, u64 count)
+{
+    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
+    if(count == 0) return 0;
+
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_write_file(file, buffer, count);
+    }
+    return 2;
+}
+
+file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
+{
+    switch(dir->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_create_file(name, attributes, dir);
+    }
+    return 0;
+}
+
+/*
+bool delete_file(file_descriptor_t* file)
+{
+
+}
+*/
+
+/*
+bool rename_file(file_descriptor_t* file, u8* newname)
+{
+    
+}
+*/
+
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 {
     //The path should be relative to the mount point (excluded) of this fs
@@ -297,45 +352,4 @@ static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 	kfree(spath);
 	fd_list_free(cdir, dirsize);
 	return 0;
-}
-
-u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
-{
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
-
-    if(file->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
-	if(count+file->offset > file->length) count = file->length - file->offset; //if we want to read more, well, NO BASTARD GTFO
-	if(count == 0) {*((u8*) buffer) = 0; return 0;}
-
-    switch(file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            return fat32fs_read_file(file, buffer, count);
-        case FS_TYPE_ISO9660:
-            return iso9660fs_read_file(file, buffer, count);
-    }
-    return 2;
-}
-
-u8 write_file(file_descriptor_t* file, void* buffer, u64 count)
-{
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
-    if(count == 0) return 0;
-
-    switch(file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            return fat32fs_write_file(file, buffer, count);
-    }
-    return 2;
-}
-
-file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
-{
-    switch(dir->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            return fat32fs_create_file(name, attributes, dir);
-    }
-    return 0;
 }

@@ -16,7 +16,6 @@
 */
 
 //this file provides support for the FAT32 file system
-//missing : some writes functions/improvements (writing a file, creating new file, mkdir, deleting files, deleting directories) 
 #include "system.h"
 #include "storage/storage.h"
 #include "memory/mem.h"
@@ -96,7 +95,7 @@ typedef struct LFN_ENTRY
 	u16 lastn[2];
 } __attribute__((packed)) lfn_entry_t;
 
-//FAT32 utils : 'this file only' methods
+//Static methods : look at method body (FAT32 utilities basically)
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
 static u8 fat32fs_read_fat(file_system_t* fs);
@@ -368,7 +367,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 }
 
 /*
-* Read the data of a file previously opened by fat32fs_open_file()
+* Read the data of a file
 */
 u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 {
@@ -421,7 +420,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 }
 
 /*
-* Write data to a file previously opened by fat32fs_open_file()
+* Write data to a file
 */
 u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 {
@@ -770,12 +769,26 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 }
 
 /*
-void fat32fs_rename(file_descriptor_t* file, u8* newname)
+* Delete a file
+*
+bool fat32fs_delete_file(file_descriptor_t* file)
 {
 
 }
 */
 
+/*
+* Rename a file
+*
+bool fat32fs_rename(file_descriptor_t* file, u8* newname)
+{
+
+}
+*/
+
+/*
+* this function updates the size of a file inside the dirent
+*/
 static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 {
 	file_system_t* fs = file->file_system;
@@ -887,12 +900,18 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	kfree(dirents);
 }
 
+/*
+* this function converts cluster address to LBA address
+*/
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 	return ((u64) ((int64_t) (spe->bpb_offset + spe->bpb->reserved_sectors + (spe->bpb->fats_number*spe->bpb->fat_size) + (cluster * spe->bpb->sectors_per_cluster)) - (2*spe->bpb->sectors_per_cluster)));
 }
 
+/*
+* this function reads the fat from disk
+*/
 static u8 fat32fs_read_fat(file_system_t* fs)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -909,6 +928,9 @@ static u8 fat32fs_read_fat(file_system_t* fs)
 	return 0;
 }
 
+/*
+* this function writes the cached fat on disk
+*/
 static void fat32fs_write_fat(file_system_t* fs)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -917,6 +939,9 @@ static void fat32fs_write_fat(file_system_t* fs)
 	block_write_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive);
 }
 
+/*
+* this function return all the clusters of a cluster chain inside a chained list (list_entry_t)
+*/
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -967,6 +992,10 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, 
 	return tr;
 }
 
+/*
+* this function returns the 8.3 name of a file
+* this is still experimental and full of bugs but as we dont really care about 8.3 and the code is horrible i'll see that later
+*/
 static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize)
 {
 	u8* namebuffer = name;
@@ -1036,9 +1065,12 @@ static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t
 	kprintf("%lreturning old name : %s , old ext : %s\n", 3, oldname, oldext);
 }
 
+/*
+* this function checks the checksum of a lfn entry
+* it uses microsoft fatgen103.doc implementation
+*/
 static u8 fat32fs_lfn_checksum (u8* pFcbName)
 {
-	//MICROSOFT fatgen103.doc implementation
 	u16 FcbNameLen;
 	u8 Sum;
 
@@ -1051,6 +1083,9 @@ static u8 fat32fs_lfn_checksum (u8* pFcbName)
 	return (Sum);
 }
 
+/*
+* this function returns the next free cluster on this fat32 file system
+*/
 static u32 fat32fs_get_free_cluster(file_system_t* fs)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -1066,6 +1101,7 @@ static u32 fat32fs_get_free_cluster(file_system_t* fs)
 
 /*
 * this function gets and marks (as a right clusterchain) nbr clusters (that were previously free)
+* it returns the first cluster on the chain
 * note: this is getting the clusters in reverse order : possibly fragmenting disk ?
 */
 static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs)

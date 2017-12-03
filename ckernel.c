@@ -121,10 +121,10 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     u8 color = (mode == KERNEL_MODE_LIVE ? 0b00001111 : mode == KERNEL_MODE_INSTALLED ? 0b00001111 : 0b00001100);
     vga_text_spemsg(context, color);
 
-    //mounting / either to RAMFS (live) or DISK (installed)
+    //mounting root directory
     if(mode == KERNEL_MODE_LIVE)
     {
-        //mounting / on the live CD
+        //mounting live CD on /
         kprintf("Mounting root directory...");
         block_device_t* dev = block_devices[root_drive];
         if(!dev) fatal_kernel_error("Could not find root drive !", "LIVE_KERNEL_LOADING");
@@ -137,11 +137,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     }
     else if(mode == KERNEL_MODE_INSTALLED)
     {
-        //mount root dir with root_dir partition
-        //u8 drive_index = (u8) (aroot_dir[2] - 97);
-        //u8 part_index = (u8) (aroot_dir[3] - 49);
-        //char h = *aroot_dir;
-
+        //mounting hard disk on /
         kprintf("Mounting root directory...");
 
         block_device_t* dev = block_devices[root_drive];
