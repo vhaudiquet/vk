@@ -97,6 +97,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size);
 u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
+bool fat32fs_delete_file(file_descriptor_t* file);
 
 //ISO9660 specific
 file_system_t* iso9660fs_init(block_device_t* drive);

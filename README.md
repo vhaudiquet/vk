@@ -8,8 +8,7 @@ an ATAPI cd-rom with an ISO9660 fs.
 
 The scheduler is working, but i'm pretty sure it still contains some bugs.
 
-I plan to add timing support, so that the ATA/ATAPI DMA driver doesn't hang if it doesn't receive IRQ.
-I will also have to get ACPI support, at least for ACPI shutdown but also to use things like HPET...
+I want to get ACPI support, at least for ACPI shutdown but also to use things like HPET...
 
 After that, i will have to clean up the code, and add system calls.
 Then i'll try to port a libc, like newlib, and binutils/gcc (that would be really great).

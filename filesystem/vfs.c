@@ -254,12 +254,24 @@ file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
     return 0;
 }
 
-/*
 bool delete_file(file_descriptor_t* file)
 {
+    //if the file is a directory, checks if it's empty
+    if(file->attributes & FILE_ATTR_DIR)
+    {
+        u32 dirsize = 0;
+        list_entry_t* list = read_directory(file, &dirsize);
+        list_free(list, dirsize);
+        if(dirsize) return false;
+    }
 
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_delete_file(file);
+    }
+    return false;
 }
-*/
 
 /*
 bool rename_file(file_descriptor_t* file, u8* newname)
@@ -331,9 +343,8 @@ static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
                 kfree(nextdir);
 
 				//we have found a subdirectory, explore it
-				//TODO : if this subdirectory is not a dir but a file (handled in subfonction but better handle)
 				break;
-			}
+            }
 			lbuf = lbuf->next;
 			j++;
 			//at this point, if we havent break yet, there is no such dir/file as we look for ; return 0

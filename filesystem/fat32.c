@@ -20,7 +20,6 @@
 #include "storage/storage.h"
 #include "memory/mem.h"
 #include "filesystem/fs.h"
-#include "error/error.h"
 
 typedef struct BPB
 {
@@ -104,7 +103,8 @@ static u32 fat32fs_get_free_cluster(file_system_t* fs);
 static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs);
 static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize);
 static u8 fat32fs_lfn_checksum (u8* pFcbName);
-static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
+static bool fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize);
+static bool fat32fs_delete_dirent(file_descriptor_t* file);
 
 /*
 * Initialize a new FAT32 filesystem on a volume
@@ -132,7 +132,7 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 
 	//check if it is a valid fat32 fs
 	if(*bpb->system_id_string != 'F' || *(bpb->system_id_string+1) != 'A' || *(bpb->system_id_string+2) != 'T' || *(bpb->system_id_string+3) != '3' || *(bpb->system_id_string+4) != '2')
-	{fatal_kernel_error("Not a valid FAT32 fs !", "FAT32FS_INIT"); return 0;} //TEMP FATAL
+		return 0;
 
 	//setup the file_system_t and fat32fs_specific_t struct that represents the fat32fs
 	file_system_t* tr = 
@@ -202,7 +202,7 @@ void fat32fs_close(file_system_t* fs)
 */
 list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 {
-	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to read a file as a directory", "FAT32FS_READ_EDIR"); //TEMP
+	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return 0;
 
 	file_system_t* fs = dir->file_system;
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -502,6 +502,7 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	if(count_bckp+file->offset > file->length)
 	{
 		file->length = count_bckp+file->offset;
+		//here we assume the function can't fail, because we wrote to the file so it obviously exists
 		fat32fs_resize_dirent(file, ((u32)count_bckp)+((u32) file->offset));
 	}
 
@@ -770,26 +771,43 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 
 /*
 * Delete a file
-*
+* Note : carefull, when used on a directory, the directory MUST be empty (and there is no check)
+*/
 bool fat32fs_delete_file(file_descriptor_t* file)
 {
+	//Step 1 : Delete dirent (mark it as 0xE5)
+	if(!fat32fs_delete_dirent(file)) return false;
+	
+	//Step 2 : mark all the clusters of this file as free
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) file->file_system->specific;
+	u32 clusize = 0;
+	list_entry_t* clulist = fat32fs_get_cluster_chain((u32) file->fsdisk_loc, file->file_system, &clusize);
+	list_entry_t* cluspoint = clulist;
+	u32 i = 0;
+	for(i = 0;i<clusize;i++)
+	{
+		spe->fat_table[*((u32*) cluspoint->element)] = 0;
+		cluspoint = cluspoint->next;
+	}
+	list_free(clulist, clusize);
+	fat32fs_write_fat(file->file_system);
 
+	return true;
 }
-*/
 
 /*
 * Rename a file
 *
 bool fat32fs_rename(file_descriptor_t* file, u8* newname)
 {
-
+	//modify dirent and file descriptor (fuck, lfns...)
 }
 */
 
 /*
 * this function updates the size of a file inside the dirent
 */
-static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
+static bool fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 {
 	file_system_t* fs = file->file_system;
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
@@ -880,8 +898,14 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 		}
 	}
 
-	//TEMP
-	if(!found) fatal_kernel_error("entry not found !", "FAT32FS_RESIZE_DIRENT");
+	if(!found) 
+	{
+		//free the cluster list
+		list_free(cluslist, (u32) cluss);
+		//free the dir entries buffer
+		kfree(dirents);
+		return false;
+	}
 
 	//write the buffer on the clusters
 	clusbuffer = cluslist;
@@ -898,6 +922,141 @@ static void fat32fs_resize_dirent(file_descriptor_t* file, u32 nsize)
 	list_free(cluslist, (u32) cluss);
 	//free the dir entries buffer
 	kfree(dirents);
+
+	return true;
+}
+
+/*
+* this function marks a dirent and all lfns corresponding to as 0xE5, wich means unused
+*/
+static bool fat32fs_delete_dirent(file_descriptor_t* file)
+{
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
+	//get the parent directory cluster
+	u32 dir_cluster = (u32) file->parent_directory->fsdisk_loc;
+
+	//get the cluster chain for the parent directory
+	u64 cluss = 0;
+	list_entry_t* cluslist = fat32fs_get_cluster_chain(dir_cluster, fs, (u32*) &cluss);
+	list_entry_t* clusbuffer = cluslist;
+
+	//here we have the full dir size, and we allocate an equivalent buffer
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
+	fat32_dir_entry_t* dirents = 
+	#ifdef MEMLEAK_DBG
+	kmalloc((u32) dir_size, "fat32:delete_dirent dir entries buffer");
+	#else
+	kmalloc((u32) dir_size);
+	#endif
+	fat32_dir_entry_t* buffer = dirents;
+
+	//reading all clusters inside this buffer
+	u32 i = 0;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//finding the corresponding entries
+	bool found = false;
+	char* lfn_name = 0;
+	u32 lfn_offset = 0;
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
+	{
+		//parsing the LFN entries
+		if(*(dirents[i].name) == 0x0) {break;}
+		if(*(dirents[i].name) == 0xE5) {continue;}
+		if(dirents[i].attributes == FAT_ATTR_LFN)
+		{
+			//long file name entry processing
+			lfn_entry_t* lfn = (lfn_entry_t*) &dirents[i];
+			//THIS is the part that is hmmm
+			//ASSUMING that the first lfn we will find is the 'top' lfn, the higher in order
+			//from what i have seen, this is true, but...
+			u16 lfn_nbr = (lfn->order & 0x40) == 0x40 ? lfn->order ^ 0x40 : lfn->order;
+
+			if(lfn_name == 0)
+			{
+				lfn_name = 
+				#ifdef MEMLEAK_DBG
+				kmalloc((u32) 13*lfn_nbr+1, "fat32:delete_dirent lfn name");
+				#else
+				kmalloc((u32) 13*lfn_nbr+1);
+				#endif
+				*(lfn_name+13*lfn_nbr) = 0;
+				//lfn_checksum = lfn->checksum;
+			}
+			
+			lfn_offset = 13*((u32) (lfn_nbr-1));
+
+			u32 fff = 0;
+			while(fff < 5) {*(lfn_name+fff+lfn_offset) = (char) lfn->firstn[fff]; fff++;}
+			fff = 0;
+			while(fff < 6) {*(lfn_name+fff+5+lfn_offset) = (char) lfn->nextn[fff]; fff++;}
+			fff = 0;
+			while(fff < 2) {*(lfn_name+fff+11+lfn_offset) = (char) lfn->lastn[fff]; fff++;}
+
+			continue;
+		}
+
+		if(lfn_name)
+		{
+			if(!strcmp(lfn_name, file->name))
+			{
+				//we have found the right 8.3 entry
+				*(dirents[i].name) = 0xE5; //marks 0xE5
+				
+				//marks all lfns
+				u32 nlen = strlen(lfn_name); alignup(nlen, 13);
+				u32 counter = 0;
+				while(nlen)
+				{
+					*(dirents[i].name) = 0xE5;
+					counter++;
+					nlen -= 13;
+				}
+
+				kfree(lfn_name);
+				found = true;
+				break;
+			}
+			kfree(lfn_name);
+			lfn_name = 0;
+			lfn_offset = 0;
+		}
+	}
+
+	if(!found) 
+	{
+		//free the cluster list
+		list_free(cluslist, (u32) cluss);
+		//free the dir entries buffer
+		kfree(dirents);
+		return false;
+	}
+
+	//write the buffer on the clusters
+	clusbuffer = cluslist;
+	buffer = dirents;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//free the cluster list
+	list_free(cluslist, (u32) cluss);
+	//free the dir entries buffer
+	kfree(dirents);
+
+	return true;
 }
 
 /*
@@ -1066,7 +1225,7 @@ static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t
 }
 
 /*
-* this function checks the checksum of a lfn entry
+* this function gets the checksum of a lfn entry from a name
 * it uses microsoft fatgen103.doc implementation
 */
 static u8 fat32fs_lfn_checksum (u8* pFcbName)
