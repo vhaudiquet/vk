@@ -25,6 +25,7 @@
 #include "error/error.h"
 #include "filesystem/fs.h"
 #include "tasking/task.h"
+#include "time/time.h"
 void args_parse(char* cmdline);
 
 //TODO : ATA PIO driver -> check for solutions on write_28, write_48, or delete them (as we dont need write on PIO if we have it on DMA)
