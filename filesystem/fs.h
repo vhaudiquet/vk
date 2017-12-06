@@ -19,6 +19,7 @@
 #define FS_HEAD
 
 #include "storage/storage.h"
+#include "time/time.h"
 
 #define FS_TYPE_RAMFS 1
 #define FS_TYPE_FAT32 2
@@ -39,6 +40,9 @@ typedef struct file_descriptor
     u8 attributes; //dir/file, hidden , (system/prgm/user), 
     u64 length; //lenght in bytes
     u64 offset; //offset (file only)
+    time_t creation_time;
+    time_t last_access_time;
+    time_t last_modification_time;
 } file_descriptor_t;
 
 #define FS_FLAG_CASE_INSENSITIVE 1

@@ -341,6 +341,32 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 
 		tf->offset = 0;
 		tf->parent_directory = dir;
+
+		//gets and converts creation/access/modification time to std time
+		//we know there can't be overflow here, and we are handling conversion mannually, so disable -Wconversion
+		#pragma GCC diagnostic push
+		#pragma GCC diagnostic ignored "-Wconversion"
+		u8 chour = dirents[i].creation_time >> 11;
+		u8 cmins = (dirents[i].creation_time & 0x7FF) >> 5;
+		u8 csecs = (dirents[i].creation_time & 0x1F)*2;
+		u8 cday = dirents[i].creation_date & 0x1F;
+		u8 cmonth = (dirents[i].creation_date & 0x1FF) >> 5;
+		u8 cyear = (dirents[i].creation_date >> 9) - 20; //0 = 1980 ; we are only taking dates from 2000 for now
+		tf->creation_time = convert_to_std_time(csecs, cmins, chour, cday, cmonth, cyear);
+
+		u8 laday = dirents[i].last_access_date & 0x1F;
+		u8 lamonth = (dirents[i].last_access_date & 0x1FF) >> 5;
+		u8 layear = (dirents[i].last_access_date >> 9) - 20; //same
+		tf->last_access_time = convert_to_std_time(0, 0, 0, laday, lamonth, layear);
+
+		u8 lmhour = dirents[i].last_modification_time >> 11;
+		u8 lmmins = (dirents[i].last_modification_time & 0x7FF) >> 5;
+		u8 lmsecs = (dirents[i].last_modification_time & 0x1F)*2;
+		u8 lmday = dirents[i].last_modification_date & 0x1F;
+		u8 lmmonth = (dirents[i].last_modification_date & 0x1FF) >> 5;
+		u8 lmyear = (dirents[i].last_modification_date >> 9) - 20; //same
+		tf->last_modification_time = convert_to_std_time(lmsecs, lmmins, lmhour, lmday, lmmonth, lmyear);
+		#pragma GCC diagnostic pop
 	
 		lbuf->element = tf;
 

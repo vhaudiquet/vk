@@ -60,13 +60,13 @@ typedef struct ISO9660_DIR_ENTRY
 
 typedef struct ISO_9660_DATE_TIME
 {
-	u8 year[4];
-	u8 month[2];
-	u8 day[2];
-	u8 hour[2];
-	u8 minute[2];
-	u8 second[2];
-	u8 hundredths[2];
+	u32 year;
+	u16 month;
+	u16 day;
+	u16 hour;
+	u16 minute;
+	u16 second;
+	u16 hundredths;
 	int8_t timezone;
 } __attribute__((packed)) iso9660_date_time_t;
 
@@ -243,6 +243,11 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
     dest->fsdisk_loc = dirent->extent_start_lsb;
     dest->length = dirent->extent_size_lsb;
     dest->offset = 0;
+
+    //parse time (check for year-100)
+    dest->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year-100));
+    dest->last_modification_time = dest->creation_time;
+    dest->last_access_time = 0; //0 as NO value or -1 ? NO Value or creation_time ?
 
     //set attributes
     dest->attributes = 0;
