@@ -245,7 +245,7 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
     dest->offset = 0;
 
     //parse time (check for year-100)
-    dest->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year-100));
+    dest->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year));
     dest->last_modification_time = dest->creation_time;
     dest->last_access_time = 0; //0 as NO value or -1 ? NO Value or creation_time ?
 

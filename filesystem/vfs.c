@@ -204,6 +204,11 @@ file_descriptor_t* open_file(char* path)
     return 0;
 }
 
+void close_file(file_descriptor_t* file)
+{
+    fd_free(file);
+}
+
 list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
 {
     if(directory->file_system->fs_type == FS_TYPE_FAT32)
@@ -273,12 +278,15 @@ bool delete_file(file_descriptor_t* file)
     return false;
 }
 
-/*
 bool rename_file(file_descriptor_t* file, u8* newname)
 {
-    
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            return fat32fs_rename(file, newname);
+    }
+    return false;
 }
-*/
 
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 {

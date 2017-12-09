@@ -18,6 +18,8 @@
 #include "time.h"
 #include "memory/mem.h"
 
+int monthdays[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
 typedef struct CMOS_TIME
 {
     u8 seconds;
@@ -82,6 +84,9 @@ cmos_time_t* get_cmos_time()
     {
         if(ct->hours & 0x80) {ct->hours &= ~0x80; if(ct->hours != 12) ct->hours+=12; else ct->hours = 0;} 
     }
+
+    ct->year += 100; //assuming 21st century
+
     #pragma GCC diagnostic pop
 
     return ct;
@@ -90,7 +95,7 @@ cmos_time_t* get_cmos_time()
 time_t convert_to_std_time(u8 seconds, u8 minutes, u8 hours, u8 day, u8 month, u8 year)
 {
     time_t tr = seconds + 60*minutes + 3600*hours + 86400*(day-1);
-    int32_t years = 2000 + year - 1; // assuming we are in the 21st century
+    int32_t years = 1900 + year - 1;
     month--;
 
     switch(month) 
@@ -127,6 +132,44 @@ time_t convert_to_std_time(u8 seconds, u8 minutes, u8 hours, u8 day, u8 month, u
     }
 
     return tr;
+}
+
+void convert_to_readable_time(time_t time, u8* seconds, u8* minutes, u8* hour, u8* day, u8* month, u8* year)
+{
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wconversion"
+    *seconds = time % 60;
+    time /= 60;
+    *minutes = time % 60;
+    time /= 60;
+    *hour = time % 24;
+    time /= 24;
+
+    time += 25568;
+
+    *year = (time / 1461) << 2;
+    time %= 1461;
+    if(time > 365)
+    {
+        *year += ((time - 1) / 365);
+        time = (time - 1) % 365;
+    }
+
+    if((*year & 3) && (time >= 59))
+    {
+        time++;
+    }
+    
+    *month = 0;
+    while(time >= monthdays[*month])
+    {
+        time -= monthdays[*month];
+        (*month)++;
+    }
+    (*month)++;
+
+    *day = (u8) (time + 1);
+    #pragma GCC diagnostic pop
 }
 
 time_t get_current_time_utc()

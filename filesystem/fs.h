@@ -64,7 +64,11 @@ void mount(char* path, file_system_t* fs);
 
 //accessing files
 file_descriptor_t* open_file(char* path);
+void close_file(file_descriptor_t* file);
 u8 read_file(file_descriptor_t* file, void* buffer, u64 count);
+u8 write_file(file_descriptor_t* file, void* buffer, u64 count);
+bool rename_file(file_descriptor_t* file, u8* newname);
+bool delete_file(file_descriptor_t* file);
 
 //FILESYSTEM utils
 void fd_list_free(list_entry_t* list, u32 list_size);
@@ -102,6 +106,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
 bool fat32fs_delete_file(file_descriptor_t* file);
+bool fat32fs_rename(file_descriptor_t* file, u8* newname);
 
 //ISO9660 specific
 file_system_t* iso9660fs_init(block_device_t* drive);

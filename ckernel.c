@@ -172,10 +172,10 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     process_t* init_process = create_process(elf_task);
     if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
 
-    fd_free(elf_task);
+    close_file(elf_task);
 
     kfree(init_buffer);
-    fd_free(init_file);
+    close_file(init_file);
 
     kprintf("[INIT] Init task loaded in memory at 0x%X\n", init_process->eip);
 
