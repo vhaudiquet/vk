@@ -259,7 +259,7 @@ file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
     return 0;
 }
 
-bool delete_file(file_descriptor_t* file)
+bool unlink(file_descriptor_t* file)
 {
     //if the file is a directory, checks if it's empty
     if(file->attributes & FILE_ATTR_DIR)
@@ -339,8 +339,18 @@ static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 				}
 
                 //copy 'dir to explore' file descriptor
-                file_descriptor_t* nextdir = kmalloc(sizeof(file_descriptor_t));
-                nextdir->name = kmalloc(strlen(ce->name)+1);
+                file_descriptor_t* nextdir = 
+                #ifdef MEMLEAK_DBG
+                kmalloc(sizeof(file_descriptor_t), "open_file dir to explore copy fd");
+                #else
+                kmalloc(sizeof(file_descriptor_t));
+                #endif
+                nextdir->name = 
+                #ifdef MEMLEAK_DBG
+                kmalloc(strlen(ce->name)+1, "open_file dir to explore copy name");
+                #else
+                kmalloc(strlen(ce->name)+1);
+                #endif
                 fd_copy(nextdir, ce);
 
                 //free the current dir list

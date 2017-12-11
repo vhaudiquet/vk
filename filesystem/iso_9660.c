@@ -126,7 +126,12 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
 file_system_t* iso9660fs_init(block_device_t* drive)
 {
     //allocating data struct
-    file_system_t* tr = kmalloc(sizeof(file_system_t));
+    file_system_t* tr = 
+    #ifndef MEMLEAK_DBG
+    kmalloc(sizeof(file_system_t));
+    #else
+    kmalloc(sizeof(file_system_t), "iso9660 file_system_t struct");
+    #endif
     tr->drive = drive;
     tr->fs_type = FS_TYPE_ISO9660;
     tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE;
@@ -155,13 +160,23 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     file_system_t* fs = dir->file_system;
     u64 lba = dir->fsdisk_loc;
     u32 length = (u32) dir->length;
-    u8* dirent_data = kmalloc(length);
+    u8* dirent_data = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(length, "iso9660_read_dir dirent buffer");
+    #else
+    kmalloc(length);
+    #endif
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
     if(block_read_flexible(lba, 0, dirent_data, length, fs->drive) != DISK_SUCCESS)
         return 0;
     
-    list_entry_t* tr = kmalloc(sizeof(list_entry_t));
+    list_entry_t* tr = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(list_entry_t), "iso9660_read_dir first list entry");
+    #else
+    kmalloc(sizeof(list_entry_t));
+    #endif
     list_entry_t* ptr = tr;
     *size = 0;
 
@@ -177,14 +192,25 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
             continue;
         }
         
-        file_descriptor_t* fd = kmalloc(sizeof(file_descriptor_t));
-        
+        file_descriptor_t* fd = 
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(file_descriptor_t), "iso9660_read_dir dirent file_descriptor");
+        #else
+        kmalloc(sizeof(file_descriptor_t));
+        #endif
+
         if(index == 0)
         {
             //current dir (.)
             fd->name = 0;
             fd_copy(fd, dir);
-            fd->name = kmalloc(2); *(fd->name+1) = 0; strcpy(fd->name, ".");
+            fd->name = 
+            #ifdef MEMLEAK_DBG
+            kmalloc(2, "iso9660_read_dir dirent name");
+            #else
+            kmalloc(2);
+            #endif
+            *(fd->name+1) = 0; strcpy(fd->name, ".");
         }
         else if(index == 1)
         {
@@ -195,14 +221,25 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
             else 
                 fd_copy(fd, dir); 
             
-            fd->name = kmalloc(3); *(fd->name+2) = 0; strcpy(fd->name, "..");
+            fd->name = 
+            #ifdef MEMLEAK_DBG
+            kmalloc(3, "iso9660_read_dir dirent name");
+            #else
+            kmalloc(3);
+            #endif
+            *(fd->name+2) = 0; strcpy(fd->name, "..");
         }
         else
             iso9660_get_fd(fd, dirptr, dir, fs);
         
         //kprintf("%s\n", fd->name);
         ptr->element = fd;
-        ptr->next = kmalloc(sizeof(list_entry_t));
+        ptr->next = 
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(list_entry_t), "iso9660_read_dir list entry");
+        #else
+        kmalloc(sizeof(list_entry_t));
+        #endif
         ptr = ptr->next;
         offset+= dirptr->length;
         length-= dirptr->length;
@@ -232,7 +269,12 @@ u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, file_system_t* fs)
 {
     //copy name
-    dest->name = kmalloc((u32) dirent->name_len+1);
+    dest->name = 
+    #ifdef MEMLEAK_DBG
+    kmalloc((u32) dirent->name_len+1, "iso9660 fd name");
+    #else
+    kmalloc((u32) dirent->name_len+1);
+    #endif
     *(dest->name+dirent->name_len) = 0;
     strncpy(dest->name, dirent->name, dirent->name_len);
     if(dirent->name_len > 2) if(*(dest->name+dirent->name_len-2) == ';') *(dest->name+dirent->name_len-2) = 0;

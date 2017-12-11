@@ -31,7 +31,12 @@ vm_block_t* vm_first_block = 0;
 
 void kvmheap_install()
 {
-    vm_first_block = kmalloc(sizeof(vm_block_t));
+    vm_first_block = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(vm_block_t), "virtual memory first block (kvmheap_install)");
+    #else
+    kmalloc(sizeof(vm_block_t));
+    #endif
     vm_first_block->vaddr = FREE_KVM_START;
     vm_first_block->size = 0xFFFFFFFF - FREE_KVM_START;
     vm_first_block->next = 0;

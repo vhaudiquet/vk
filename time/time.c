@@ -47,7 +47,12 @@ cmos_time_t* get_cmos_time()
         if(!(register_b & 4)) cmos_flags |= CMOS_FLAG_BCD;
     }
 
-    cmos_time_t* ct = kmalloc(sizeof(cmos_time_t));
+    cmos_time_t* ct = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(cmos_time_t), "CMOS time struct");
+    #else
+    kmalloc(sizeof(cmos_time_t));
+    #endif
 
     outb (0x70, (0x80 << 7) | (0x0));
     ct->seconds = inb(0x71);

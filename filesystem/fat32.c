@@ -614,7 +614,12 @@ bool fat32fs_rename(file_descriptor_t* file, u8* newname)
 	if(!fat32fs_delete_dirent(file)) return false;
 
 	char* oldname = file->name;
-	char* nn = kmalloc(strlen((char*) newname)+1);
+	char* nn = 
+	#ifndef MEMLEAK_DBG
+	kmalloc(strlen((char*) newname)+1);
+	#else
+	kmalloc(strlen((char*) newname)+1, "fat32fs_rename new name");
+	#endif
 	strcpy(nn, (char*) newname);
 	file->name = nn;
 

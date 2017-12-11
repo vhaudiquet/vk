@@ -26,7 +26,12 @@ void install_block_devices()
 {
     kprintf("Installing block devices...");
 
-    block_devices = kmalloc(sizeof(void*)*10);
+    block_devices = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(void*)*10, "block devices array (install_block_devices)");
+    #else
+    kmalloc(sizeof(void*)*10);
+    #endif
     ata_install();
 
     vga_text_okmsg();

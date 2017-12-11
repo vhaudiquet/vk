@@ -21,14 +21,24 @@ block_device_t* init_ramdisk(u32 size)
 {
     //fill block device struct
     alignup(size, BYTES_PER_SECTOR);
-    block_device_t* tr = kmalloc(sizeof(block_device_t));
+    block_device_t* tr = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(sizeof(block_device_t), "ramdisk struct");
+    #else
+    kmalloc(sizeof(block_device_t));
+    #endif
     tr->device_size = size/BYTES_PER_SECTOR;
     tr->device_type = RAMDISK_DEVICE;
     tr->device_class = HARD_DISK_DRIVE;
     tr->partition_count = 0;
 
     //we are using the pointer device_struct to store ramdisk base addr
-    tr->device_struct = kmalloc(size);
+    tr->device_struct = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(size, "ramdisk content");
+    #else
+    kmalloc(size);
+    #endif
 
     return tr;
 }
