@@ -58,13 +58,16 @@ typedef struct elf_program_header
 
 bool elf_check(file_descriptor_t* file)
 {
-    //check if name ends with .elf (actually this is obsolete because an elf file doesnt really ends with .elf)
-    //u32 nl = strlen(file->name);
-    //if((*(file->name+nl-1) != 'f') | (*(file->name+nl-2) != 'l') | (*(file->name+nl-3) != 'e') | (*(file->name+nl-4) != '.')) return false;
-    
+    //ignoring offset
+    u64 old_offset = file->offset;
+    file->offset = 0;
+
     //read header to check it
     elf_header_t eh;
     read_file(file, &eh, sizeof(elf_header_t));
+
+    //restoring offset
+    file->offset = old_offset;
 
     //check magic
     if((eh.magic[0] != 0x7F) | (eh.magic[1] != 'E') | (eh.magic[2] != 'L') | (eh.magic[3] != 'F')) return false;
@@ -90,7 +93,14 @@ void* elf_load(file_descriptor_t* file, u32* page_directory)
     kmalloc((u32) file->length);
     #endif
 
+    //ignoring offset
+    u64 old_offset = file->offset;
+    file->offset = 0;
+
     read_file(file, buffer, file->length);
+
+    //restoring offset
+    file->offset = old_offset;
 
     elf_header_t* header = (elf_header_t*) buffer;
 
@@ -102,12 +112,10 @@ void* elf_load(file_descriptor_t* file, u32* page_directory)
 
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);
 
-        //asm("cli");
         pd_switch(page_directory);
         memcpy((void*)prg_h[i].p_vaddr, buffer + prg_h[i].p_offset, prg_h[i].p_filesz);
         memset((void*)prg_h[i].p_vaddr + prg_h[i].p_filesz, 0, prg_h[i].p_memsz - prg_h[i].p_filesz);
         pd_switch(kernel_page_directory);
-        //asm("sti");
     }
 
     void* tr = (void*) header->program_entry;

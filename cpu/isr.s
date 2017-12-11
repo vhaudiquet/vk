@@ -178,9 +178,6 @@ SYSCALL_H:
     pushl %ebx
     pushl %eax
     call syscall_global
-    # popl %eax
-    # popl %ebx
-    # popl %edx
     add $0xC, %esp
     pop %gs
     pop %fs
