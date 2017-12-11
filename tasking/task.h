@@ -23,7 +23,7 @@
 
 //ELF loading
 bool elf_check(file_descriptor_t* file);
-void* elf_load(file_descriptor_t* file, u32* page_directory);
+void* elf_load(file_descriptor_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
 
 //Process
 typedef struct PROCESS
@@ -37,6 +37,8 @@ typedef struct PROCESS
     u32 kesp;
     u32 base_stack;
     u32 base_kstack;
+    list_entry_t* data_loc;
+    u32 data_size;
 } process_t;
 
 process_t* create_process(file_descriptor_t* executable);

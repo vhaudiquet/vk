@@ -84,7 +84,7 @@ bool elf_check(file_descriptor_t* file)
     return true;
 }
 
-void* elf_load(file_descriptor_t* file, u32* page_directory)
+void* elf_load(file_descriptor_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size)
 {
     u8* buffer = 
     #ifdef MEMLEAK_DBG
@@ -111,12 +111,22 @@ void* elf_load(file_descriptor_t* file, u32* page_directory)
         if(prg_h[i].p_memsz == 0) continue;
 
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);
+        
+        //marking allocated memory on the list
+        data_loc->element = kmalloc(sizeof(u32)*2);
+        ((u32*)data_loc->element)[0] = prg_h[i].p_vaddr;
+        ((u32*)data_loc->element)[1] = prg_h[i].p_memsz;
+        data_loc->next = kmalloc(sizeof(list_entry_t));
+        data_loc = data_loc->next;
+        (*data_size)++;
 
         pd_switch(page_directory);
         memcpy((void*)prg_h[i].p_vaddr, buffer + prg_h[i].p_offset, prg_h[i].p_filesz);
         memset((void*)prg_h[i].p_vaddr + prg_h[i].p_filesz, 0, prg_h[i].p_memsz - prg_h[i].p_filesz);
         pd_switch(kernel_page_directory);
     }
+    //freeing last list entry, unused
+    kfree(data_loc);
 
     void* tr = (void*) header->program_entry;
     kfree(buffer);

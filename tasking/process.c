@@ -35,15 +35,14 @@ process_t* create_process(file_descriptor_t* executable)
 
     u32* page_directory = get_kernel_pd_clone();
 
-    void* code_offset = (void*) elf_load(executable, page_directory);
+    list_entry_t* data_loc = kmalloc(sizeof(list_entry_t));
+    u32 data_size = 0;
+    void* code_offset = (void*) elf_load(executable, page_directory, data_loc, &data_size);
 
     if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); return 0;}
 
-    void* stack_offset;
-    //if((int) (code_offset-0x10000) > 0)
-    //    stack_offset = (void*) code_offset-1;
-    //else
-        stack_offset = (void*) 0xC0000000-8194;
+    //TODO: check if this area isnt already mapped by elf code/data ; and find a better area to permit to the stack to grow later
+    void* stack_offset = (void*) 0xC0000000-8194;
     
     map_memory(8192, (u32) stack_offset-8192, page_directory);
     pd_switch(page_directory);
@@ -56,6 +55,9 @@ process_t* create_process(file_descriptor_t* executable)
     #else
     kmalloc(sizeof(process_t));
     #endif
+
+    tr->data_loc = data_loc;
+    tr->data_size = data_size;
 
     tr->base_stack = (u32) stack_offset-8192;
 
@@ -136,9 +138,26 @@ process_t* init_kernel_process()
 
 void exit_process(process_t* process)
 {
+    //mark physical memory reserved for process stack as free
     u32 stack_phys = get_physical(process->base_stack, process->page_directory);
     free_block(stack_phys);
+
+    //TODO : mark all data/code blocks reserved for the process as free
+    u32 i = 0;
+    list_entry_t* dloc = process->data_loc;
+    for(i=0;i<process->data_size;i++)
+    {
+        u32 phys = get_physical(((u32*)dloc->element)[0], process->page_directory);
+        free_block(phys);
+    }
+    list_free(dloc, process->data_size);
+
+    //free process's kernel stack
     kfree((void*) process->base_kstack);
+
+    //free process's page directory
     pt_free(process->page_directory);
+
+    //remove process from schedulers
     scheduler_remove_process(process);
 }
