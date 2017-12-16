@@ -28,7 +28,7 @@
 process_t* kernel_process = 0;
 process_t* idle_process = 0;
 
-process_t* create_process(file_descriptor_t* executable)
+process_t* create_process(file_descriptor_t* executable, int argc, char** argv)
 {
     //check if the file is really an ELF executable
     if(!elf_check(executable)) return 0;
@@ -41,12 +41,43 @@ process_t* create_process(file_descriptor_t* executable)
 
     if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); return 0;}
 
-    //TODO: check if this area isnt already mapped by elf code/data ; and find a better area to permit to the stack to grow later
-    void* stack_offset = (void*) 0xC0000000-8194;
+    //TODO: check if this area isnt already mapped by elf code/data
+    void* stack_offset = (void*) 0xC0000000;
     
     map_memory(8192, (u32) stack_offset-8192, page_directory);
     pd_switch(page_directory);
     memset((void*)(stack_offset-8192), 0, 8192);
+
+    /* ARGUMENTS PASSING */
+    int i;
+    char** uparam = (char**) kmalloc(sizeof(char*) * ((u32) argc));
+    
+    //copy strings
+    for (i=0; i<argc; i++) 
+    {
+        stack_offset -= (strlen(argv[i]) + 1);
+        strcpy((char*) stack_offset, argv[i]);
+        uparam[i] = (char*) stack_offset;
+    }
+
+    //copy adresses
+    for (i=argc-1; i>=0; i--)
+    {
+        stack_offset -= sizeof(char*);
+        *((char**) stack_offset) = uparam[i]; 
+    }
+
+    //copy argv
+    stack_offset -= sizeof(char*);
+    *((char**) stack_offset) = (char*) (stack_offset + 4); 
+
+    //copy argc
+    stack_offset -= sizeof(char*);
+    *((int*) stack_offset) = argc; 
+
+    stack_offset -= sizeof(char*);
+    /* ARGUMENTS PASSED */
+
     pd_switch(kernel_page_directory);
 
     process_t* tr = 

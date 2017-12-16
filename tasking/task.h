@@ -41,7 +41,7 @@ typedef struct PROCESS
     u32 data_size;
 } process_t;
 
-process_t* create_process(file_descriptor_t* executable);
+process_t* create_process(file_descriptor_t* executable, int argc, char** argv);
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
