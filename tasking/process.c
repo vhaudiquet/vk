@@ -78,7 +78,7 @@ process_t* create_process(file_descriptor_t* executable, int argc, char** argv)
     stack_offset -= sizeof(char*);
     /* ARGUMENTS PASSED */
 
-    pd_switch(kernel_page_directory);
+    pd_switch(current_process->page_directory);
 
     process_t* tr = 
     #ifdef MEMLEAK_DBG
