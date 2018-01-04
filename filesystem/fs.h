@@ -46,6 +46,7 @@ typedef struct file_descriptor
 } file_descriptor_t;
 
 #define FS_FLAG_CASE_INSENSITIVE 1
+#define FS_FLAG_READ_ONLY 2
 
 typedef struct file_system
 {
@@ -75,22 +76,6 @@ void fd_list_free(list_entry_t* list, u32 list_size);
 void fd_copy(file_descriptor_t* dest, file_descriptor_t* src);
 void fd_free(file_descriptor_t* fd);
 
-//RAMFS specific
-typedef struct ramfs
-{
-    u32 base_addr;
-    u32 size;
-    u32 list_size;
-    file_descriptor_t root_directory;
-} ramfs_t;
-
-ramfs_t* ramfs_init(u32 size);
-list_entry_t* ramfs_read_dir(file_descriptor_t* dir, u32* size);
-file_descriptor_t* ramfs_open_file(char* path, ramfs_t* fs);
-u8 ramfs_read_file(file_descriptor_t* file, void* buffer, u64 count);
-u8 ramfs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
-file_descriptor_t* ramfs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
-
 //FAT32 specific
 typedef struct fat32fs_specific
 {
@@ -113,5 +98,17 @@ file_system_t* iso9660fs_init(block_device_t* drive);
 void iso9660fs_close(file_system_t* fs);
 list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
 u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
+
+//EXT2 specific
+typedef struct ext2fs_specific
+{
+    struct EXT2_SUPERBLOCK* superblock;
+    u32 superblock_offset;
+    u32 block_size;
+} ext2fs_specific_t;
+
+file_system_t* ext2fs_init(block_device_t* drive, u8 partition);
+list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
+u8 ext2fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 
 #endif

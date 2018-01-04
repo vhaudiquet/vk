@@ -31,9 +31,6 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 	u32 scount = (u32) (count / BYTES_PER_SECTOR);
 	if(count % BYTES_PER_SECTOR) scount++;
 
-	//calculate sector offset
-	while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
-
 	if(scount > 255) return DISK_FAIL_INTERNAL;
 
 	if(sector > U32_MAX)
@@ -91,9 +88,6 @@ u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	//calculate sector count
 	u32 scount = (u32)(count / BYTES_PER_SECTOR);
 	if(count % BYTES_PER_SECTOR) scount++;
-
-	//calculate sector offset
-	while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
 	
 	u8* cached_f = 0;
 	if(offset | (count%512)) //cache starting sector (before any out cmd)
@@ -186,7 +180,7 @@ u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	
 	u8 status = ata_pio_poll_status(drive);
 	
-	if(status & 0x1) return DISK_FAIL_BUSY;//fatal_kernel_error("Drive error while flushing", "WRITE_28"); //temp debug
+	if(status & 0x1) return DISK_FAIL_BUSY;
 	return DISK_SUCCESS;
 }
 

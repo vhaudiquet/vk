@@ -31,16 +31,13 @@ typedef struct PRD
 u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
     if(!count) return DISK_SUCCESS;
-    
+
     u32 bps = ((drive->flags & ATA_FLAG_ATAPI) ? ATAPI_SECTOR_SIZE : BYTES_PER_SECTOR);
 
     /* Calculate sector count */
-    //calculate sector count
     u32 scount = count / bps;
     if(count % bps) scount++;
     
-    //calculate sector offset
-    while(offset>=bps) {offset-=bps; sector++; scount--;}
     if(scount > 127) return DISK_FAIL_INTERNAL;
     if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return DISK_FAIL_INTERNAL;
 
@@ -120,9 +117,6 @@ u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_devic
     //calculate sector count
     u32 scount = (u32)(count / BYTES_PER_SECTOR);
     if(count % BYTES_PER_SECTOR) scount++;
-
-    //calculate sector offset
-    while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++; scount--;}
 
     /* cache first and last sector if necessary */
     u8* cached_f = 0;

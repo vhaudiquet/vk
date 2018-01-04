@@ -133,7 +133,10 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 
 	//check if it is a valid fat32 fs
 	if(*bpb->system_id_string != 'F' || *(bpb->system_id_string+1) != 'A' || *(bpb->system_id_string+2) != 'T' || *(bpb->system_id_string+3) != '3' || *(bpb->system_id_string+4) != '2')
+	{
+		kfree(bpb);
 		return 0;
+	}
 
 	//setup the file_system_t and fat32fs_specific_t struct that represents the fat32fs
 	file_system_t* tr = 
@@ -1226,9 +1229,9 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, 
 		#endif
 		lbuf = lbuf->next;
 
-		if(!cchain) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (->0)\n", 0b00000110);
-		else if(cchain == 1) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (reserved cluster)\n", 0b00000110);
-		else if(cchain == 0x0FFFFFF7) kprintf("%v[WARNING] [SEVERE] Filesystem might be corrupted (bad cluster)\n", 0b00000110);
+		if(!cchain) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (->0) !\n", 0b00000110);
+		else if(cchain == 1) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (reserved cluster)\n", 0b00000110);
+		else if(cchain == 0x0FFFFFF7) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (bad cluster)\n", 0b00000110);
 
 		cluster = cchain;
 		(*size)++;

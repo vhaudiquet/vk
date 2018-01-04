@@ -47,6 +47,7 @@ void* kmalloc(u32 size);
 #endif
 void kfree(void* pointer);
 void* krealloc(void* pointer, u32 newsize);
+u32 kheap_get_size(void* ptr);
 
 //KPHEAP (page heap)
 extern u8 kpheap_blocks[1024];

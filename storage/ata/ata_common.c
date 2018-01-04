@@ -255,6 +255,11 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 {
     if(drive->flags & ATA_FLAG_ATAPI)
     {
+		//calculate sector offset
+		//while(offset>=ATAPI_SECTOR_SIZE) {offset-=ATAPI_SECTOR_SIZE; sector++;}
+		sector += offset/ATAPI_SECTOR_SIZE;
+		offset %= ATAPI_SECTOR_SIZE;
+
         u8 err = DISK_SUCCESS;
 		u32 a = 0; u32 as = 0;
 		while(count > 31*ATAPI_SECTOR_SIZE)
@@ -270,7 +275,12 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
     }
     else
     {
-        if(!scheduler_started)
+		//calculate sector offset
+		//while(offset>=BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++;}
+		sector += offset/BYTES_PER_SECTOR;
+		offset %= BYTES_PER_SECTOR;
+        
+		if(!scheduler_started)
         {
             u8 err = DISK_SUCCESS;
             u32 a = 0; u32 as = 0;
@@ -311,6 +321,9 @@ u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t*
     }
     else
     {
+		//calculate sector offset
+		while(offset>BYTES_PER_SECTOR) {offset-=BYTES_PER_SECTOR; sector++;}
+
         if(!scheduler_started)
         {
             u8 err = DISK_SUCCESS;

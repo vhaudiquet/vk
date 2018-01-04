@@ -109,6 +109,7 @@ void list_free_eonly(list_entry_t* list, u32 list_size)
 void fd_free(file_descriptor_t* fd)
 {
     if(fd->name) kfree(fd->name);
+    if(fd->file_system->fs_type == FS_TYPE_EXT2) kfree((void*) ((uintptr_t) fd->fsdisk_loc));
     kfree(fd);
 }
 
@@ -136,4 +137,13 @@ void fd_copy(file_descriptor_t* dest, file_descriptor_t* src)
     dest->length = src->length;
     dest->offset = src->offset;
     dest->parent_directory = src->parent_directory;
+
+    if(src->file_system->fs_type == FS_TYPE_EXT2)
+    {
+        void* inode = (void*) ((uintptr_t) src->fsdisk_loc);
+        u32 inode_size = kheap_get_size(inode);
+        void* inode_cpy = kmalloc(inode_size);
+        memcpy(inode_cpy, inode, inode_size);
+        dest->fsdisk_loc = (uintptr_t) inode_cpy;
+    }
 }

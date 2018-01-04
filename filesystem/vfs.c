@@ -40,11 +40,20 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
     if(!drive) return 0;
     
+    u32 offset;
+    if(partition)
+    {
+        if(!drive->partitions[partition-1]->system_id)
+            return 0;
+        offset = drive->partitions[partition-1]->start_lba;
+    }
+    else offset = 0;
+
     u8* buff = 
     #ifdef MEMLEAK_DBG
-    kmalloc(512, "detect fs type buffer");
+    kmalloc(2048, "detect fs type buffer");
     #else
-    kmalloc(512);
+    kmalloc(2048);
     #endif
 
     u8* buff2 = 
@@ -54,20 +63,7 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     kmalloc(512);
     #endif
 
-    u32 offset;
-    if(partition)
-    {
-        if(!drive->partitions[partition-1]->system_id)
-        {
-            kfree(buff);
-            kfree(buff2);
-            return 0;
-        }
-        offset = drive->partitions[partition-1]->start_lba;
-    }
-    else offset = 0;
-
-    if(block_read_flexible(offset, 0, buff, 512, drive) != DISK_SUCCESS)
+    if(block_read_flexible(offset, 0, buff, 2048, drive) != DISK_SUCCESS)
     {
         kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
     }
@@ -75,7 +71,7 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     {
         kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
     }
-    
+
     //FAT8 and 16 signature offset kprintf("s: %s\n", buff+54);
     if(((*(buff+66) == 0x28) | (*(buff+66) == 0x29)) && (strcfirst("FAT32", (char*) buff+82) == 5))
     {
@@ -88,6 +84,12 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
         kfree(buff);
         kfree(buff2);
         return FS_TYPE_ISO9660;
+    }
+    else if((*(buff+1024+56) == 0x53) && (*(buff+1024+57) == 0xef))
+    {
+        kfree(buff);
+        kfree(buff2);
+        return FS_TYPE_EXT2;
     }
     else kprintf("%lUnknown file system type.\n", 3);
 
@@ -111,6 +113,11 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
         case FS_TYPE_ISO9660:
         {
             fs = iso9660fs_init(drive);
+            break;
+        }
+        case FS_TYPE_EXT2:
+        {
+            fs = ext2fs_init(drive, partition);
             break;
         }
     }
@@ -215,6 +222,8 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
         return fat32fs_read_dir(directory, dirsize);
     else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
         return iso9660fs_read_dir(directory, dirsize);
+    else if(directory->file_system->fs_type == FS_TYPE_EXT2)
+        return ext2fs_read_dir(directory, dirsize);
     else return 0;
 }
 
@@ -235,6 +244,8 @@ u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
         case FS_TYPE_ISO9660:
             tr = iso9660fs_read_file(file, buffer, count);
             break;
+        case FS_TYPE_EXT2:
+            tr = ext2fs_read_file(file, buffer, count);
     }
     if(!tr) file->offset += count;
     return tr;

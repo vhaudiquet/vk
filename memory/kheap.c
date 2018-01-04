@@ -139,6 +139,14 @@ void kfree(void* pointer)
     merge_free_blocks();
 }
 
+u32 kheap_get_size(void* ptr)
+{
+    block_header_t* blockHeader = (block_header_t*) (ptr - sizeof(block_header_t));
+    if(blockHeader->magic != BLOCK_HEADER_MAGIC) 
+        fatal_kernel_error(UNKNOWN_BLOCK_ERRMSG, "Pointer size");
+    return blockHeader->size;
+}
+
 void* krealloc(void* pointer, u32 newsize)
 {
     block_header_t* blockHeader = (block_header_t*) (pointer - sizeof(block_header_t));

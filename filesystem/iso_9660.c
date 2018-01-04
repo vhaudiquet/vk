@@ -134,7 +134,7 @@ file_system_t* iso9660fs_init(block_device_t* drive)
     #endif
     tr->drive = drive;
     tr->fs_type = FS_TYPE_ISO9660;
-    tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE;
+    tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE | FS_FLAG_READ_ONLY;
 
     //reading primary volume descriptor
     iso9660_primary_volume_descriptor_t pvd;
@@ -279,6 +279,7 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
     strncpy(dest->name, dirent->name, dirent->name_len);
     if(dirent->name_len > 2) if(*(dest->name+dirent->name_len-2) == ';') *(dest->name+dirent->name_len-2) = 0;
     if(dirent->name_len > 1) {u32 len = strlen(dest->name); if(*(dest->name+len-1) == '.') *(dest->name+len-1) = 0;}
+    
     //set infos
     dest->file_system = fs;
     dest->parent_directory = parent;
