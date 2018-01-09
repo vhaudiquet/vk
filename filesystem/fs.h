@@ -25,6 +25,7 @@
 #define FS_TYPE_FAT32 2
 #define FS_TYPE_EXT2 3
 #define FS_TYPE_ISO9660 4
+#define FS_TYPE_DEVFS 5
 
 #define FILE_ATTR_DIR 0x1
 #define FILE_ATTR_HIDDEN 0x2

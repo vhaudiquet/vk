@@ -233,6 +233,7 @@ u8 ext2fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 /*
 * Read the content of an inode (the direct and indirect blocks)
 * Returns 0 if it went well, 1 instead
+* TODO: Optimisations
 */
 static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer)
 {

@@ -41,7 +41,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //init
     vga_setup(); //Setup VGA : set video_mode to 80x25 TEXT, get display type, set and clean VRAM, disable cursor
     
-    kprintf("Installing CPU...");
+    kprintf("Setting up CPU...");
     gdt_install(stack_pointer); //Install GDT : Null segment, Kernel code, Kernel data, User code, User data, TSS
     idt_install(); //TODO : ISRs ! (actually the handle isn't that bad but could be reaaally better)
     cpu_detect(); //TODO : Special handle INVALID_OPCODE
