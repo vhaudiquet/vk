@@ -112,6 +112,13 @@ typedef struct EXT2_DIRENT
     u8 name[];
 } __attribute__((packed)) ext2_dirent_t;
 
+typedef struct EXT2_INODE_DESCRIPTOR
+{
+    u32 inode_number;
+    ext2_inode_t inode;
+} ext2_inode_descriptor_t;
+
+
 //disk block offset relative to the superblock, in bytes
 #define BLOCK_OFFSET(block) ((block-1)*ext2->block_size)
 static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs);
@@ -153,6 +160,8 @@ file_system_t* ext2fs_init(block_device_t* drive, u8 partition)
     ext2spe->superblock = superblock;
     ext2spe->superblock_offset = start_offset+2;
     ext2spe->block_size = (u32)(1024 << superblock->block_size);
+    ext2spe->inode_cache = 0;
+    ext2spe->inode_cache_size = 0;
     
     tr->specific = ext2spe;
 
@@ -442,6 +451,17 @@ static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs)
     
     ext2fs_specific_t* ext2 = fs->specific;
 
+    //checks if the inode is in the cache
+    list_entry_t* iptr = ext2->inode_cache;
+    u32 isize = ext2->inode_cache_size;
+    while(iptr && isize)
+    {
+        ext2_inode_descriptor_t* element = iptr->element;
+        if(element->inode_number == inode) return &element->inode;
+        iptr = iptr->next;
+        isize--;
+    }
+
     u32 inode_size = ((ext2->superblock->version_major >=1) ? ext2->superblock->inode_struct_size : 128);
 
     u32 inodes_per_blockgroup = ext2->superblock->inodes_per_blockgroup;
@@ -455,9 +475,35 @@ static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs)
     block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(2)+bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
     u32 inode_read_offset = BLOCK_OFFSET(inode_bg.starting_block_adress) + (index * inode_size);
 
-    ext2_inode_t* tr = kmalloc(inode_size);
-    block_read_flexible(ext2->superblock_offset, inode_read_offset, (u8*) tr, inode_size, fs->drive);
-    return tr;
+    //add the inode to the cache
+    ext2_inode_descriptor_t* descriptor = kmalloc(sizeof(ext2_inode_descriptor_t));
+    descriptor->inode_number = inode;
+    block_read_flexible(ext2->superblock_offset, inode_read_offset, (u8*) &descriptor->inode, inode_size, fs->drive);
+
+    if(!ext2->inode_cache)
+    {
+        ext2->inode_cache = kmalloc(sizeof(list_entry_t));
+        ext2->inode_cache->element = descriptor;
+    }
+    else
+    {
+        list_entry_t* ptr = ext2->inode_cache;
+        list_entry_t* last = 0;
+        u32 size = ext2->inode_cache_size;
+        while(ptr && size)
+        {
+            last = ptr;
+            ptr = ptr->next;
+            size--;
+        }
+        ptr = kmalloc(sizeof(list_entry_t));
+        ptr->element = descriptor;
+        last->next = ptr;
+    }
+
+    ext2->inode_cache_size++;
+
+    return &descriptor->inode;
 }
 
 /*

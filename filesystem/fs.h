@@ -106,6 +106,8 @@ typedef struct ext2fs_specific
     struct EXT2_SUPERBLOCK* superblock;
     u32 superblock_offset;
     u32 block_size;
+    list_entry_t* inode_cache;
+    u32 inode_cache_size;
 } ext2fs_specific_t;
 
 file_system_t* ext2fs_init(block_device_t* drive, u8 partition);
