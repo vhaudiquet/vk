@@ -277,8 +277,12 @@ file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
     return 0;
 }
 
-bool unlink(file_descriptor_t* file)
+bool unlink(char* path)
 {
+    //open file
+    file_descriptor_t* file = open_file(path);
+    if(!file) return false;
+
     //if the file is a directory, checks if it's empty
     if(file->attributes & FILE_ATTR_DIR)
     {
@@ -288,22 +292,35 @@ bool unlink(file_descriptor_t* file)
         if(dirsize) return false;
     }
 
+    bool tr = false;
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            return fat32fs_delete_file(file);
+            tr = fat32fs_delete_file(file);
+            break;
     }
-    return false;
+
+    close_file(file);
+
+    return tr;
 }
 
-bool rename_file(file_descriptor_t* file, u8* newname)
+bool rename_file(char* path, char* newname)
 {
+    file_descriptor_t* file = open_file(path);
+    if(!file) return false;
+
+    bool tr = false;
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            return fat32fs_rename(file, newname);
+            tr = fat32fs_rename(file, newname);
+            break;
     }
-    return false;
+
+    close_file(file);
+
+    return tr;
 }
 
 static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)

@@ -118,7 +118,6 @@ typedef struct EXT2_INODE_DESCRIPTOR
     ext2_inode_t inode;
 } ext2_inode_descriptor_t;
 
-
 //disk block offset relative to the superblock, in bytes
 #define BLOCK_OFFSET(block) ((block-1)*ext2->block_size)
 static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs);

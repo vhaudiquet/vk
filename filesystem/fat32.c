@@ -611,7 +611,7 @@ bool fat32fs_delete_file(file_descriptor_t* file)
 /*
 * Rename a file
 */
-bool fat32fs_rename(file_descriptor_t* file, u8* newname)
+bool fat32fs_rename(file_descriptor_t* file, char* newname)
 {
 	//delete old dirent
 	if(!fat32fs_delete_dirent(file)) return false;
@@ -623,7 +623,7 @@ bool fat32fs_rename(file_descriptor_t* file, u8* newname)
 	#else
 	kmalloc(strlen((char*) newname)+1, "fat32fs_rename new name");
 	#endif
-	strcpy(nn, (char*) newname);
+	strcpy(nn, newname);
 	file->name = nn;
 
 	//create new dirent

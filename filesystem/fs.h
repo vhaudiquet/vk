@@ -40,7 +40,7 @@ typedef struct file_descriptor
     u64 fsdisk_loc;//location of the file on the drive (ex: first cluster if FAT32fs)
     u8 attributes; //dir/file, hidden , (system/prgm/user), 
     u64 length; //lenght in bytes
-    u64 offset; //offset (file only)
+    /* out */ u64 offset; //offset (file only)
     time_t creation_time;
     time_t last_access_time;
     time_t last_modification_time;
@@ -69,8 +69,8 @@ file_descriptor_t* open_file(char* path);
 void close_file(file_descriptor_t* file);
 u8 read_file(file_descriptor_t* file, void* buffer, u64 count);
 u8 write_file(file_descriptor_t* file, void* buffer, u64 count);
-bool rename_file(file_descriptor_t* file, u8* newname);
-bool unlink(file_descriptor_t* file);
+bool rename_file(char* path, char* newname);
+bool unlink(char* path);
 
 //FILESYSTEM utils
 void fd_list_free(list_entry_t* list, u32 list_size);
@@ -92,7 +92,7 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
 u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
 bool fat32fs_delete_file(file_descriptor_t* file);
-bool fat32fs_rename(file_descriptor_t* file, u8* newname);
+bool fat32fs_rename(file_descriptor_t* file, char* newname);
 
 //ISO9660 specific
 file_system_t* iso9660fs_init(block_device_t* drive);
