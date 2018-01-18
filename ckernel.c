@@ -160,9 +160,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     #else
     kmalloc((u32) init_file->file->length+1);
     #endif
-    memset(init_buffer, 0, (size_t) init_file->file->length+1);
-    read_file(init_file, init_buffer, init_file->file->length);
-    init_buffer[init_file->file->length-1] = 0;
+    memset(init_buffer, 0, (size_t) flength(init_file)+1);
+    read_file(init_file, init_buffer, flength(init_file));
+    init_buffer[flength(init_file)-1] = 0;
 
     kprintf("[INIT] Opening %s...", init_buffer);
     fd_t* elf_task = open_file(init_buffer);

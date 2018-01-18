@@ -77,6 +77,7 @@ file_descriptor_t* cache_file(file_descriptor_t* file);
 //accessing files
 fd_t* open_file(char* path);
 void close_file(fd_t* file);
+u64 flength(fd_t* file);
 u8 read_file(fd_t* file, void* buffer, u64 count);
 u8 write_file(fd_t* file, void* buffer, u64 count);
 bool rename_file(char* path, char* newname);

@@ -256,6 +256,11 @@ void close_file(fd_t* file)
     kfree(file);
 }
 
+u64 flength(fd_t* file)
+{
+    return file->file->length;
+}
+
 list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
 {
     if(directory->file_system->fs_type == FS_TYPE_FAT32)
