@@ -32,6 +32,7 @@
 #define DIR_ATTR_MOUNTPOINT 0x3
 
 //VFS, GLOBAL LAYER
+extern list_entry_t* file_cache;
 typedef struct file_descriptor
 {
     char* name; //file name
@@ -40,11 +41,17 @@ typedef struct file_descriptor
     u64 fsdisk_loc;//location of the file on the drive (ex: first cluster if FAT32fs)
     u8 attributes; //dir/file, hidden , (system/prgm/user), 
     u64 length; //lenght in bytes
-    /* out */ u64 offset; //offset (file only)
+    ///* out */ u64 offset; //offset (file only)
     time_t creation_time;
     time_t last_access_time;
     time_t last_modification_time;
 } file_descriptor_t;
+
+typedef struct fd
+{
+    file_descriptor_t* file;
+    u64 offset;
+} fd_t;
 
 #define FS_FLAG_CASE_INSENSITIVE 1
 #define FS_FLAG_READ_ONLY 2
@@ -64,11 +71,14 @@ u8 detect_fs_type(block_device_t* drive, u8 partition);
 u8 mount_volume(char* path, block_device_t* drive, u8 partition);
 void mount(char* path, file_system_t* fs);
 
+//file cache
+file_descriptor_t* cache_file(file_descriptor_t* file);
+
 //accessing files
-file_descriptor_t* open_file(char* path);
-void close_file(file_descriptor_t* file);
-u8 read_file(file_descriptor_t* file, void* buffer, u64 count);
-u8 write_file(file_descriptor_t* file, void* buffer, u64 count);
+fd_t* open_file(char* path);
+void close_file(fd_t* file);
+u8 read_file(fd_t* file, void* buffer, u64 count);
+u8 write_file(fd_t* file, void* buffer, u64 count);
 bool rename_file(char* path, char* newname);
 bool unlink(char* path);
 
@@ -88,8 +98,8 @@ typedef struct fat32fs_specific
 file_system_t* fat32fs_init(block_device_t* drive, u8 partition);
 void fat32fs_close(file_system_t* fs);
 list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size);
-u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
-u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count);
+u8 fat32fs_read_file(fd_t* file, void* buffer, u64 count);
+u8 fat32fs_write_file(fd_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
 bool fat32fs_delete_file(file_descriptor_t* file);
 bool fat32fs_rename(file_descriptor_t* file, char* newname);
@@ -98,7 +108,7 @@ bool fat32fs_rename(file_descriptor_t* file, char* newname);
 file_system_t* iso9660fs_init(block_device_t* drive);
 void iso9660fs_close(file_system_t* fs);
 list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
-u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
+u8 iso9660fs_read_file(fd_t* file, void* buffer, u64 count);
 
 //EXT2 specific
 typedef struct ext2fs_specific
@@ -112,6 +122,6 @@ typedef struct ext2fs_specific
 
 file_system_t* ext2fs_init(block_device_t* drive, u8 partition);
 list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
-u8 ext2fs_read_file(file_descriptor_t* file, void* buffer, u64 count);
+u8 ext2fs_read_file(fd_t* file, void* buffer, u64 count);
 
 #endif

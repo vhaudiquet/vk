@@ -134,6 +134,6 @@ void fd_copy(file_descriptor_t* dest, file_descriptor_t* src)
     dest->fsdisk_loc = src->fsdisk_loc;
     dest->attributes = src->attributes;
     dest->length = src->length;
-    dest->offset = src->offset;
+    //TODO : maybe better scale dest->offset = src->offset;
     dest->parent_directory = src->parent_directory;
 }

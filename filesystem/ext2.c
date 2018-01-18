@@ -231,11 +231,11 @@ list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size)
 * Reads a file from an ext2 fs
 * Returns 0 if it went well, 1 instead
 */
-u8 ext2fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
+u8 ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
     if(count > U32_MAX) return 1;
-    ext2_inode_t* inode = (ext2_inode_t*)((uintptr_t)file->fsdisk_loc);
-    return ext2_inode_read_content(inode, file->file_system, (u32) file->offset, (u32) count, buffer);
+    ext2_inode_t* inode = (ext2_inode_t*)((uintptr_t)fd->file->fsdisk_loc);
+    return ext2_inode_read_content(inode, fd->file->file_system, (u32) fd->offset, (u32) count, buffer);
 }
 
 /*
@@ -540,7 +540,7 @@ static void ext2_get_fd(file_descriptor_t* dest, ext2_dirent_t* dirent, file_des
         u64 size_high = ((u64) inode->directory_acl << 32);
         dest->length |= size_high;
     }
-    dest->offset = 0;
+    //TODO : maybe better scale dest->offset = 0;
 
     //set time
     dest->creation_time = inode->creation_time;

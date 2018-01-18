@@ -251,9 +251,10 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     return tr;
 }
 
-u8 iso9660fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
+u8 iso9660fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
-    u64 offset = file->offset;
+    file_descriptor_t* file = fd->file;
+    u64 offset = fd->offset;
 
     file_system_t* fs = file->file_system;
     u64 lba = file->fsdisk_loc;
@@ -285,7 +286,7 @@ static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent,
     dest->parent_directory = parent;
     dest->fsdisk_loc = dirent->extent_start_lsb;
     dest->length = dirent->extent_size_lsb;
-    dest->offset = 0;
+    //TODO : maybe better scale dest->offset = 0;
 
     //parse time (check for year-100)
     dest->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year));

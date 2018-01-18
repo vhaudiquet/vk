@@ -25,6 +25,9 @@
 * to provides general functions to open a file from a path, either the file is on disk/ram/external, fat32/ext2/... (once supported)
 */
 
+list_entry_t* file_cache = 0;
+u32 file_cache_size = 0;
+
 typedef struct mount_point
 {
     char* path;
@@ -34,7 +37,7 @@ typedef struct mount_point
 mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 
-static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp);
+static fd_t* do_open_fs(char* path, mount_point_t* mp);
 
 u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
@@ -152,12 +155,12 @@ void mount(char* path, file_system_t* fs)
 
     //we are mounting a standard point
     //first lets get the folder pointed by path, check if it is really a folder, and make it mount_point
-    file_descriptor_t* mf = open_file(path);
-    if((mf->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to mount to a file ?!", "MOUNT");
+    fd_t* mf = open_file(path);
+    if((mf->file->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to mount to a file ?!", "MOUNT");
 
     //check if 'mf' is empty ; if it is not we are bad
 
-    mf->attributes |= DIR_ATTR_MOUNTPOINT;
+    mf->file->attributes |= DIR_ATTR_MOUNTPOINT;
 
     mount_point_t* next_point = 
     #ifdef MEMLEAK_DBG
@@ -179,13 +182,50 @@ void mount(char* path, file_system_t* fs)
     current_mount_points++;
 }
 
-file_descriptor_t* open_file(char* path)
+file_descriptor_t* cache_file(file_descriptor_t* file)
+{
+    if(!file_cache)
+    {
+        file_cache = kmalloc(sizeof(list_entry_t));
+        file_cache->element = file;
+        file_cache_size = 1;
+        return file;
+    }
+
+    list_entry_t* ptr = file_cache;
+    list_entry_t* bef = 0;
+    u32 size = file_cache_size;
+    while(ptr && size)
+    {
+        file_descriptor_t* element = ptr->element;
+        if(element->file_system == file->file_system && element->fsdisk_loc == file->fsdisk_loc) 
+        {
+            kfree(file);
+            return element;
+        }
+
+        bef = ptr;
+        ptr = ptr->next;
+        size--;
+    }
+
+    ptr = kmalloc(sizeof(list_entry_t));
+    ptr->element = file;
+    bef->next = ptr;
+    file_cache_size++;
+    return file;
+}
+
+fd_t* open_file(char* path)
 {
     //we are trying to access the root path : simplest case
     if(*path == '/' && strlen(path) == 1)
     {
         file_system_t* fs = root_point->fs;
-        return &fs->root_dir;
+        fd_t* tr = kmalloc(sizeof(fd_t));
+        tr->file = &fs->root_dir;
+        tr->offset = 0;
+        return tr;
     }
 
     //we are already into a filesystem that contains a dir that is a mount point
@@ -211,9 +251,9 @@ file_descriptor_t* open_file(char* path)
     return 0;
 }
 
-void close_file(file_descriptor_t* file)
+void close_file(fd_t* file)
 {
-    fd_free(file);
+    kfree(file);
 }
 
 list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
@@ -227,32 +267,35 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
     else return 0;
 }
 
-u8 read_file(file_descriptor_t* file, void* buffer, u64 count)
+u8 read_file(fd_t* fd, void* buffer, u64 count)
 {
+    file_descriptor_t* file = fd->file;
     if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
 
-    if(file->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
-	if(count+file->offset > file->length) count = file->length - file->offset; //if we want to read more, well, NO BASTARD GTFO
+    if(fd->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
+	if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
 	if(count == 0) {*((u8*) buffer) = 0; return 0;}
 
     u8 tr = 2;
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            tr = fat32fs_read_file(file, buffer, count);
+            tr = fat32fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_ISO9660:
-            tr = iso9660fs_read_file(file, buffer, count);
+            tr = iso9660fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_read_file(file, buffer, count);
+            tr = ext2fs_read_file(fd, buffer, count);
     }
-    if(!tr) file->offset += count;
+    if(!tr) fd->offset += count;
     return tr;
 }
 
-u8 write_file(file_descriptor_t* file, void* buffer, u64 count)
+u8 write_file(fd_t* fd, void* buffer, u64 count)
 {
+    file_descriptor_t* file = fd->file;
+
     if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
     if(count == 0) return 0;
 
@@ -260,43 +303,48 @@ u8 write_file(file_descriptor_t* file, void* buffer, u64 count)
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            tr = fat32fs_write_file(file, buffer, count);
+            tr = fat32fs_write_file(fd, buffer, count);
             break;
     }
-    if(!tr) file->offset += count;
+    if(!tr) fd->offset += count;
     return tr;
 }
 
-file_descriptor_t* create_file(u8* name, u8 attributes, file_descriptor_t* dir)
+fd_t* create_file(u8* name, u8 attributes, fd_t* dir)
 {
-    switch(dir->file_system->fs_type)
+    file_descriptor_t* tr = 0;
+    switch(dir->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            return fat32fs_create_file(name, attributes, dir);
+            tr = fat32fs_create_file(name, attributes, dir->file);
     }
-    return 0;
+    if(!tr) return 0;
+    fd_t* trf = kmalloc(sizeof(fd_t));
+    trf->file = tr;
+    trf->offset = 0;
+    return trf;
 }
 
 bool unlink(char* path)
 {
     //open file
-    file_descriptor_t* file = open_file(path);
+    fd_t* file = open_file(path);
     if(!file) return false;
 
     //if the file is a directory, checks if it's empty
-    if(file->attributes & FILE_ATTR_DIR)
+    if(file->file->attributes & FILE_ATTR_DIR)
     {
         u32 dirsize = 0;
-        list_entry_t* list = read_directory(file, &dirsize);
+        list_entry_t* list = read_directory(file->file, &dirsize);
         list_free(list, dirsize);
         if(dirsize) return false;
     }
 
     bool tr = false;
-    switch(file->file_system->fs_type)
+    switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            tr = fat32fs_delete_file(file);
+            tr = fat32fs_delete_file(file->file);
             break;
     }
 
@@ -307,14 +355,14 @@ bool unlink(char* path)
 
 bool rename_file(char* path, char* newname)
 {
-    file_descriptor_t* file = open_file(path);
+    fd_t* file = open_file(path);
     if(!file) return false;
 
     bool tr = false;
-    switch(file->file_system->fs_type)
+    switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            tr = fat32fs_rename(file, newname);
+            tr = fat32fs_rename(file->file, newname);
             break;
     }
 
@@ -323,7 +371,7 @@ bool rename_file(char* path, char* newname)
     return tr;
 }
 
-static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
+static fd_t* do_open_fs(char* path, mount_point_t* mp)
 {
     //The path should be relative to the mount point (excluded) of this fs
 	/* Step 1 : Split the path on '/' */
@@ -370,7 +418,12 @@ static file_descriptor_t* do_open_fs(char* path, mount_point_t* mp)
 					fd_list_free(cdir, dirsize);
 					kfree(spath[i]);
                     kfree(spath);
-					return tr;
+
+                    file_descriptor_t* cached = cache_file(tr);
+                    fd_t* trf = kmalloc(sizeof(fd_t));
+                    trf->file = cached;
+                    trf->offset = 0;
+					return trf;
 				}
 
                 //copy 'dir to explore' file descriptor

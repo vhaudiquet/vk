@@ -152,20 +152,20 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     }
 
     //running /sys/init
-    file_descriptor_t* init_file = open_file("/sys/init");
+    fd_t* init_file = open_file("/sys/init");
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
     char* init_buffer =
     #ifdef MEMLEAK_DBG
-    kmalloc((u32) init_file->length+1, "init file buffer");
+    kmalloc((u32) init_file->file->length+1, "init file buffer");
     #else
-    kmalloc((u32) init_file->length+1);
+    kmalloc((u32) init_file->file->length+1);
     #endif
-    memset(init_buffer, 0, (size_t) init_file->length+1);
-    read_file(init_file, init_buffer, init_file->length);
-    init_buffer[init_file->length-1] = 0;
+    memset(init_buffer, 0, (size_t) init_file->file->length+1);
+    read_file(init_file, init_buffer, init_file->file->length);
+    init_buffer[init_file->file->length-1] = 0;
 
     kprintf("[INIT] Opening %s...", init_buffer);
-    file_descriptor_t* elf_task = open_file(init_buffer);
+    fd_t* elf_task = open_file(init_buffer);
     if(!elf_task) {vga_text_failmsg(); fatal_kernel_error("Could not open init process file", "INIT_RUN");}
     else vga_text_okmsg();
 

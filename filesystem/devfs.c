@@ -151,7 +151,7 @@ static void devfs_get_fd(file_descriptor_t* dest, devfs_dirent_t* dirent, file_d
     dest->file_system = fs;
     dest->parent_directory = parent;
     dest->length = dirent->length;
-    dest->offset = 0;
+    //TODO: maybe better scale dest->offset = 0;
 
     dest->fsdisk_loc = (uintptr_t) dirent->diskloc;
 

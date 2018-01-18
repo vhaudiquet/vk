@@ -292,6 +292,8 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 			falses_entries++; continue;
 		}
 
+		//TODO: check if file_cluster == cache->files->file_cluster (if the file is already cached)
+
 		file_descriptor_t* tf = 
 		#ifdef MEMLEAK_DBG
 		kmalloc(sizeof(file_descriptor_t), "fat32:list_dir file_descriptor element");
@@ -343,7 +345,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 		if((dirents[i].attributes & FAT_ATTR_HIDDEN) == FAT_ATTR_HIDDEN)
 			tf->attributes |= FILE_ATTR_HIDDEN;
 
-		tf->offset = 0;
+		//TODO : maybe better scaling tf->offset = 0;
 		tf->parent_directory = dir;
 
 		//gets and converts creation/access/modification time to std time
@@ -374,6 +376,8 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 	
 		lbuf->element = tf;
 
+		//TODO: add tf to the cache
+
 		//kprintf("%lfile_descriptor : (%s) (0x%X)\n", 3, tf->name, tf->fsdisk_loc);
 	
 		lbuf->next = 
@@ -399,9 +403,10 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 /*
 * Read the data of a file
 */
-u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
+u8 fat32fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
-	u64 offset = file->offset;
+	file_descriptor_t* file = fd->file;
+	u64 offset = fd->offset;
 	file_system_t* fs = file->file_system;
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 
@@ -452,11 +457,12 @@ u8 fat32fs_read_file(file_descriptor_t* file, void* buffer, u64 count)
 /*
 * Write data to a file
 */
-u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
+u8 fat32fs_write_file(fd_t* fd, u8* buffer, u64 count)
 {
+	file_descriptor_t* file = fd->file;
 	u64 count_bckp = count;
 	u32 cluster = (u32) file->fsdisk_loc;
-	u64 offset = file->offset;
+	u64 offset = fd->offset;
 	file_system_t* fs = file->file_system;
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 
@@ -529,11 +535,11 @@ u8 fat32fs_write_file(file_descriptor_t* file, u8* buffer, u64 count)
 	//freeing the cluster list
 	list_free(cluslist, (u32) cluss);
 
-	if(count_bckp+file->offset > file->length)
+	if(count_bckp+fd->offset > file->length)
 	{
-		file->length = count_bckp+file->offset;
+		file->length = count_bckp+fd->offset;
 		//here we assume the function can't fail, because we wrote to the file so it obviously exists
-		fat32fs_resize_dirent(file, ((u32)count_bckp)+((u32) file->offset));
+		fat32fs_resize_dirent(file, ((u32)count_bckp)+((u32) fd->offset));
 	}
 
 	return 0;
@@ -568,7 +574,7 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 	tr->file_system = fs;
 	tr->fsdisk_loc = file_cluster;
 	tr->length = 0;
-	tr->offset = 0;
+	//TODO: better scaling tr->offset = 0;
 	tr->parent_directory = dir;
 	tr->creation_time = tr->last_access_time = tr->last_modification_time = get_current_time_utc();
 

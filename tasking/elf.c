@@ -56,7 +56,7 @@ typedef struct elf_program_header
     u32 align;
 } elf_program_header_t;
 
-bool elf_check(file_descriptor_t* file)
+bool elf_check(fd_t* file)
 {
     //ignoring offset
     u64 old_offset = file->offset;
@@ -84,20 +84,20 @@ bool elf_check(file_descriptor_t* file)
     return true;
 }
 
-void* elf_load(file_descriptor_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size)
+void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size)
 {
     u8* buffer = 
     #ifdef MEMLEAK_DBG
-    kmalloc((u32) file->length, "ELF loading buffer");
+    kmalloc((u32) file->file->length, "ELF loading buffer");
     #else
-    kmalloc((u32) file->length);
+    kmalloc((u32) file->file->length);
     #endif
 
     //ignoring offset
     u64 old_offset = file->offset;
     file->offset = 0;
 
-    read_file(file, buffer, file->length);
+    read_file(file, buffer, file->file->length);
 
     //restoring offset
     file->offset = old_offset;
@@ -107,7 +107,7 @@ void* elf_load(file_descriptor_t* file, u32* page_directory, list_entry_t* data_
     elf_program_header_t* prg_h = (elf_program_header_t*) (buffer + header->program_header_table);
     for(u32 i = 0; i < header->ph_entry_nbr; i++)
     {
-        if((u32) prg_h+i > (u32) buffer+file->length) return 0;
+        if((u32) prg_h+i > (u32) buffer+file->file->length) return 0;
         if(prg_h[i].p_memsz == 0) continue;
 
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);

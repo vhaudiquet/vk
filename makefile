@@ -81,6 +81,7 @@ asmobjects:
 	$(AS) $(AFLAGS) cpu/isr.s -o isr.o
 
 objects:
+	# compile every .c file in every subfolder
 	find . -name "*.c"|while read F; do $(CC) $(CFLAGS) $$F; done
 
 clean:

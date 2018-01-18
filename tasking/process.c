@@ -28,7 +28,7 @@
 process_t* kernel_process = 0;
 process_t* idle_process = 0;
 
-process_t* create_process(file_descriptor_t* executable, int argc, char** argv)
+process_t* create_process(fd_t* executable, int argc, char** argv)
 {
     //check if the file is really an ELF executable
     if(!elf_check(executable)) return 0;

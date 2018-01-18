@@ -22,8 +22,8 @@
 #include "filesystem/fs.h"
 
 //ELF loading
-bool elf_check(file_descriptor_t* file);
-void* elf_load(file_descriptor_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
+bool elf_check(fd_t* file);
+void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
 
 //Process
 typedef struct PROCESS
@@ -41,7 +41,7 @@ typedef struct PROCESS
     u32 data_size;
 } process_t;
 
-process_t* create_process(file_descriptor_t* executable, int argc, char** argv);
+process_t* create_process(fd_t* executable, int argc, char** argv);
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
