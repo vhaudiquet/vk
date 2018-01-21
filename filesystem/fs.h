@@ -82,6 +82,7 @@ u8 read_file(fd_t* file, void* buffer, u64 count);
 u8 write_file(fd_t* file, void* buffer, u64 count);
 bool rename_file(char* path, char* newname);
 bool unlink(char* path);
+list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize);
 
 //FILESYSTEM utils
 void fd_list_free(list_entry_t* list, u32 list_size);
@@ -124,5 +125,10 @@ typedef struct ext2fs_specific
 file_system_t* ext2fs_init(block_device_t* drive, u8 partition);
 list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
 u8 ext2fs_read_file(fd_t* file, void* buffer, u64 count);
+
+//DEVFS specific
+file_system_t* devfs_init();
+list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size);
+u8 devfs_read_file(fd_t* fd, void* buffer, u64 count);
 
 #endif

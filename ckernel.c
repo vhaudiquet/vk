@@ -151,6 +151,12 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         vga_text_okmsg();
     }
 
+    //initializing/mounting devfs
+    kprintf("Mounting /dev filesystem...");
+    file_system_t* devfs = devfs_init();
+    mount("/dev", devfs);
+    vga_text_okmsg();
+
     //running /sys/init
     fd_t* init_file = open_file("/sys/init");
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");

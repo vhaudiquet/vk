@@ -156,10 +156,11 @@ void mount(char* path, file_system_t* fs)
     //we are mounting a standard point
     //first lets get the folder pointed by path, check if it is really a folder, and make it mount_point
     fd_t* mf = open_file(path);
+    if(!mf) fatal_kernel_error("Can't find mount point", "MOUNT");
     if((mf->file->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to mount to a file ?!", "MOUNT");
 
-    //check if 'mf' is empty ; if it is not we are bad
-
+    //TODO : check if 'mf' is empty ; if it is not we are bad
+    
     mf->file->attributes |= DIR_ATTR_MOUNTPOINT;
 
     mount_point_t* next_point = 
@@ -173,8 +174,7 @@ void mount(char* path, file_system_t* fs)
     next_point->next = 0;
     
     mount_point_t* last = root_point;
-    u32 i = 0;
-    while(i < current_mount_points)
+    while(last->next)
     {
         last = last->next;
     }
@@ -245,6 +245,15 @@ fd_t* open_file(char* path)
         i++;
     }
 
+    //if we want the root directory of the root point
+    if(!strcmp(path, best->path))
+    {
+        fd_t* tr = kmalloc(sizeof(fd_t));
+        tr->file = &best->fs->root_dir;
+        tr->offset = 0;
+        return tr;
+    }
+
     if(best != 0) return do_open_fs(path+1, best);
     
     fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); //TEMP
@@ -269,6 +278,8 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
         return iso9660fs_read_dir(directory, dirsize);
     else if(directory->file_system->fs_type == FS_TYPE_EXT2)
         return ext2fs_read_dir(directory, dirsize);
+    else if(directory->file_system->fs_type == FS_TYPE_DEVFS)
+        return devfs_read_dir(directory, dirsize);
     else return 0;
 }
 
@@ -292,6 +303,10 @@ u8 read_file(fd_t* fd, void* buffer, u64 count)
             break;
         case FS_TYPE_EXT2:
             tr = ext2fs_read_file(fd, buffer, count);
+            break;
+        case FS_TYPE_DEVFS:
+            tr = devfs_read_file(fd, buffer, count);
+            break;
     }
     if(!tr) fd->offset += count;
     return tr;

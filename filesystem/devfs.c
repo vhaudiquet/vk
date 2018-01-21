@@ -20,12 +20,14 @@
 
 #define DEVFS_TYPE_DIRECTORY 1
 #define DEVICE_TYPE_BLOCK 2
+#define DEVICE_TYPE_BLOCK_PART 4
 #define DEVICE_TYPE_INPUT 3
 
 typedef struct DEVFS_DISKLOC
 {
     void* device_struct;
     u8 device_type;
+    u8 device_info;
 } __attribute__((packed)) devfs_diskloc_t;
 
 typedef struct DEVFS_DIRENT
@@ -53,27 +55,37 @@ file_system_t* devfs_init()
     root_dirent.diskloc = kmalloc(sizeof(devfs_diskloc_t));
     root_dirent.diskloc->device_type = DEVFS_TYPE_DIRECTORY;
     root_dirent.diskloc->device_struct = kmalloc(root_dirent.length);
+    memset(root_dirent.diskloc->device_struct, 0, root_dirent.length);
+    root_dirent.diskloc->device_info = 0;
     devfs_get_fd(&tr->root_dir, &root_dirent, 0, tr);
 
-    //add block devices
+    /* add block devices */
     u32 i = 0;
     for(;i<block_device_count;i++)
     {
         block_device_t* blockdev = block_devices[i];
+        if(blockdev->device_class != HARD_DISK_DRIVE) continue;
 
         //create sdx entry
         devfs_diskloc_t* diskloc = kmalloc(sizeof(devfs_diskloc_t));
         diskloc->device_struct = blockdev;
         diskloc->device_type = DEVICE_TYPE_BLOCK;
+        diskloc->device_info = 0;
         char* name = kmalloc(4);
         name[0] = 's'; name[1] = 'd'; name[2] = (char) ('a'+i); name[3] = 0;
-        devfs_create_file(&tr->root_dir, diskloc, name, blockdev->device_size); //care: size is in sectors
+        devfs_create_file(&tr->root_dir, diskloc, name, blockdev->device_size*512); //care: size is in sectors
 
         //create sdxX entry
-        u32 j = 0;
+        u8 j = 0;
         for(;j<blockdev->partition_count;j++)
         {
-            
+            devfs_diskloc_t* xdiskloc = kmalloc(sizeof(devfs_diskloc_t));
+            xdiskloc->device_struct = blockdev;
+            xdiskloc->device_type = DEVICE_TYPE_BLOCK_PART;
+            xdiskloc->device_info = j;
+            char* xname = kmalloc(5);
+            xname[0] = 's'; xname[1] = 'd'; xname[2] = (char) ('a'+i); xname[3] = (char) ('1' + j); xname[4] = 0;
+            devfs_create_file(&tr->root_dir, xdiskloc, xname, blockdev->partitions[j]->length); //care: length is in sectors ?
         }
     }
 
@@ -93,7 +105,7 @@ list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size)
     *size = 0;
 
     u32 length = (u32) dir->length;
-    while(dirent_buffer->diskloc && length>=sizeof(devfs_dirent_t))
+    while((dirent_buffer->diskloc) && (length>=sizeof(devfs_dirent_t)))
     {
         file_descriptor_t* fd = kmalloc(sizeof(file_descriptor_t));
         devfs_get_fd(fd, dirent_buffer, dir, fs);
@@ -109,6 +121,24 @@ list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size)
     return tr;
 }
 
+u8 devfs_read_file(fd_t* fd, void* buffer, u64 count)
+{
+    file_descriptor_t* file = fd->file;
+    devfs_diskloc_t* diskloc = (devfs_diskloc_t*) ((uintptr_t) file->fsdisk_loc);
+
+    if(diskloc->device_type == DEVICE_TYPE_BLOCK)
+    {
+        return block_read_flexible(0, (u32) fd->offset, (u8*) buffer, count, diskloc->device_struct);
+    }
+    else if(diskloc->device_type == DEVICE_TYPE_BLOCK_PART)
+    {
+        block_device_t* bd = diskloc->device_struct;
+        return block_read_flexible(bd->partitions[diskloc->device_info]->start_lba, (u32) fd->offset, (u8*) buffer, count, bd);
+    }
+
+    return 1;
+}
+
 static void devfs_create_file(file_descriptor_t* dir, devfs_diskloc_t* diskloc, char* name, u32 length)
 {
     devfs_diskloc_t* dir_diskloc = (devfs_diskloc_t*) ((uintptr_t) dir->fsdisk_loc);
@@ -120,13 +150,13 @@ static void devfs_create_file(file_descriptor_t* dir, devfs_diskloc_t* diskloc, 
 
     devfs_dirent_t* dirent_buffer = dir_diskloc->device_struct;
     u32 dlength = (u32) dir->length;
-    while(dirent_buffer->diskloc && dlength>=sizeof(devfs_dirent_t))
+    while((dirent_buffer->diskloc) && (dlength>=sizeof(devfs_dirent_t)))
     {
         dirent_buffer = (devfs_dirent_t*) (((uintptr_t) dirent_buffer) + sizeof(devfs_dirent_t));
         dlength -= sizeof(devfs_dirent_t);
     }
 
-    if(length < sizeof(devfs_dirent_t))
+    if(dir->length < sizeof(devfs_dirent_t))
     {
         //worst case, we need to realloc space...
         u32 oldl = (u32) dir->length;

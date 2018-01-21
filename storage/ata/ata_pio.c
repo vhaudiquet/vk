@@ -230,6 +230,7 @@ void ata_read_partitions(block_device_t* drive)
 			drive->partitions[i]->length = mbr->partitions[i].length;
 			drive->partitions[i]->system_id = mbr->partitions[i].system_id;
 			drive->partitions[i]->bootable = mbr->partitions[i].bootable;
+			drive->partition_count++;
 			//kprintf("registering part %u, start 0x%X, length 0x%X, bootable %u\n", i, mbr->partitions[i].start_lba, mbr->partitions[i].length, mbr->partitions[i].bootable);
 		}
 		else
