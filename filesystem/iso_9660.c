@@ -248,6 +248,8 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     }
     kfree(ptr);
 
+    kfree(dirent_data);
+
     return tr;
 }
 

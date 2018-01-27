@@ -18,11 +18,6 @@
 #include "fs.h"
 #include "memory/mem.h"
 
-#define DEVFS_TYPE_DIRECTORY 1
-#define DEVICE_TYPE_BLOCK 2
-#define DEVICE_TYPE_BLOCK_PART 4
-#define DEVICE_TYPE_INPUT 3
-
 typedef struct DEVFS_DISKLOC
 {
     void* device_struct;
@@ -39,6 +34,8 @@ typedef struct DEVFS_DIRENT
 
 static void devfs_get_fd(file_descriptor_t* dest, devfs_dirent_t* dirent, file_descriptor_t* parent, file_system_t* fs);
 static void devfs_create_file(file_descriptor_t* dir, devfs_diskloc_t* diskloc, char* name, u32 length);
+
+file_system_t* devfs = 0;
 
 file_system_t* devfs_init()
 {
@@ -89,6 +86,7 @@ file_system_t* devfs_init()
         }
     }
 
+    devfs = tr;
     return tr;
 }
 
@@ -137,6 +135,19 @@ u8 devfs_read_file(fd_t* fd, void* buffer, u64 count)
     }
 
     return 1;
+}
+
+void devfs_register_device(char* name, void* device, u8 device_type, u8 device_info)
+{
+    char* name_bck = kmalloc(strlen(name)+1);
+    strcpy(name_bck, name);
+
+    devfs_diskloc_t* diskloc = kmalloc(sizeof(devfs_diskloc_t));
+    diskloc->device_struct = device;
+    diskloc->device_type = device_type;
+    diskloc->device_info = device_info;
+
+    devfs_create_file(&devfs->root_dir, diskloc, name_bck, 0);
 }
 
 static void devfs_create_file(file_descriptor_t* dir, devfs_diskloc_t* diskloc, char* name, u32 length)

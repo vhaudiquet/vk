@@ -26,6 +26,7 @@
 #include "filesystem/fs.h"
 #include "tasking/task.h"
 #include "time/time.h"
+#include "io/io.h"
 void args_parse(char* cmdline);
 
 //TODO : ATA PIO driver -> check for solutions on write_28, write_48, or delete them (as we dont need write on PIO if we have it on DMA)
@@ -156,6 +157,8 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     file_system_t* devfs = devfs_init();
     mount("/dev", devfs);
     vga_text_okmsg();
+
+    tty_init();
 
     //running /sys/init
     fd_t* init_file = open_file("/sys/init");

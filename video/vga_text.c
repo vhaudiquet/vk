@@ -224,37 +224,3 @@ void vga_text_nl()
         TEXT_CURSOR_X = 0;
     }
 }
-
-/*
-#include "memory/mem.h"
-bool s = true;
-void vga_text_switch()
-{
-    static u8* dest;
-    static u8 OTEXT_CURSOR_X, OTEXT_CURSOR_Y;
-    if(s)
-    {
-        #ifdef MEMLEAK_DBG
-        dest = kmalloc(0xFA0, "VGA Switch (debug) buffer");
-        #else
-        dest = kmalloc(0xFA0);
-        #endif
-        memcpy(dest, (void*) 0xC00B8000, 0xFA0);
-        memset((void*) 0xC00B8000, 0, 0xFA0);
-        OTEXT_CURSOR_X = TEXT_CURSOR_X;
-        OTEXT_CURSOR_Y = TEXT_CURSOR_Y;
-        TEXT_CURSOR_X = 0;
-        TEXT_CURSOR_Y = 0;
-        s = false;
-    }
-    else
-    {
-        memset((void*) 0xC00B8000, 0, 0xFA0);
-        memcpy((void*) 0xC00B8000, dest, 0xFA0);
-        kfree(dest);
-        TEXT_CURSOR_X = OTEXT_CURSOR_X;
-        TEXT_CURSOR_Y = OTEXT_CURSOR_Y;
-        s = true;
-    }
-}
-*/
