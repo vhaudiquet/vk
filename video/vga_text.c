@@ -87,6 +87,13 @@ void vga_text_cls()
     }
 }
 
+void vga_text_reset()
+{
+    vga_text_cls();
+    TEXT_CURSOR_X = 0;
+    TEXT_CURSOR_Y = 0;
+}
+
 static void vga_text_scroll_up()
 {
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
@@ -223,4 +230,10 @@ void vga_text_nl()
         TEXT_CURSOR_Y++;
         TEXT_CURSOR_X = 0;
     }
+}
+
+void vga_text_tty_switch(tty_t* tty)
+{
+    vga_text_reset();
+    vga_text_puts(tty->buffer, 0b00000111);
 }

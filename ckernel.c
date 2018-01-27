@@ -158,6 +158,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     mount("/dev", devfs);
     vga_text_okmsg();
 
+    //initializing ttys
     tty_init();
 
     //running /sys/init
@@ -187,6 +188,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     close_file(init_file);
 
     kprintf("[INIT] Init task loaded in memory at 0x%X\n", init_process->eip);
+
+    //switching video output to tty1
+    vga_text_tty_switch(current_tty);
 
     scheduler_add_process(init_process);
 

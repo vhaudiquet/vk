@@ -55,6 +55,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 edx)
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
 {
     switch(ss)
@@ -62,8 +64,8 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
         case 1:
         {
             u8 ch = ebx & 0xFF;//<< 24 >> 24;
-            u8 color = edx & 0xFF;//<< 24 >> 24;
-            vga_text_putc(ch, color);
+            //u8 color = edx & 0xFF;//<< 24 >> 24;
+            tty_write(&ch, 1, current_tty);
             break;
         }
         case 2:
@@ -71,8 +73,8 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
             if(ptr_validate(ebx, current_process->page_directory))
             {
                 u8* str = (u8*) ebx;
-                u8 color = edx & 0xFF;//<< 24 >> 24;
-                vga_text_puts(str, color);
+                //u8 color = edx & 0xFF;//<< 24 >> 24;
+                tty_write(str, strlen((char*) str), current_tty);
             }
             break;
         }
@@ -86,6 +88,7 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
             vga_text_disable_cursor();
     }
 }
+#pragma GCC diagnostic pop
 
 static void kbd_syscall(u16 ss, u32 ebx)
 {

@@ -18,7 +18,8 @@
 #ifndef VIDEO_HEAD
 #define VIDEO_HEAD
 
-#include "../system.h"
+#include "system.h"
+#include "io/io.h"
 
 #define VIDEO_MODE_NONE 0x0
 #define VIDEO_MODE_VGA_TEXT 0x1
@@ -29,6 +30,8 @@ void vga_text_puts(unsigned char* str, u8 color);
 void vga_text_disable_cursor();
 void vga_text_enable_cursor();
 void vga_text_cls();
+void vga_text_reset();
+void vga_text_tty_switch(tty_t* tty);
 
 void set_video_mode(u8 video_mode);
 u8 get_video_mode();
