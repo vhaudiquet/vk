@@ -60,7 +60,7 @@ u8 kbd_getkeychar()
 {
     u8 keycode = kbd_getkeycode();
     u8 size = sizeof(azer_kbd_map);
-    u8 tr = keycode > size ? 0 : (kbd_maj ? azer_maj_kbd_map[keycode] : azer_kbd_map[keycode]);
+    u8 tr = keycode > size ? kbd_getkeychar() : (kbd_maj ? azer_maj_kbd_map[keycode] : azer_kbd_map[keycode]);
     return tr;
 }
 
