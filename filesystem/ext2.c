@@ -18,6 +18,8 @@
 #include "fs.h"
 #include "memory/mem.h"
 
+#define EXT2_ROFEATURE_SIZE_64 0x2
+
 typedef struct EXT2_SUPERBLOCK
 {
     u32 inodes;
@@ -119,7 +121,7 @@ typedef struct EXT2_INODE_DESCRIPTOR
 } ext2_inode_descriptor_t;
 
 //disk block offset relative to the superblock, in bytes
-#define BLOCK_OFFSET(block) ((block-1)*ext2->block_size)
+#define BLOCK_OFFSET(block) ((block)*(ext2->block_size/512))
 static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs);
 static void ext2_get_fd(file_descriptor_t* dest, ext2_dirent_t* dirent, file_descriptor_t* parent, file_system_t* fs);
 static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer);
@@ -157,7 +159,7 @@ file_system_t* ext2fs_init(block_device_t* drive, u8 partition)
     //allocating specific data struct
     ext2fs_specific_t* ext2spe = kmalloc(sizeof(ext2fs_specific_t));
     ext2spe->superblock = superblock;
-    ext2spe->superblock_offset = start_offset+2;
+    ext2spe->superblock_offset = start_offset;
     ext2spe->block_size = (u32)(1024 << superblock->block_size);
     ext2spe->inode_cache = 0;
     ext2spe->inode_cache_size = 0;
@@ -249,7 +251,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
 
     //processing inode size
     u64 inode_size = inode->size_low;
-    if((ext2->superblock->version_major >= 1) && (ext2->superblock->read_only_features & 0x2))
+    if((ext2->superblock->version_major >= 1) && (ext2->superblock->read_only_features & EXT2_ROFEATURE_SIZE_64) && ((inode->type_and_permissions >> 12) != 4))
     {
         u64 size_high = ((u64) inode->directory_acl << 32);
         inode_size |= size_high;
@@ -271,11 +273,11 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
         if(!inode->direct_block_pointers[i]) 
         {
-            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (direct block pointer->0)\n", 0b00000110);
+            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (direct block pointer %u ->0)\n", 0b00000110, i);
             return 1;
         }
 
-        block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(inode->direct_block_pointers[i])+offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
         
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
@@ -296,7 +298,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         return 1;
     }
     u32* singly_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(inode->singly_indirect_block_pointer), (u8*) singly_indirect_block, ext2->block_size, fs->drive);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
 
     for(;i<(ext2->block_size/4);i++)
     {
@@ -308,7 +310,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             return 1;
         }
 
-        block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(singly_indirect_block[i])+offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
         
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
@@ -331,7 +333,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         return 1;
     }
     u32* doubly_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(inode->doubly_indirect_block_pointer), (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
     
     u32 j;
     for(j = 0;j<(ext2->block_size/4);j++)
@@ -344,7 +346,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             return 1;
         }
         u32* sib = kmalloc(ext2->block_size);
-        block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(doubly_indirect_block[j]), (u8*) sib, ext2->block_size, fs->drive);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
 
         for(;i<(ext2->block_size/4);i++)
         {
@@ -356,7 +358,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
                 return 1;
             }
 
-            block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(sib[i])+offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+            block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
         
             currentloc+=ext2->block_size;
             if(offset) offset = 0;
@@ -381,7 +383,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         return 1;
     }
     u32* triply_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(inode->triply_indirect_block_pointer), (u8*) triply_indirect_block, ext2->block_size, fs->drive);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
 
     u32 k;
     for(k=0;k<(ext2->block_size/4);k++)
@@ -393,7 +395,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             return 1;
         }
         u32* dib = kmalloc(ext2->block_size);
-        block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(triply_indirect_block[j]), (u8*) dib, ext2->block_size, fs->drive);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
 
         for(j=0;j<(ext2->block_size/4);j++)
         {
@@ -405,7 +407,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
                 return 1;
             }
             u32* sib = kmalloc(ext2->block_size);
-            block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(dib[j]), (u8*) sib, ext2->block_size, fs->drive);
+            block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
 
             for(;i<(ext2->block_size/4);i++)
             {
@@ -417,7 +419,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
                     return 1;
                 }
 
-                block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(sib[i])+offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+                block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
         
                 currentloc+=ext2->block_size;
                 if(offset) offset = 0;
@@ -447,7 +449,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
 static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs)
 {
     if(inode == 1) return 0; //bad blocks inode
-    
+
     ext2fs_specific_t* ext2 = fs->specific;
 
     //checks if the inode is in the cache
@@ -461,24 +463,41 @@ static ext2_inode_t* ext2_inode_read(u32 inode, file_system_t* fs)
         isize--;
     }
 
+    /* We need to read the inode from disk. For that, we have to find the block group and block_group_descriptor of this inode */
+
+    //getting inode size from superblock or standard depending on ext2 version
     u32 inode_size = ((ext2->superblock->version_major >=1) ? ext2->superblock->inode_struct_size : 128);
 
+    //calculating inode block group
     u32 inodes_per_blockgroup = ext2->superblock->inodes_per_blockgroup;
     u32 inode_block_group = (inode - 1) / inodes_per_blockgroup;
 
+    //calculating inode index in the inode table
     u32 index = (inode - 1) % inodes_per_blockgroup;
 
+    //calculating block_group_descriptor offset
     u32 bg_read_offset = inode_block_group*sizeof(ext2_block_group_descriptor_t);
 
+    //reading block group descriptor
     ext2_block_group_descriptor_t inode_bg;
-    block_read_flexible(ext2->superblock_offset, BLOCK_OFFSET(2)+bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
-    u32 inode_read_offset = BLOCK_OFFSET(inode_bg.starting_block_adress) + (index * inode_size);
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+    
+    //calculating inode location on the disk (based on inode table block start found in block group descriptor)
+    u32 inode_read_offset = (index * inode_size);
 
-    //add the inode to the cache
+    //create a cache entry for this inode
     ext2_inode_descriptor_t* descriptor = kmalloc(sizeof(ext2_inode_descriptor_t));
     descriptor->inode_number = inode;
-    block_read_flexible(ext2->superblock_offset, inode_read_offset, (u8*) &descriptor->inode, inode_size, fs->drive);
+    
+    /*
+    * READ THE INODE (directly to the cache entry) (victory we found it !)
+    * here we are reading only the first 128 bits of inode, because when it has more
+    * we dont need the other values (for now) and the inode struct (&descriptor->inode) has only 128 bits space 
+    */
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.starting_block_adress), inode_read_offset, (u8*) &descriptor->inode, sizeof(ext2_inode_t), fs->drive);
 
+    //add the cache entry to the cache (linked list)
     if(!ext2->inode_cache)
     {
         ext2->inode_cache = kmalloc(sizeof(list_entry_t));
@@ -535,7 +554,7 @@ static void ext2_get_fd(file_descriptor_t* dest, ext2_dirent_t* dirent, file_des
 
     dest->length = inode->size_low;
     //if file is not a directory and fs has feature activated, file_size is 64 bits long (directory_acl is size_high)
-    if((!(dest->attributes & FILE_ATTR_DIR)) && (ext2->superblock->version_major >= 1) && (ext2->superblock->read_only_features & 0x2))
+    if((!(dest->attributes & FILE_ATTR_DIR)) && (ext2->superblock->version_major >= 1) && (ext2->superblock->read_only_features & EXT2_ROFEATURE_SIZE_64))
     {
         u64 size_high = ((u64) inode->directory_acl << 32);
         dest->length |= size_high;

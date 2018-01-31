@@ -9,7 +9,7 @@ LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
 QEMU=qemu-system-i386 -enable-kvm # kvm
 VBVMNAME=VK
-MEDIAPATH=/run/media/valentin/MULTISYSTEM
+MEDIAPATH=/run/media/valentin/VALOU3433/boot/iso
 DISKIMAGE=../extdisk.img
 VBOXDISKIMAGE=../disk.vdi
 
@@ -52,14 +52,13 @@ hddimage: kernel
 kernelc: kernel
 	cp ../kernel.elf $(MEDIAPATH)/kernel.elf
 	rm ../kernel.elf
-	umount $(MEDIAPATH)
 
 isoc: iso
 	cp ../os.iso $(MEDIAPATH)/os.iso
 	rm ../os.iso
 
 iso: kernel
-	cp ../kernel.elf ../iso/boot/kernel.elf
+	cp ../kernel.elf ../iso/sys/kernel.elf
 	genisoimage -R                              \
                 -b boot/grub/stage2_eltorito    \
                 -no-emul-boot                   \

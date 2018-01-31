@@ -23,8 +23,9 @@
 * THIS IS A TEMP KEYBOARD DRIVER ; i dont know yet if the keyboard driver has a place in the kernel,
 * or if the kernel should just pass the keycode to the userland GUI or SCHELL, and this interface decides
 * what to do with it
+* EDIT : alright i figured that out now i'll have to make a nice layer for kbd and all
 * Even if the keyboard driver takes place inside the kernel, there will be modules to support others kbd layouts
-* (this is only used to test thingsS)
+* (this is only used to test things)
 */
 
 bool kbd_requested = false;
@@ -34,26 +35,26 @@ bool kbd_maj = false;
 
 u8 azer_kbd_map[] = 
 {
-    0, 0, 
+    '?', '?', 
     '&', 130, '"', '\'', '(', '-', 138, '_', 135, 133, ')', '=',
     '\b', '\t',
     'a', 'z', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '^', '$',
-    '\n', 0,
-    'q', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 151, 0, 0, '*',
-    'w', 'x', 'c', 'v', 'b', 'n', ',', ';', ':', '!', 0,
-    0, 0, ' '
+    '\n', '?',
+    'q', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 151, '?', '?', '*',
+    'w', 'x', 'c', 'v', 'b', 'n', ',', ';', ':', '!', '?',
+    '?', '?', ' '
 };
 
 u8 azer_maj_kbd_map[] =
 {
-    0, 0,
+    '?', '?',
     '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 167, '+',
     '\b', '\t',
     'A', 'Z', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 249, 156,
-    '\n', 0,
-    'Q', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'M', '%', 0, 0, 230,
-    'W', 'X', 'C', 'V', 'B', 'N', '?', '.', '/', 245, 0,
-    0, 0, ' '
+    '\n', '?',
+    'Q', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'M', '%', '?', '?', 230,
+    'W', 'X', 'C', 'V', 'B', 'N', '?', '.', '/', 245, '?',
+    '?', '?', ' '
 };
 
 u8 kbd_getkeychar()
