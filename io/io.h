@@ -33,5 +33,6 @@ extern tty_t* tty1; extern tty_t* tty2; extern tty_t* tty3;
 void tty_init();
 u8 tty_write(u8* buffer, u32 count, tty_t* tty);
 u8 tty_getch(tty_t* tty);
+void tty_switch(tty_t* tty);
 
 #endif

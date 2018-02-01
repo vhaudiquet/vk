@@ -29,6 +29,8 @@
 */
 
 bool kbd_maj = false;
+bool kbd_ctrl = false;
+bool kbd_alt = false;
 
 u8 azer_kbd_map[] = 
 {

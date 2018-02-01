@@ -31,21 +31,21 @@ void tty_init()
     kprintf("Initializing ttys...");
 
     tty1 = kmalloc(sizeof(tty_t)); tty1->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    strcpy((char*) tty1->buffer, "VK 0.0-indev (tty1)\n");
     tty1->count = 0; tty1->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
     tty1->keyboard_stream = iostream_alloc();
+    tty_write((u8*) "VK 0.0-indev (tty1)\n", 20, tty1);
     devfs_register_device("tty1", tty1, DEVICE_TYPE_TTY, 0);
 
     tty2 = kmalloc(sizeof(tty_t)); tty2->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    strcpy((char*) tty2->buffer, "VK 0.0-indev (tty2)\n");
     tty2->count = 0; tty2->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
     tty2->keyboard_stream = iostream_alloc();
+    tty_write((u8*) "VK 0.0-indev (tty2)\n", 20, tty2);
     devfs_register_device("tty2", tty2, DEVICE_TYPE_TTY, 0);
 
     tty3 = kmalloc(sizeof(tty_t)); tty3->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    strcpy((char*) tty3->buffer, "VK 0.0-indev (tty3)\n");
     tty3->count = 0; tty3->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
     tty3->keyboard_stream = iostream_alloc();
+    tty_write((u8*) "VK 0.0-indev (tty3)\n", 20, tty3);
     devfs_register_device("tty3", tty3, DEVICE_TYPE_TTY, 0);
 
     current_tty = tty1;

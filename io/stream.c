@@ -49,7 +49,7 @@ u8 iostream_getch(io_stream_t* iostream)
 {
     if(iostream->count)
     {
-        kprintf(""); //i dont know why yet, we need a little delay here if we come from the end loop, so this will do it
+        kprintf(""); //i dont know why yet, we need a little delay here if we come from the end loop, so this will do it //TODO check
         u8 tr = *iostream->buffer;
         iostream->count--;
         memcpy(iostream->buffer, iostream->buffer+1, iostream->count);

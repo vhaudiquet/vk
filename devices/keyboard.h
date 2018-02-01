@@ -18,12 +18,10 @@
 #ifndef KEYBOARD_HEAD
 #define KEYBOARD_HEAD
 
-extern bool kbd_requested;
-extern volatile u8 kbd_keycode;
 extern bool kbd_maj;
+extern bool kbd_ctrl;
+extern bool kbd_alt;
 
-u8 kbd_getkeychar();
-u8 kbd_getkeycode();
 u8 getchar(u8 keycode);
 
 #endif

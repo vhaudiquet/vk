@@ -99,9 +99,25 @@ void irq_handler(u32 irq_number)
 void keyboard_interrupt()
 {
 	u8 keycode = inb(0x60);
+	
+	//handling shift and majlock
 	if(keycode == 42) kbd_maj = !kbd_maj;
 	else if(keycode == 170) kbd_maj = !kbd_maj;
 	else if(keycode == 58) kbd_maj = !kbd_maj;
+	
+	//handling ctrl
+	if(keycode == 0x1D) kbd_ctrl = true;
+	else if(keycode == 0x9D) kbd_ctrl = false;
+
+	//handling alt
+	if(keycode == 0x38) kbd_alt = true;
+	else if(keycode == 0xB8) kbd_alt = false;
+
+	//handling tty switch
+	if(kbd_ctrl && kbd_alt && (keycode == 0x3B)) {tty_switch(tty1); return;}
+	if(kbd_ctrl && kbd_alt && (keycode == 0x3C)) {tty_switch(tty2); return;}
+	if(kbd_ctrl && kbd_alt && (keycode == 0x3D)) {tty_switch(tty3); return;}
+
 	u8 ch = getchar(keycode);
 	if(ch) iostream_write(&ch, 1, current_tty->keyboard_stream);
 }
