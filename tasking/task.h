@@ -20,6 +20,7 @@
 
 #include "system.h"
 #include "filesystem/fs.h"
+#include "io/io.h"
 
 //ELF loading
 bool elf_check(fd_t* file);
@@ -39,9 +40,10 @@ typedef struct PROCESS
     u32 base_kstack;
     list_entry_t* data_loc;
     u32 data_size;
+    tty_t* tty;
 } process_t;
 
-process_t* create_process(fd_t* executable, int argc, char** argv);
+process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();

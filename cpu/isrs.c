@@ -95,15 +95,13 @@ void irq_handler(u32 irq_number)
 }
 
 #include "devices/keyboard.h"
+#include "io/io.h"
 void keyboard_interrupt()
 {
 	u8 keycode = inb(0x60);
 	if(keycode == 42) kbd_maj = !kbd_maj;
 	else if(keycode == 170) kbd_maj = !kbd_maj;
 	else if(keycode == 58) kbd_maj = !kbd_maj;
-	if(kbd_requested)
-	{
-		kbd_keycode = keycode;
-		kbd_requested = false;
-	}
+	u8 ch = getchar(keycode);
+	if(ch) iostream_write(&ch, 1, current_tty->keyboard_stream);
 }

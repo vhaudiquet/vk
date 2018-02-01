@@ -179,7 +179,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     if(!elf_task) {vga_text_failmsg(); fatal_kernel_error("Could not open init process file", "INIT_RUN");}
     else vga_text_okmsg();
 
-    process_t* init_process = create_process(elf_task, 0, 0);
+    process_t* init_process = create_process(elf_task, 0, 0, tty1);
     if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
 
     close_file(elf_task);

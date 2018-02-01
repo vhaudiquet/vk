@@ -65,7 +65,7 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
         {
             u8 ch = ebx & 0xFF;//<< 24 >> 24;
             //u8 color = edx & 0xFF;//<< 24 >> 24;
-            tty_write(&ch, 1, current_tty);
+            tty_write(&ch, 1, current_process->tty);
             break;
         }
         case 2:
@@ -74,7 +74,7 @@ static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
             {
                 u8* str = (u8*) ebx;
                 //u8 color = edx & 0xFF;//<< 24 >> 24;
-                tty_write(str, strlen((char*) str), current_tty);
+                tty_write(str, strlen((char*) str), current_process->tty);
             }
             break;
         }
@@ -99,7 +99,7 @@ static void kbd_syscall(u16 ss, u32 ebx)
             if(ptr_validate(ebx, current_process->page_directory))
             {
                 u8* ptr = (u8*) ebx;
-                *ptr = kbd_getkeycode();
+                *ptr = 0; //*ptr = kbd_getkeycode();
             }
             break;
         }
@@ -108,7 +108,7 @@ static void kbd_syscall(u16 ss, u32 ebx)
             if(ptr_validate(ebx, current_process->page_directory))
             {
                 u8* ptr = (u8*) ebx;
-                *ptr = kbd_getkeychar();
+                *ptr = tty_getch(current_process->tty);
             }
             break;
         }

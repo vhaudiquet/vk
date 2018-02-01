@@ -28,7 +28,7 @@ io_stream_t* iostream_alloc()
     tr->buffer_size = IOSTREAM_DEFAULT_BUFFER_SIZE;
     tr->buffer = kmalloc(tr->buffer_size);
     tr->count = 0;
-    return 0;
+    return tr;
 }
 
 /*
@@ -49,6 +49,7 @@ u8 iostream_getch(io_stream_t* iostream)
 {
     if(iostream->count)
     {
+        kprintf(""); //i dont know why yet, we need a little delay here if we come from the end loop, so this will do it
         u8 tr = *iostream->buffer;
         iostream->count--;
         memcpy(iostream->buffer, iostream->buffer+1, iostream->count);

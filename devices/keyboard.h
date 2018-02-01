@@ -24,5 +24,6 @@ extern bool kbd_maj;
 
 u8 kbd_getkeychar();
 u8 kbd_getkeycode();
+u8 getchar(u8 keycode);
 
 #endif
