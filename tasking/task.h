@@ -29,18 +29,27 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 //Process
 typedef struct PROCESS
 {
+    //registers (backed up every schedule)
     g_regs_t gregs;
     s_regs_t sregs;
     u32 eip;
     u32 esp;
     u32 ebp;
+    //page directory of the process
     u32* page_directory;
+    //process kernel stack current esp
     u32 kesp;
+    //process base stack and kernel stack (to free them on exit_process)
     u32 base_stack;
     u32 base_kstack;
+    //location of all elf data segments in memory (to free them on exit_process)
     list_entry_t* data_loc;
     u32 data_size;
+    //tty of the process
     tty_t* tty;
+    //files opened by the process
+    fd_t** files;
+    u32 files_size;
 } process_t;
 
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);

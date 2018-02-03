@@ -38,7 +38,7 @@ bool ptr_validate(u32 ptr, u32* page_directory)
     return true;
 }
 
-void syscall_global(u32 syscall_number, u32 ebx, u32 edx)
+void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
 {
     u32 snbr = (u32) syscall_number >> 16;
     u16 ss = syscall_number & 0xFFFF;//<< 16 >> 16;

@@ -17,6 +17,7 @@
 
 #include "fs.h"
 #include "memory/mem.h"
+#include "io/io.h"
 
 typedef struct DEVFS_DISKLOC
 {
@@ -132,6 +133,39 @@ u8 devfs_read_file(fd_t* fd, void* buffer, u64 count)
     {
         block_device_t* bd = diskloc->device_struct;
         return block_read_flexible(bd->partitions[diskloc->device_info]->start_lba, (u32) fd->offset, (u8*) buffer, count, bd);
+    }
+    else if(diskloc->device_type == DEVICE_TYPE_TTY)
+    {
+        tty_t* tty = diskloc->device_struct;
+        if(count == 1)
+        {
+            *((u8*) buffer) = tty_getch(tty);
+            return 0;
+        }
+        return 1;
+    }
+
+    return 1;
+}
+
+u8 devfs_write_file(fd_t* fd, void* buffer, u64 count)
+{
+    file_descriptor_t* file = fd->file;
+    devfs_diskloc_t* diskloc = (devfs_diskloc_t*) ((uintptr_t) file->fsdisk_loc);
+
+    if(diskloc->device_type == DEVICE_TYPE_BLOCK)
+    {
+        return block_write_flexible(0, (u32) fd->offset, (u8*) buffer, count, diskloc->device_struct);
+    }
+    else if(diskloc->device_type == DEVICE_TYPE_BLOCK_PART)
+    {
+        block_device_t* bd = diskloc->device_struct;
+        return block_write_flexible(bd->partitions[diskloc->device_info]->start_lba, (u32) fd->offset, (u8*) buffer, count, bd);
+    }
+    else if(diskloc->device_type == DEVICE_TYPE_TTY)
+    {
+        tty_t* tty = diskloc->device_struct;
+        return tty_write(buffer, (u32) count, tty);
     }
 
     return 1;

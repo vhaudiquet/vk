@@ -92,6 +92,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 
     tr->base_stack = (u32) stack_offset-8192;
 
+    //set default registers to 0
     tr->gregs.eax = 0;
     tr->gregs.ebx = 0;
     tr->gregs.ecx = 0;
@@ -100,15 +101,27 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->gregs.edi = 0;
     tr->ebp = 0;
 
+    //set default segment registers
     tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
     tr->sregs.cs = 0x1B;
 
     tr->eip = (u32) code_offset;
     tr->esp = (u32) stack_offset;
 
+    //set process page directory (the one we just allocated)
     tr->page_directory = page_directory;
 
+    //set process tty, depending on argument
     tr->tty = tty;
+
+    //init process file array
+    tr->files_size = 5;
+    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
+
+    //init stdout, stdin, stderr
+    tr->files[0] = tty->pointer;
+    tr->files[1] = tty->pointer;
+    tr->files[2] = tty->pointer;
 
     //process kernel stack
     void* kstack = 
@@ -122,6 +135,32 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->base_kstack = (u32) kstack;
 
     return tr;
+}
+
+void exit_process(process_t* process)
+{
+    //mark physical memory reserved for process stack as free
+    u32 stack_phys = get_physical(process->base_stack, process->page_directory);
+    free_block(stack_phys);
+
+    //TODO : mark all data/code blocks reserved for the process as free
+    u32 i = 0;
+    list_entry_t* dloc = process->data_loc;
+    for(i=0;i<process->data_size;i++)
+    {
+        u32 phys = get_physical(((u32*)dloc->element)[0], process->page_directory);
+        free_block(phys);
+    }
+    list_free(dloc, process->data_size);
+
+    //free process's kernel stack
+    kfree((void*) process->base_kstack);
+
+    //free process's page directory
+    pt_free(process->page_directory);
+
+    //remove process from schedulers
+    scheduler_remove_process(process);
 }
 
 extern void idle_loop();
@@ -167,30 +206,4 @@ process_t* init_kernel_process()
     current_process = kernel_process;
 
     return kernel_process;
-}
-
-void exit_process(process_t* process)
-{
-    //mark physical memory reserved for process stack as free
-    u32 stack_phys = get_physical(process->base_stack, process->page_directory);
-    free_block(stack_phys);
-
-    //TODO : mark all data/code blocks reserved for the process as free
-    u32 i = 0;
-    list_entry_t* dloc = process->data_loc;
-    for(i=0;i<process->data_size;i++)
-    {
-        u32 phys = get_physical(((u32*)dloc->element)[0], process->page_directory);
-        free_block(phys);
-    }
-    list_free(dloc, process->data_size);
-
-    //free process's kernel stack
-    kfree((void*) process->base_kstack);
-
-    //free process's page directory
-    pt_free(process->page_directory);
-
-    //remove process from schedulers
-    scheduler_remove_process(process);
 }

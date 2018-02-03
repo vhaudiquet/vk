@@ -253,8 +253,7 @@ fd_t* open_file(char* path)
         tr->offset = 0;
         return tr;
     }
-
-    if(best != 0) return do_open_fs(path+1, best);
+    if(best != 0) return do_open_fs(path+strlen(best->path), best);
     
     fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); //TEMP
     return 0;
@@ -393,6 +392,9 @@ bool rename_file(char* path, char* newname)
 
 static fd_t* do_open_fs(char* path, mount_point_t* mp)
 {
+    //todo: increase perfs (by not copying but just updating ptr)
+    if(*path == '/') {strcpy(path, path+1);}
+    
     //The path should be relative to the mount point (excluded) of this fs
 	/* Step 1 : Split the path on '/' */
 	u32 i = 0;

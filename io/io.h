@@ -25,6 +25,7 @@ typedef struct TTY
     u32 count;
     u32 buffer_size;
     io_stream_t* keyboard_stream;
+    fd_t* pointer;
 } tty_t;
 
 extern tty_t* current_tty;

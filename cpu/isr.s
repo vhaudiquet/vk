@@ -175,10 +175,11 @@ SYSCALL_H:
     push %fs
     push %gs
     pushl %edx
+    pushl %ecx
     pushl %ebx
     pushl %eax
     call syscall_global
-    add $0xC, %esp
+    add $0x10, %esp
     pop %gs
     pop %fs
     pop %es
