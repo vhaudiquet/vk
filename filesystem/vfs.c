@@ -287,8 +287,12 @@ u8 read_file(fd_t* fd, void* buffer, u64 count)
     file_descriptor_t* file = fd->file;
     if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
 
-    if(fd->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
-	if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
+    if(file->length) //if file->length is 0, it's a special file (blockdev/tty...)
+    {
+        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
+	    if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
+    }
+
 	if(count == 0) {*((u8*) buffer) = 0; return 0;}
 
     u8 tr = 2;
@@ -323,6 +327,9 @@ u8 write_file(fd_t* fd, void* buffer, u64 count)
     {
         case FS_TYPE_FAT32:
             tr = fat32fs_write_file(fd, buffer, count);
+            break;
+        case FS_TYPE_DEVFS:
+            tr = devfs_write_file(fd, buffer, count);
             break;
     }
     if(!tr) fd->offset += count;

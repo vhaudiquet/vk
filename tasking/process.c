@@ -122,6 +122,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->files[0] = tty->pointer;
     tr->files[1] = tty->pointer;
     tr->files[2] = tty->pointer;
+    tr->files_count = 3;
 
     //process kernel stack
     void* kstack = 

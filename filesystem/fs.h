@@ -138,6 +138,7 @@ extern file_system_t* devfs;
 file_system_t* devfs_init();
 list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size);
 u8 devfs_read_file(fd_t* fd, void* buffer, u64 count);
+u8 devfs_write_file(fd_t* fd, void* buffer, u64 count);
 void devfs_register_device(char* name, void* device, u8 device_type, u8 device_info);
 
 #endif

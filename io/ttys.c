@@ -78,7 +78,16 @@ u8 tty_write(u8* buffer, u32 count, tty_t* tty)
     memcpy(tty->buffer+tty->count, buffer, count);
     tty->count += count;
 
-    if(tty == current_tty) vga_text_puts(buffer, 0b00000111);
+    if(tty == current_tty) 
+    {
+        u32 t = 0;
+        while(count)
+        {
+            vga_text_putc(*(buffer+t), 0b00000111);
+            count--;
+            t++;
+        }
+    }
 
     return 0;
 }

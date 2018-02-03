@@ -169,7 +169,7 @@ isr_common:
 
 .global SYSCALL_H
 SYSCALL_H:
-    pusha
+    # pusha
     push %ds
     push %es
     push %fs
@@ -184,5 +184,5 @@ SYSCALL_H:
     pop %fs
     pop %es
     pop %ds
-    popa
+    # popa
     iret

@@ -50,6 +50,7 @@ typedef struct PROCESS
     //files opened by the process
     fd_t** files;
     u32 files_size;
+    u32 files_count;
 } process_t;
 
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);

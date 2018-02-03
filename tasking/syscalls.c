@@ -19,17 +19,6 @@
 #include "task.h"
 #include "video/video.h"
 #include "memory/mem.h"
-#include "devices/keyboard.h"
-
-/*
-* For now, i have less than 10 syscalls, and they are all in this file
-* Then i may need to expand the file or to rewrite it
-* For now it contains the system calls, that i use only to debug the kernel
-* (the idea is to build a stable and powerfull kernel, and then creates a way for userland to call each kernel service)
-*/
-
-static void vga_text_syscall(u16 ss, u32 ebx, u32 edx);
-static void kbd_syscall(u16 ss, u32 ebx);
 
 bool ptr_validate(u32 ptr, u32* page_directory)
 {
@@ -40,79 +29,106 @@ bool ptr_validate(u32 ptr, u32* page_directory)
 
 void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
 {
-    u32 snbr = (u32) syscall_number >> 16;
-    u16 ss = syscall_number & 0xFFFF;//<< 16 >> 16;
-    switch(snbr)
+    // kprintf("%lSyscall %u : %X, %X, %X\n", 3, syscall_number, ebx, ecx, edx);
+    switch(syscall_number)
     {
-        case 0:
-            vga_text_syscall(ss, ebx, edx);
-            break;
-        case 1:
-            kbd_syscall(ss, ebx);
-            break;
-        default:
-            break;
-    }
-}
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-static void vga_text_syscall(u16 ss, u32 ebx, u32 edx)
-{
-    switch(ss)
-    {
+        //1:Syscall OPEN
         case 1:
         {
-            u8 ch = ebx & 0xFF;//<< 24 >> 24;
-            //u8 color = edx & 0xFF;//<< 24 >> 24;
-            tty_write(&ch, 1, current_process->tty);
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            
+            char* path = (char*) ebx;
+            fd_t* file = open_file(path);
+            if(!file) {asm("mov $0, %eax"); return;}
+                
+            if(current_process->files_count == current_process->files_size)
+            {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size);}
+
+            current_process->files[current_process->files_count] = file;
+            current_process->files_count++;
+            asm("mov %0, %%eax"::"g"(current_process->files_count-1));
             break;
         }
+        //2:Syscall CLOSE
         case 2:
         {
-            if(ptr_validate(ebx, current_process->page_directory))
+            if(current_process->files_count >= ebx && current_process->files[ebx])
             {
-                u8* str = (u8*) ebx;
-                //u8 color = edx & 0xFF;//<< 24 >> 24;
-                tty_write(str, strlen((char*) str), current_process->tty);
+                close_file(current_process->files[ebx]);
+                current_process->files_count--;
+                memcpy((void*) ((uintptr_t)current_process->files)+ebx*sizeof(uintptr_t), (void*) ((uintptr_t)current_process->files)+(ebx+1)*sizeof(uintptr_t), current_process->files_count-ebx);
             }
             break;
         }
+        //3:Syscall READ
         case 3:
-            vga_text_cls();
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            
+            u8 tr = read_file(current_process->files[ebx], (void*) ecx, edx);
+            asm("mov %0, %%eax"::"g"((u32) tr));
             break;
+        }
+        //4:Syscall WRITE
         case 4:
-            vga_text_enable_cursor();
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            u8 tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
+            asm("mov %0, %%eax"::"g"((u32) tr));
             break;
+        }
+        //5:Syscall RENAME
         case 5:
-            vga_text_disable_cursor();
-    }
-}
-#pragma GCC diagnostic pop
+        {
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            char* oldpath = (char*) ebx;
+            char* newname = (char*) ecx;
 
-static void kbd_syscall(u16 ss, u32 ebx)
-{
-    switch(ss)
-    {
-        case 1:
-        {
-            if(ptr_validate(ebx, current_process->page_directory))
-            {
-                u8* ptr = (u8*) ebx;
-                *ptr = 0; //*ptr = kbd_getkeycode();
-            }
+            u8 tr = rename_file(oldpath, newname);
+            asm("mov %0, %%eax"::"g"((u32) tr));
             break;
         }
-        case 2:
+        //6:Syscall LINK
+        case 6:
         {
-            if(ptr_validate(ebx, current_process->page_directory))
-            {
-                u8* ptr = (u8*) ebx;
-                *ptr = tty_getch(current_process->tty);
-            }
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            char* oldpath = (char*) ebx;
+            char* newpath = (char*) ecx;
+
+            //TODO : Link
+            asm("mov %0, %%eax"::"g"(0));
             break;
         }
-        default:
+        //7:Syscall UNLINK
+        case 7:
+        {
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            char* path = (char*) ebx;
+
+            u8 tr = unlink(path);
+            asm("mov %0, %%eax"::"g"((u32) tr));
             break;
+        }
+        //8:Syscall SEEK
+        case 8:
+        {
+            //TODO : Seek
+            break;
+        }
+        //9:Syscall STAT
+        case 9:
+        {
+            //TODO : Stat
+            break;
+        }
+        //11:Syscall EXEC
+        case 11:
+        {
+            break;
+        }
     }
 }
