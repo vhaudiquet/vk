@@ -331,6 +331,9 @@ u8 write_file(fd_t* fd, void* buffer, u64 count)
         case FS_TYPE_DEVFS:
             tr = devfs_write_file(fd, buffer, count);
             break;
+        case FS_TYPE_EXT2:
+            tr = ext2fs_write_file(fd, buffer, count);
+            break;
     }
     if(!tr) fd->offset += count;
     return tr;
@@ -384,15 +387,26 @@ bool link(char* oldpath, char* newpath)
     fd_t* file = open_file(oldpath);
     if(!file) return false;
 
+    char* newname = strrchr(newpath, '/')+1;
+    
+    u32 newdirlen = (strlen(newpath) - ((u32)(newname - newpath)));
+    char* newdir = kmalloc(newdirlen+1);
+    strncpy(newdir, newpath, newdirlen);
+    *(newdir+newdirlen) = 0;
+    fd_t* newdir_fd = open_file(newdir);
+    if(!newdir_fd) {close_file(file); kfree(newdir); return false;}
+
     bool tr = false;
     switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_EXT2:
-            //TODO
+            tr = ext2fs_link(file->file, newdir_fd->file, newname);
             break;
     }
 
     close_file(file);
+    close_file(newdir_fd);
+    kfree(newdir);
 
     return tr;
 }

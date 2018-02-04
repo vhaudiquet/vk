@@ -99,6 +99,9 @@ void irq_handler(u32 irq_number)
 void keyboard_interrupt()
 {
 	u8 keycode = inb(0x60);
+
+	//if ttys are'nt initilized, we return
+	if(!tty1 | !tty2 | !tty3) return;
 	
 	//handling shift and majlock
 	if(keycode == 42) kbd_maj = !kbd_maj;
