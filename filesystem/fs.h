@@ -81,6 +81,7 @@ u64 flength(fd_t* file);
 u8 read_file(fd_t* file, void* buffer, u64 count);
 u8 write_file(fd_t* file, void* buffer, u64 count);
 bool rename_file(char* path, char* newname);
+bool link(char* oldpath, char* newpath);
 bool unlink(char* path);
 list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize);
 

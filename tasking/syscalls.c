@@ -99,8 +99,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             char* oldpath = (char*) ebx;
             char* newpath = (char*) ecx;
 
-            //TODO : Link
-            asm("mov %0, %%eax"::"g"(0));
+            u8 tr = link(oldpath, newpath);
+            asm("mov %0, %%eax"::"g"((u32) tr));
             break;
         }
         //7:Syscall UNLINK
@@ -127,6 +127,48 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         }
         //11:Syscall EXEC
         case 11:
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+
+            process_t* process = create_process(current_process->files[ebx], (int) ecx, (char**) edx, current_process->tty);
+            scheduler_add_process(process);
+            break;
+        }
+        //12:Syscall EXIT
+        case 12:
+        {
+            exit_process(current_process);
+            break;
+        }
+        //13:Syscall FORK
+        case 13:
+        {
+            break;
+        }
+        //17:Syscall SBRK
+        case 17:
+        {
+            
+            break;
+        }
+        //18:Syscall GETPID
+        case 18:
+        {
+            break;
+        }
+        //19:Syscall KILL
+        case 19:
+        {
+            break;
+        }
+        //21:Syscall GET_CURENT_TIME
+        case 21:
+        {
+            break;
+        }
+        //22:Syscall SUSPEND
+        case 22:
         {
             break;
         }

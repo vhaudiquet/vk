@@ -208,7 +208,10 @@ static void kheap_expand()
     if(KHEAP_BASE_END >= FREE_KVM_START) fatal_kernel_error("Kernel heap full ! How ?", "KHEAP_EXPAND");
     
     //TODO : we need to EXPAND heap in ALL CURRENT PAGES DIRS (all processes page dirs)
+    //or we handle that in PF ? (if page fault but kernel page mapped, map ?)
+    //anyway we will need a spinlock on that too (lock kernelpagedir or something like that)
     map_memory(0x400000, KHEAP_BASE_END, kernel_page_directory);
+
     block_header_t* base_block = (block_header_t*) KHEAP_BASE_END;
     base_block->magic = BLOCK_HEADER_MAGIC;
     base_block->size = 0x400000 - sizeof(block_header_t);

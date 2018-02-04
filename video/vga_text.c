@@ -69,7 +69,7 @@ bool vga_setup(void)
     //Cleaning video ram and initializing pointer
     vga_text_cls();
 
-    vga_text_disable_cursor();
+    vga_text_enable_cursor();
 
     kprintf("%lVGA display setup done\n", 1);
     return true;

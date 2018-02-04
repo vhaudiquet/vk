@@ -144,7 +144,7 @@ void exit_process(process_t* process)
     u32 stack_phys = get_physical(process->base_stack, process->page_directory);
     free_block(stack_phys);
 
-    //TODO : mark all data/code blocks reserved for the process as free
+    //mark all data/code blocks reserved for the process as free
     u32 i = 0;
     list_entry_t* dloc = process->data_loc;
     for(i=0;i<process->data_size;i++)
@@ -163,6 +163,13 @@ void exit_process(process_t* process)
     //remove process from schedulers
     scheduler_remove_process(process);
 }
+
+/*
+u32 sbrk(process_t* process, u32 incr)
+{
+
+}
+*/
 
 extern void idle_loop();
 asm(".global idle_loop\n \

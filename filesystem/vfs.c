@@ -379,6 +379,24 @@ bool unlink(char* path)
     return tr;
 }
 
+bool link(char* oldpath, char* newpath)
+{
+    fd_t* file = open_file(oldpath);
+    if(!file) return false;
+
+    bool tr = false;
+    switch(file->file->file_system->fs_type)
+    {
+        case FS_TYPE_EXT2:
+            //TODO
+            break;
+    }
+
+    close_file(file);
+
+    return tr;
+}
+
 bool rename_file(char* path, char* newname)
 {
     fd_t* file = open_file(path);

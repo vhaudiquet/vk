@@ -54,6 +54,7 @@ typedef struct PROCESS
 } process_t;
 
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
+void exit_process(process_t* process);
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();

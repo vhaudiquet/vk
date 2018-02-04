@@ -161,7 +161,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //initializing ttys
     tty_init();
 
-    //running /sys/init
+    //reading /sys/init
     fd_t* init_file = open_file("/sys/init");
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
     char* init_buffer =
@@ -174,11 +174,12 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     read_file(init_file, init_buffer, flength(init_file));
     init_buffer[flength(init_file)-1] = 0;
 
-    kprintf("[INIT] Opening %s...", init_buffer);
+    kprintf("INIT: Opening %s...", init_buffer);
     fd_t* elf_task = open_file(init_buffer);
     if(!elf_task) {vga_text_failmsg(); fatal_kernel_error("Could not open init process file", "INIT_RUN");}
     else vga_text_okmsg();
 
+    //create init process in tty1
     process_t* init_process = create_process(elf_task, 0, 0, tty1);
     if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
 
@@ -186,8 +187,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
     kfree(init_buffer);
     close_file(init_file);
-
-    kprintf("[INIT] Init task loaded in memory at 0x%X\n", init_process->eip);
 
     //switching video output to tty1
     vga_text_tty_switch(current_tty);

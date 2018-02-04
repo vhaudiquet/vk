@@ -107,8 +107,9 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
     elf_program_header_t* prg_h = (elf_program_header_t*) (buffer + header->program_header_table);
     for(u32 i = 0; i < header->ph_entry_nbr; i++)
     {
-        if((u32) prg_h+i > (u32) buffer+flength(file)) return 0;
-        if(prg_h[i].p_memsz == 0) continue;
+        if((u32) prg_h+i > (u32) buffer+flength(file)) return 0; //if we reach the end of the file before than we should, error
+        if(!prg_h[i].segment_type) continue; //ignore segment if type is null
+        if(!prg_h[i].p_memsz) continue; //ignore segment if memsz is null
 
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);
         
