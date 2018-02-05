@@ -71,7 +71,7 @@ typedef struct EXT2_SUPERBLOCK
 typedef struct EXT2_BLOCK_GROUP_DESCRIPTOR
 {
     u32 block_address_block_usage; //of block usage bitmap
-    u32 block_adress_inode_usage; //of inode usage bitmap
+    u32 block_address_inode_usage; //of inode usage bitmap
     u32 starting_block_adress; //of inode table
     u16 unallocated_blocks;
     u16 unallocated_inodes;
@@ -130,6 +130,10 @@ static u32 ext2_block_alloc(file_system_t* fs);
 static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir);
 static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len);
 static void ext2_inode_write(ext2_inode_descriptor_t* inode, file_system_t* fs);
+static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir);
+static u32 ext2_inode_alloc(file_system_t* fs);
+static void ext2_inode_free(u32 inode, file_system_t* fs);
+static void ext2_bitmap_mark_bit_free(u8* bitmap, u32 bit);
 
 /*
 * Init an ext2 filesystem on a volume
@@ -269,6 +273,104 @@ u8 ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname
 {
     u32 inode = ((ext2_inode_descriptor_t*)((uintptr_t)file->fsdisk_loc))->inode_number;
     return ext2_create_dirent(inode, newname, newdir);
+}
+
+u8 ext2fs_unlink(file_descriptor_t* file)
+{
+    ext2_inode_descriptor_t* inode_desc = ((ext2_inode_descriptor_t*)((uintptr_t)file->fsdisk_loc));
+    ext2_inode_t* inode = &inode_desc->inode;
+
+    if(!ext2_remove_dirent(file->name, file->parent_directory)) return 0;
+
+    inode->hard_links--;
+    if(!inode->hard_links)
+    {
+        ext2_inode_free(inode_desc->inode_number, file->file_system);
+    }
+    else ext2_inode_write(inode_desc, file->file_system);
+
+    return 1;
+}
+
+file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor_t* dir)
+{
+    file_system_t* fs = dir->file_system;
+
+    u32 inode_nbr = ext2_inode_alloc(fs);
+    ext2_inode_t inode;
+    
+    //setting type and permissions
+    inode.type_and_permissions = 0;
+    if(attributes | FILE_ATTR_DIR) inode.type_and_permissions |= 0x4000;
+    else inode.type_and_permissions |= 0x8000;
+
+    //set user_id/permissions
+    inode.user_id = 0;
+    inode.group_id = 0;
+    
+    //set inode time
+    time_t current_time = get_current_time_utc();
+    inode.last_access_time = (int32_t) current_time;
+    inode.creation_time = (int32_t) current_time;
+    inode.last_access_time = (int32_t) current_time;
+    inode.deletion_time = 0;
+
+    //set inode size
+    inode.size_low = 0;
+
+    //set hard links
+    inode.hard_links = 1;
+
+    //TODO: set inode used disk sectors
+    inode.used_disk_sectors = 0;
+
+    //set inode flags
+    inode.flags = 0;
+
+    //set os specific values
+    inode.os_specific_1 = 0;
+    memset(inode.os_specific_2, 0, 12);
+
+    //set block pointers
+    u32 i = 0;
+    for(;i<12;i++)
+    {
+        inode.direct_block_pointers[i] = 0;
+    }
+    inode.singly_indirect_block_pointer = 0;
+    inode.doubly_indirect_block_pointer = 0;
+    inode.triply_indirect_block_pointer = 0;
+
+    //TODO : set generation number ?
+    inode.generation_number = 0;
+
+    //set extended attributes
+    inode.extended_attributes = 0;
+    inode.directory_acl = 0;
+
+    //TODO: set fragment block adress ?
+    inode.fragment_block_adress = 0;
+
+    //get inode desc
+    ext2_inode_descriptor_t inode_desc;
+    inode_desc.inode_number = inode_nbr;
+    inode_desc.inode = inode;
+
+    //TODO: maybe cache inode
+    ext2_inode_write(&inode_desc, fs);
+
+    //create dirent
+    ext2_create_dirent(inode_nbr, name, dir);
+
+    ext2_dirent_t dirent;
+    dirent.inode = inode_nbr;
+    dirent.name_len = (u8) strlen(name);
+    strcpy((char*) dirent.name, name); 
+
+    file_descriptor_t* tr = kmalloc(sizeof(file_descriptor_t));
+    ext2_get_fd(tr, &dirent,dir, fs);
+
+    return tr;
 }
 
 /*
@@ -740,6 +842,82 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
 }
 
 /*
+* Allocates a new inode
+*/
+static u32 ext2_inode_alloc(file_system_t* fs)
+{
+    ext2fs_specific_t* ext2 = fs->specific;
+
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+
+    u32 i = 0;
+    for(;i<ext2->blockgroup_count;i++)
+    {
+        //read bg_desc of blockgroup i
+        ext2_block_group_descriptor_t bg_desc;
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table),  i*sizeof(ext2_block_group_descriptor_t),
+        (u8*) &bg_desc, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+        //read inode bitmap of blockgroup i
+        u8* bitmap_buffer = kmalloc(ext2->block_size);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg_desc.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+        //find first free bit of bitmap
+        u32 first_zero_bit = ext2_bitmap_mark_first_zero_bit(bitmap_buffer, ext2->block_size);
+        if(first_zero_bit == ((u32)-1)) {kfree(bitmap_buffer); continue;} //this blockgroup has no free inode
+
+        //rewrite marked bitmap on disk
+        block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg_desc.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+        
+        //calculate inode to return
+        u32 inode = i*ext2->superblock->inodes_per_blockgroup + first_zero_bit + 1;
+
+        //update bg_desc and rewrite it
+        bg_desc.unallocated_inodes--;
+        block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table),  i*sizeof(ext2_block_group_descriptor_t),
+        (u8*) &bg_desc, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+        //update superblock and rewrite it
+        ext2->superblock->unallocated_inodes--;
+        block_write_flexible(ext2->superblock_offset+2, 0,
+        (u8*) ext2->superblock, sizeof(ext2_superblock_t), fs->drive);
+
+        //return the free block that we have marked
+        return inode;
+    }
+
+    return 0;
+}
+
+static void ext2_inode_free(u32 inode, file_system_t* fs)
+{
+    ext2fs_specific_t* ext2 = fs->specific;
+
+    //calculating inode block group
+    u32 inodes_per_blockgroup = ext2->superblock->inodes_per_blockgroup;
+    u32 inode_block_group = (inode - 1) / inodes_per_blockgroup;
+
+    //calculating block_group_descriptor offset
+    u32 bg_read_offset = inode_block_group*sizeof(ext2_block_group_descriptor_t);
+
+    //reading block group descriptor
+    ext2_block_group_descriptor_t inode_bg;
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+    //reading inode bitmap
+    u8* bitmap_buffer = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+    //marking bit free in bitmap
+    u32 bit_to_mark = inode - 1 - inode_block_group*ext2->superblock->inodes_per_blockgroup;
+    ext2_bitmap_mark_bit_free(bitmap_buffer, bit_to_mark);
+
+    //rewrite marked bitmap on disk
+    block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+}
+
+/*
 * Allocates a new block
 */
 static u32 ext2_block_alloc(file_system_t* fs)
@@ -810,6 +988,13 @@ static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len)
     return ((u32)-1);
 }
 
+static void ext2_bitmap_mark_bit_free(u8* bitmap, u32 bit)
+{
+    u32 byte = bit/8;
+    u32 inbit = bit%8;
+    *(bitmap+byte) &= (0 << inbit);
+}
+
 static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
 {
     file_system_t* fs = dir->file_system;
@@ -830,7 +1015,7 @@ static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
     u64 length = dir->length;
 
     u8* dirent_buffer = kmalloc((u32) length);
-    if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) return 0;
+    if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) {kfree(dirent_buffer); return 0;}
     
     u32 offset = 0;
     while(length)
@@ -846,6 +1031,40 @@ static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
 
     //write the dirent
     if(ext2_inode_write_content(dir_inode_desc, fs, offset, towrite.size, (u8*) &towrite)) return 0;
+
+    return 1;
+}
+
+static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir)
+{
+    file_system_t* fs = dir->file_system;
+
+    ext2_inode_descriptor_t* dir_inode_desc = ((ext2_inode_descriptor_t*) ((uintptr_t) dir->fsdisk_loc));
+    ext2_inode_t* dir_inode = &dir_inode_desc->inode;
+
+    //read the directory to determine offset to remove dirent
+    u64 length = dir->length;
+
+    u8* dirent_buffer = kmalloc((u32) length);
+    if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) {kfree(dirent_buffer); return 0;}
+    
+    u32 offset = 0;
+    while(length)
+    {
+        ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
+        
+        u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
+
+        if(!strcmp((char*) dirent->name, name)) {memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-((u32)8+name_len_real));}
+
+        offset += (u32)(8+name_len_real);
+        length -= (u32)(8+name_len_real);
+    }
+
+    //rewrite the buffer
+    if(ext2_inode_write_content(dir_inode_desc, fs, offset, (u32) dir->length, (u8*) dirent_buffer)) {kfree(dirent_buffer); return 0;}
+
+    kfree(dirent_buffer);
 
     return 1;
 }

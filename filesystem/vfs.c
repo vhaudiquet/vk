@@ -346,12 +346,17 @@ fd_t* create_file(u8* name, u8 attributes, fd_t* dir)
     {
         case FS_TYPE_FAT32:
             tr = fat32fs_create_file(name, attributes, dir->file);
+            break;
+        case FS_TYPE_EXT2:
+            tr = ext2fs_create_file((char*) name, attributes, dir->file);
+            break;
     }
     if(!tr) return 0;
+    file_descriptor_t* cached = cache_file(tr);
     fd_t* trf = kmalloc(sizeof(fd_t));
-    trf->file = tr;
+    trf->file = cached;
     trf->offset = 0;
-    return trf;
+	return trf;
 }
 
 bool unlink(char* path)
@@ -374,6 +379,9 @@ bool unlink(char* path)
     {
         case FS_TYPE_FAT32:
             tr = fat32fs_delete_file(file->file);
+            break;
+        case FS_TYPE_EXT2:
+            tr = ext2fs_unlink(file->file);
             break;
     }
 

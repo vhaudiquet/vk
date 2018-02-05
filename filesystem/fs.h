@@ -129,6 +129,8 @@ list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
 u8 ext2fs_read_file(fd_t* file, void* buffer, u64 count);
 u8 ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
 u8 ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname);
+u8 ext2fs_unlink(file_descriptor_t* file);
+file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor_t* dir);
 
 //DEVFS specific
 #define DEVFS_TYPE_DIRECTORY 1
