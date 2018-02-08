@@ -45,16 +45,27 @@ typedef struct PROCESS
     //location of all elf data segments in memory (to free them on exit_process)
     list_entry_t* data_loc;
     u32 data_size;
+    //heap
+    u32 heap_addr;
+    u32 heap_size;
     //tty of the process
     tty_t* tty;
     //files opened by the process
     fd_t** files;
     u32 files_size;
     u32 files_count;
+    //pid
+    u32 pid;
 } process_t;
 
+void process_init();
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
 void exit_process(process_t* process);
+u32 sbrk(process_t* process, u32 incr);
+
+extern process_t** processes;
+extern u32 processes_size;
+
 extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();

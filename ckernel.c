@@ -61,6 +61,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     pci_install(); //Setup PCI devices
     install_block_devices(); //Setup block devices (ATA, ATAPI,...)
 
+    process_init(); //Init process array
     scheduler_init(); //Init scheduler
     init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
     scheduler_add_process(init_idle_process()); //Add idle_process to the queue, so that if there is no process the kernel don't crash

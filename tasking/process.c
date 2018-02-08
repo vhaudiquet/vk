@@ -25,8 +25,18 @@
 * Implementation of PROCESS, used by the scheduler
 */
 
+#define PROCESSES_ARRAY_SIZE 20
+process_t** processes = 0;
+u32 processes_size = 0;
+
 process_t* kernel_process = 0;
 process_t* idle_process = 0;
+
+void process_init()
+{
+    processes_size = PROCESSES_ARRAY_SIZE;
+    processes = kmalloc(processes_size);
+}
 
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 {
@@ -124,6 +134,18 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->files[2] = tty->pointer;
     tr->files_count = 3;
 
+    //set process heap
+    //for now we decide that the last mem segment will be the start of the heap (cause it's easier and i'm lazy)
+    list_entry_t* ptr = data_loc;
+    u32 dsize = data_size-1;
+    while(dsize)
+    {
+        ptr = ptr->next;
+        dsize--;
+    }
+    tr->heap_addr = ((u32*)ptr->element)[0]+((u32*)ptr->element)[1];
+    tr->heap_size = 0;
+
     //process kernel stack
     void* kstack = 
     #ifdef MEMLEAK_DBG
@@ -134,6 +156,20 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->kesp = ((u32) kstack) + 8191;
 
     tr->base_kstack = (u32) kstack;
+
+    //register process in process list
+    u32 j = 0;
+    for(;j<processes_size;j++)
+    {
+        if(!processes[j]) {processes[j] = tr; tr->pid = j;}
+    }
+
+    if(!tr->pid)
+    {
+        processes_size*=2;
+        processes = krealloc(processes, processes_size);
+        processes[j+1] = tr; tr->pid = (j+1);
+    }
 
     return tr;
 }
@@ -162,14 +198,25 @@ void exit_process(process_t* process)
 
     //remove process from schedulers
     scheduler_remove_process(process);
+
+    //remove process from array
+    processes[process->pid] = 0;
+
+    //free process struct
+    kfree(process);
 }
 
-/*
 u32 sbrk(process_t* process, u32 incr)
 {
-
+    u32 new_last_addr = process->heap_addr+process->heap_size+incr;
+    if(!is_mapped(new_last_addr, process->page_directory))
+    {
+        //TODO : Change that, it can actually cause a kernel panic (if the miss of mapped memory is after)
+        map_memory(incr, process->heap_addr+process->heap_size, process->page_directory);        
+    }
+    process->heap_size += incr;
+    return process->heap_addr+process->heap_size;
 }
-*/
 
 extern void idle_loop();
 asm(".global idle_loop\n \

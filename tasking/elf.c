@@ -56,6 +56,20 @@ typedef struct elf_program_header
     u32 align;
 } elf_program_header_t;
 
+typedef struct elf_section_header
+{
+    u32 name;
+    u32 type;
+    u32 flags;
+    u32 addr;
+    u32 offset;
+    u32 size;
+    u32 link;
+    u32 info;
+    u32 align;
+    u32 ent_size;
+} elf_section_header_t;
+
 bool elf_check(fd_t* file)
 {
     //ignoring offset
@@ -108,7 +122,7 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
     for(u32 i = 0; i < header->ph_entry_nbr; i++)
     {
         if((u32) prg_h+i > (u32) buffer+flength(file)) return 0; //if we reach the end of the file before than we should, error
-        if(!prg_h[i].segment_type) continue; //ignore segment if type is null
+        if(prg_h[i].segment_type != 1) continue; //ignore segment if type is not 1 (0 = null, 2 = dynamic, 3 = interpreted, 4 = notes)
         if(!prg_h[i].p_memsz) continue; //ignore segment if memsz is null
 
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);

@@ -17,6 +17,7 @@
 
 #include "../system.h"
 #include "error/error.h"
+#include "tasking/task.h"
 #include "mem.h"
 
 /*
@@ -207,10 +208,16 @@ static void kheap_expand()
 {
     if(KHEAP_BASE_END >= FREE_KVM_START) fatal_kernel_error("Kernel heap full ! How ?", "KHEAP_EXPAND");
     
-    //TODO : we need to EXPAND heap in ALL CURRENT PAGES DIRS (all processes page dirs)
-    //or we handle that in PF ? (if page fault but kernel page mapped, map ?)
+    //we need to EXPAND heap in ALL CURRENT PAGES DIRS (all processes page dirs)
+    //todo : check if we can handle that in PF ? (if page fault but kernel page mapped, map ?)
     //anyway we will need a spinlock on that too (lock kernelpagedir or something like that)
     map_memory(0x400000, KHEAP_BASE_END, kernel_page_directory);
+    u32 i = 0;
+    for(;i<processes_size;i++)
+    {
+        process_t* process = processes[i];
+        map_memory(0x400000, KHEAP_BASE_END, process->page_directory);
+    }
 
     block_header_t* base_block = (block_header_t*) KHEAP_BASE_END;
     base_block->magic = BLOCK_HEADER_MAGIC;

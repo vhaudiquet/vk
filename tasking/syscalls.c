@@ -116,7 +116,14 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //8:Syscall SEEK
         case 8:
         {
-            //TODO : Seek
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
+            u32 offset = ecx;
+            u32 whence = edx;
+            if(whence == 0) current_process->files[ebx]->offset = offset; //SEEK_SET
+            else if(whence == 1) current_process->files[ebx]->offset += offset; //SEEK_CUR
+            else if(whence == 2) current_process->files[ebx]->offset = flength(current_process->files[ebx])+offset; //SEEK_END
+            
+            asm("mov %0, %%eax"::"g"((u32) current_process->files[ebx]->offset));
             break;
         }
         //9:Syscall STAT
@@ -149,12 +156,14 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //17:Syscall SBRK
         case 17:
         {
-            
+            u32 tr = sbrk(current_process, ebx);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //18:Syscall GETPID
         case 18:
         {
+            asm("mov %0, %%eax"::"g"(current_process->pid));
             break;
         }
         //19:Syscall KILL
