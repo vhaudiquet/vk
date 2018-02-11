@@ -66,8 +66,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
             
-            u8 tr = read_file(current_process->files[ebx], (void*) ecx, edx);
-            asm("mov %0, %%eax"::"g"((u32) tr));
+            error_t tr = read_file(current_process->files[ebx], (void*) ecx, edx);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //4:Syscall WRITE
@@ -75,8 +75,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         {
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
-            u8 tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
-            asm("mov %0, %%eax"::"g"((u32) tr));
+            error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //5:Syscall RENAME

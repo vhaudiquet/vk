@@ -37,20 +37,20 @@ void install_block_devices()
     vga_text_okmsg();
 }
 
-u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
+error_t block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
 {
     if(drive->device_type == ATA_DEVICE)
     {
         return ata_read_flexible(sector, offset, data, count, drive->device_struct);
     }
-    return DISK_FAIL_INTERNAL;
+    return ERROR_DISK_INTERNAL;
 }
 
-u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
+error_t block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive)
 {
     if(drive->device_type == ATA_DEVICE)
     {
         return ata_write_flexible(sector, offset, data, count, (ata_device_t*) drive->device_struct);
     }
-    return DISK_FAIL_INTERNAL;
+    return ERROR_DISK_INTERNAL;
 }

@@ -111,7 +111,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 
 	//select drive
     outb(DEVICE_PORT(current), 0xA0); //always master there, to see if there is a device on the cable or not
-	u8 status = inb(COMMAND_PORT(current));
+	error_t status = inb(COMMAND_PORT(current));
 	if(status == 0xFF)
 	{
 		return 0; //no device found
@@ -141,7 +141,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	status = ata_pio_poll_status(current);
 
     //if error, check if drive is atapi, or return
-	if(status & 0x01)
+	if(status != ERROR_NONE)
 	{
 		u8 t0 = inb(LBA_MID_PORT(current));
 		u8 t1 = inb(LBA_HI_PORT(current));
@@ -156,7 +156,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
             }
             //wait for drive busy/drive error
             status = ata_pio_poll_status((ata_device_t*) current);
-            if(status & 0x01)
+            if(status != ERROR_NONE)
             {
                 return 0;
             }
@@ -251,7 +251,7 @@ void ata_io_wait(ata_device_t* drive)
     inb(CONTROL_PORT(drive));
 }
 
-u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
     if(drive->flags & ATA_FLAG_ATAPI)
     {
@@ -260,7 +260,7 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 		sector += offset/ATAPI_SECTOR_SIZE;
 		offset %= ATAPI_SECTOR_SIZE;
 
-        u8 err = DISK_SUCCESS;
+        error_t err = ERROR_NONE;
 		u32 a = 0; u32 as = 0;
 		while(count > 31*ATAPI_SECTOR_SIZE)
 		{
@@ -269,7 +269,7 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
 			a += 31*ATAPI_SECTOR_SIZE;
 			as += 31;
 			offset = 0;
-			if(err != DISK_SUCCESS) return err;
+			if(err != ERROR_NONE) return err;
 		}
 		return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
     }
@@ -282,7 +282,7 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
         
 		if(!scheduler_started)
         {
-            u8 err = DISK_SUCCESS;
+            error_t err = ERROR_NONE;
             u32 a = 0; u32 as = 0;
             while(count > 255*BYTES_PER_SECTOR)
             {
@@ -291,13 +291,13 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
                 a += 255*BYTES_PER_SECTOR;
                 as += 255;
                 offset = 0;
-                if(err != DISK_SUCCESS) return err;
+                if(err != ERROR_NONE) return err;
             }
             return ata_pio_read_flexible(sector+as, offset, data+a, count, drive);
         }
         else
         {
-            u8 err = DISK_SUCCESS;
+            error_t err = ERROR_NONE;
             u32 a = 0; u32 as = 0;
             while(count > 127*BYTES_PER_SECTOR)
             {
@@ -306,18 +306,18 @@ u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* 
                 a += 127*BYTES_PER_SECTOR;
                 as += 127;
                 offset = 0;
-                if(err != DISK_SUCCESS) return err;
+                if(err != ERROR_NONE) return err;
             }
             return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
         }
     }
 }
 
-u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+error_t ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
     if(drive->flags & ATA_FLAG_ATAPI)
     {
-        return DISK_FAIL_INTERNAL;
+        return ERROR_DISK_INTERNAL;
     }
     else
     {
@@ -326,7 +326,7 @@ u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t*
 
         if(!scheduler_started)
         {
-            u8 err = DISK_SUCCESS;
+            error_t err = ERROR_NONE;
             u32 a = 0; u32 as = 0;
             while(count > 255*BYTES_PER_SECTOR)
             {
@@ -335,13 +335,13 @@ u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t*
                 a += 255*BYTES_PER_SECTOR;
                 as += 255;
                 offset = 0;
-                if(err != DISK_SUCCESS) return err;
+                if(err != ERROR_NONE) return err;
             }
             return ata_pio_write_flexible(sector+as, offset, data+a, count, drive);
         }
         else
         {
-            u8 err = DISK_SUCCESS;
+            error_t err = ERROR_NONE;
             u32 a = 0; u32 as = 0;
             while(count > 127*BYTES_PER_SECTOR)
             {
@@ -350,7 +350,7 @@ u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t*
                 a += 127*BYTES_PER_SECTOR;
                 as += 127;
                 offset = 0;
-                if(err != DISK_SUCCESS) return err;
+                if(err != ERROR_NONE) return err;
             }
             return ata_dma_write_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
         }

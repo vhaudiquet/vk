@@ -28,9 +28,9 @@ typedef struct PRD
     u16 reserved;
 } __attribute__((packed)) prd_t;
 
-u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
-    if(!count) return DISK_SUCCESS;
+    if(!count) return ERROR_NONE;
 
     u32 bps = ((drive->flags & ATA_FLAG_ATAPI) ? ATAPI_SECTOR_SIZE : BYTES_PER_SECTOR);
 
@@ -38,8 +38,8 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
     u32 scount = count / bps;
     if(count % bps) scount++;
     
-    if(scount > 127) return DISK_FAIL_INTERNAL;
-    if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return DISK_FAIL_INTERNAL;
+    if(scount > 127) return ERROR_DISK_INTERNAL;
+    if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return ERROR_DISK_INTERNAL;
 
     /*prepare a PRDT (Physical Region Descriptor Table)*/
     //PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary,  1 per ATA bus
@@ -66,18 +66,18 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
 
     if(drive->flags & ATA_FLAG_ATAPI)
     {
-        if(sector & 0xF0000000) return DISK_FAIL_OUT;
-        if(atapi_cmd_dma_read_28((u32) sector, drive) != DISK_SUCCESS) return DISK_FAIL_BUSY;
+        if(sector & 0xF0000000) return ERROR_DISK_OUT;
+        if(atapi_cmd_dma_read_28((u32) sector, drive) != ERROR_NONE) return ERROR_DISK_BUSY;
     }
     else if(sector > U32_MAX)
     {
-        if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
-        if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+        if(!(drive->flags & ATA_FLAG_LBA48)) return ERROR_DISK_OUT;
+        if(sector & 0xFFFF000000000000) return ERROR_DISK_OUT;
         ata_cmd_48(sector, scount, ATA_CMD_DMA_READ_48, drive);
     }
     else
     {
-        if(sector & 0xF0000000) return DISK_FAIL_OUT;
+        if(sector & 0xF0000000) return ERROR_DISK_OUT;
         ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_DMA_READ_28, drive);        
     }
 
@@ -103,16 +103,16 @@ u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device
     unmap_flexible(sizeof(prd_t)+scount*512, virtual, kernel_page_directory);
     kvm_free_block(virtual);
 
-    if(!(end_status & 5)) return DISK_FAIL_INTERNAL;
-    if(end_status & 2) return DISK_FAIL_INTERNAL;
-    if(end_disk_status & 1) return DISK_FAIL_INTERNAL;
+    if(!(end_status & 5)) return ERROR_DISK_INTERNAL;
+    if(end_status & 2) return ERROR_DISK_INTERNAL;
+    if(end_disk_status & 1) return ERROR_DISK_INTERNAL;
 
-    return DISK_SUCCESS;
+    return ERROR_NONE;
 }
 
-u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
+error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
-    if(!count) return DISK_SUCCESS;
+    if(!count) return ERROR_NONE;
     
     //calculate sector count
     u32 scount = (u32)(count / BYTES_PER_SECTOR);
@@ -174,13 +174,13 @@ u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_devic
 
     if(sector > U32_MAX)
     {
-        if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
-        if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+        if(!(drive->flags & ATA_FLAG_LBA48)) return ERROR_DISK_OUT;
+        if(sector & 0xFFFF000000000000) return ERROR_DISK_OUT;
         ata_cmd_48(sector, scount, ATA_CMD_DMA_WRITE_48, drive);
     }
     else
     {
-        if(sector & 0xF0000000) return DISK_FAIL_OUT;
+        if(sector & 0xF0000000) return ERROR_DISK_OUT;
         ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_DMA_WRITE_28, drive);        
     }
 
@@ -205,9 +205,9 @@ u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_devic
     
     free_block(prdt_phys);
 
-    if(!(end_status & 5)) return DISK_FAIL_INTERNAL;
-    if(end_status & 2) return DISK_FAIL_INTERNAL;
-    if(end_disk_status & 1) return DISK_FAIL_INTERNAL;
+    if(!(end_status & 5)) return ERROR_DISK_INTERNAL;
+    if(end_status & 2) return ERROR_DISK_INTERNAL;
+    if(end_disk_status & 1) return ERROR_DISK_INTERNAL;
 
-    return DISK_SUCCESS;
+    return ERROR_NONE;
 }

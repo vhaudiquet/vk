@@ -124,8 +124,8 @@ typedef struct EXT2_INODE_DESCRIPTOR
 #define BLOCK_OFFSET(block) ((block)*(ext2->block_size/512))
 static ext2_inode_descriptor_t* ext2_inode_read(u32 inode, file_system_t* fs);
 static void ext2_get_fd(file_descriptor_t* dest, ext2_dirent_t* dirent, file_descriptor_t* parent, file_system_t* fs);
-static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer);
-static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_system_t* fs, u32 offset, u32 size, u8* buffer);
+static error_t ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer);
+static error_t ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_system_t* fs, u32 offset, u32 size, u8* buffer);
 static u32 ext2_block_alloc(file_system_t* fs);
 static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir);
 static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len);
@@ -249,22 +249,22 @@ list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size)
 
 /*
 * Reads a file from an ext2 fs
-* Returns 0 if it went well, 1 instead
+* Returns ERROR_NONE if it went well, errno instead
 */
-u8 ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
+error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
-    if(count > U32_MAX) return 1;
+    if(count > U32_MAX) return ERROR_FILE_OUT;
     ext2_inode_t* inode = &((ext2_inode_descriptor_t*)((uintptr_t)fd->file->fsdisk_loc))->inode;
     return ext2_inode_read_content(inode, fd->file->file_system, (u32) fd->offset, (u32) count, buffer);
 }
 
 /*
 * Write a file to an ext2 fs
-* Returns 0 if it went well, 1 instead
+* Returns ERROR_NONE if it went well, errno instead
 */
-u8 ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
+error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
 {
-    if(count > U32_MAX) return 1;
+    if(count > U32_MAX) return ERROR_FILE_OUT;
     ext2_inode_descriptor_t* inode = (ext2_inode_descriptor_t*)((uintptr_t)fd->file->fsdisk_loc);
     return ext2_inode_write_content(inode, fd->file->file_system, (u32) fd->offset, (u32) count, buffer);
 }
@@ -374,10 +374,10 @@ file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor
 
 /*
 * Read the content of an inode (the direct and indirect blocks)
-* Returns 0 if it went well, 1 instead
+* Returns ERROR_NONE if it went well, errno instead
 * TODO: Optimisations
 */
-static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer)
+static error_t ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer)
 {
     ext2fs_specific_t* ext2 = fs->specific;
 
@@ -390,7 +390,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
     }
 
     //checking size conflicts
-    if(size+offset > inode_size) return 1;
+    if(size+offset > inode_size) return ERROR_FILE_OUT;
 
     u32 currentloc = 0;
 
@@ -406,7 +406,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         if(!inode->direct_block_pointers[i]) 
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (direct block pointer %u ->0)\n", 0b00000110, i);
-            return 1;
+            return ERROR_FILE_CORRUPTED_FS;
         }
 
         block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
@@ -417,7 +417,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
 
-        if(!size) return 0;
+        if(!size) return ERROR_NONE;
     }
 
     //resetting block counter
@@ -427,7 +427,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
     if(!inode->singly_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->0)\n", 0b00000110);
-        return 1;
+        return ERROR_FILE_CORRUPTED_FS;
     }
     u32* singly_indirect_block = kmalloc(ext2->block_size);
     block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
@@ -439,7 +439,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->direct block pointer->0)\n", 0b00000110);
             kfree(singly_indirect_block);
-            return 1;
+            return ERROR_FILE_CORRUPTED_FS;
         }
 
         block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
@@ -450,7 +450,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
             
-        if(!size) {kfree(singly_indirect_block); return 0;}
+        if(!size) {kfree(singly_indirect_block); return ERROR_NONE;}
     }
         
     kfree(singly_indirect_block);
@@ -462,7 +462,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
     if(!inode->doubly_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->0)\n", 0b00000110);
-        return 1;
+        return ERROR_FILE_CORRUPTED_FS;
     }
     u32* doubly_indirect_block = kmalloc(ext2->block_size);
     block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
@@ -475,7 +475,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->singly indirect pointer->0)\n", 0b00000110);
             kfree(doubly_indirect_block);
-            return 1;
+            return ERROR_FILE_CORRUPTED_FS;
         }
         u32* sib = kmalloc(ext2->block_size);
         block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
@@ -487,7 +487,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             {
                 kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly->singly->direct->0)\n", 0b00000110);
                 kfree(sib); kfree(doubly_indirect_block);
-                return 1;
+                return ERROR_FILE_CORRUPTED_FS;
             }
 
             block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
@@ -498,7 +498,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             if(size >= ext2->block_size) size -= ext2->block_size;
             else size = 0;
             
-            if(!size) {kfree(sib); kfree(doubly_indirect_block); return 0;}
+            if(!size) {kfree(sib); kfree(doubly_indirect_block); return ERROR_NONE;}
         }
 
         kfree(sib);
@@ -512,7 +512,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
     if(!inode->triply_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->0)\n", 0b00000110);
-        return 1;
+        return ERROR_FILE_CORRUPTED_FS;
     }
     u32* triply_indirect_block = kmalloc(ext2->block_size);
     block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
@@ -524,7 +524,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->doubly indirect pointer->0)\n", 0b00000110);
             kfree(triply_indirect_block);
-            return 1;
+            return ERROR_FILE_CORRUPTED_FS;
         }
         u32* dib = kmalloc(ext2->block_size);
         block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
@@ -536,7 +536,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
             {
                 kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->0)\n", 0b00000110);
                 kfree(triply_indirect_block); kfree(dib);
-                return 1;
+                return ERROR_FILE_CORRUPTED_FS;
             }
             u32* sib = kmalloc(ext2->block_size);
             block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
@@ -548,7 +548,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
                 {
                     kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->direct->0)\n", 0b00000110);
                     kfree(sib); kfree(dib); kfree(triply_indirect_block);
-                    return 1;
+                    return ERROR_FILE_CORRUPTED_FS;
                 }
 
                 block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
@@ -559,7 +559,7 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
                 if(size >= ext2->block_size) size -= ext2->block_size;
                 else size = 0;
             
-                if(!size) {kfree(sib); kfree(dib); kfree(triply_indirect_block); return 0;}
+                if(!size) {kfree(sib); kfree(dib); kfree(triply_indirect_block); return ERROR_NONE;}
             }
 
             kfree(sib);
@@ -572,16 +572,16 @@ static u8 ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 of
 
     kfree(triply_indirect_block);
 
-    return 0;
+    return ERROR_NONE;
 }
 
 /*
 * Write the content of an inode (the direct and indirect blocks)
-* Returns 0 if it went well, 1 instead
+* Returns ERROR_NONE if it went well, errno instead
 */
-static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_system_t* fs, u32 offset, u32 size, u8* buffer)
+static error_t ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_system_t* fs, u32 offset, u32 size, u8* buffer)
 {
-    if(fs->flags & FS_FLAG_READ_ONLY) return 1;
+    if(fs->flags & FS_FLAG_READ_ONLY) return ERROR_FILE_SYSTEM_READ_ONLY;
     ext2fs_specific_t* ext2 = fs->specific;
     ext2_inode_t* inode = &inode_desc->inode;
 
@@ -597,7 +597,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
     if(size + offset > inode_size) inode->size_low = (size+offset);
 
     //checking offsets conflicts
-    if(offset > inode_size) return 1;
+    if(offset > inode_size) return ERROR_FILE_OUT;
 
     //processing offset to get first block to write
     u32 first_block = 0;
@@ -629,7 +629,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
         {
             //rewrite inode
             ext2_inode_write(inode_desc, fs);
-            return 0;
+            return ERROR_NONE;
         }
     }
 
@@ -672,7 +672,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
             kfree(singly_indirect_block); 
             //rewrite inode
             ext2_inode_write(inode_desc, fs);
-            return 0;
+            return ERROR_NONE;
         }
     }
     
@@ -734,7 +734,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
                 block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
                 //rewrite inode
                 ext2_inode_write(inode_desc, fs);
-                kfree(sib); kfree(doubly_indirect_block); return 0;
+                kfree(sib); kfree(doubly_indirect_block); return ERROR_NONE;
             }
         }
 
@@ -815,7 +815,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
                     //rewrite inode
                     ext2_inode_write(inode_desc, fs);
                     kfree(sib); kfree(dib); kfree(triply_indirect_block); 
-                    return 0;
+                    return ERROR_NONE;
                 }
             }
 
@@ -840,7 +840,7 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
     //rewrite inode
     ext2_inode_write(inode_desc, fs);
 
-    return 0;
+    return ERROR_NONE;
 }
 
 /*

@@ -168,7 +168,7 @@ list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
     #endif
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
-    if(block_read_flexible(lba, 0, dirent_data, length, fs->drive) != DISK_SUCCESS)
+    if(block_read_flexible(lba, 0, dirent_data, length, fs->drive) != ERROR_NONE)
         return 0;
     
     list_entry_t* tr = 
@@ -263,7 +263,7 @@ u8 iso9660fs_read_file(fd_t* fd, void* buffer, u64 count)
 
     while(offset > 2048) {offset -= 2048; lba++;}
 
-    if(block_read_flexible(lba, (u32) offset, buffer, count, fs->drive) != DISK_SUCCESS)
+    if(block_read_flexible(lba, (u32) offset, buffer, count, fs->drive) != ERROR_NONE)
         return 1;
     
     return 0;

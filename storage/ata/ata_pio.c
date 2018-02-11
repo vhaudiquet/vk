@@ -23,33 +23,33 @@
 #include "../storage.h"
 #include "memory/mem.h"
 
-u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+error_t ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
-	if(!count) return DISK_SUCCESS;
+	if(!count) return ERROR_NONE;
 
 	//calculate sector count
 	u32 scount = (u32) (count / BYTES_PER_SECTOR);
 	if(count % BYTES_PER_SECTOR) scount++;
 
-	if(scount > 255) return DISK_FAIL_INTERNAL;
+	if(scount > 255) return ERROR_DISK_INTERNAL;
 
 	if(sector > U32_MAX)
 	{
-		if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
+		if(!(drive->flags & ATA_FLAG_LBA48)) return ERROR_DISK_OUT;
 		//verify that sector is really 48-bits integer
-		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+		if(sector & 0xFFFF000000000000) return ERROR_DISK_OUT;
 		ata_cmd_48(sector, scount, ATA_CMD_PIO_READ_MULTIPLE_48, drive);
 	}
 	else
 	{
 		//verify that sector is really a 28-bits integer
-		if(sector & 0xF0000000) return DISK_FAIL_OUT;
+		if(sector & 0xF0000000) return ERROR_DISK_OUT;
 		ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_PIO_READ_MULTIPLE_28, drive);
 	}
 
 	//wait for drive to be ready
-	u8 status = ata_pio_poll_status(drive);
-	if(status & 0x1) return DISK_FAIL_BUSY;
+	error_t status = ata_pio_poll_status(drive);
+	if(status != ERROR_NONE) return status;
 
 	//actually read the data
 	u32 data_read = 0;
@@ -68,8 +68,8 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 		data_read+=2;
 		if(!(data_read % (512*2)))
 		{
-			u8 status = ata_pio_poll_status(drive);
-			if(status & 0x1) return DISK_FAIL_BUSY;
+			error_t status = ata_pio_poll_status(drive);
+			if(status != ERROR_NONE) return status;
 		}
 	}
 
@@ -80,10 +80,10 @@ u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device
 		data_read+=2;
 	}
 
-	return DISK_SUCCESS;
+	return ERROR_NONE;
 }
 
-u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
+error_t ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive)
 {
 	//calculate sector count
 	u32 scount = (u32)(count / BYTES_PER_SECTOR);
@@ -118,14 +118,14 @@ u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 
 	if(sector > U32_MAX)
 	{
-		if(!(drive->flags & ATA_FLAG_LBA48)) return DISK_FAIL_OUT;
+		if(!(drive->flags & ATA_FLAG_LBA48)) return ERROR_DISK_OUT;
 		//verify that sector is really a 48-bits integer
-		if(sector & 0xFFFF000000000000) return DISK_FAIL_OUT;
+		if(sector & 0xFFFF000000000000) return ERROR_DISK_OUT;
 		ata_cmd_48(sector, scount, ATA_CMD_PIO_WRITE_MULTIPLE_48, drive);
 	}
 	else
 	{
-		if(sector & 0xF0000000) return DISK_FAIL_OUT;
+		if(sector & 0xF0000000) return ERROR_DISK_OUT;
 		ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_PIO_WRITE_MULTIPLE_28, drive);
 	}
 	
@@ -178,13 +178,11 @@ u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 	//then flush drive
 	outb(COMMAND_PORT(drive), 0xE7);
 	
-	u8 status = ata_pio_poll_status(drive);
-	
-	if(status & 0x1) return DISK_FAIL_BUSY;
-	return DISK_SUCCESS;
+	error_t status = ata_pio_poll_status(drive);
+	return status;
 }
 
-u8 ata_pio_poll_status(ata_device_t* drive)
+error_t ata_pio_poll_status(ata_device_t* drive)
 {
 	u8 status = inb(COMMAND_PORT(drive));
 	u32 times = 0;
@@ -192,10 +190,10 @@ u8 ata_pio_poll_status(ata_device_t* drive)
 		{status = inb(COMMAND_PORT(drive)); times++;}
 
 	//TEMP
-	if(status & 0x20) return 1;//{kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
-	if(times == 0xFFFFF) return 1;//{kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2);return 0x01;}
-	if(status & 0x1) return 1;//{kprintf("%lDRIVE ERR !\n", 2); return 0x01;}
-	return status;
+	if(status & 0x20) return ERROR_DISK_UNREACHABLE;//{kprintf("%lDRIVE FAULT !\n", 2); return 0x01;}
+	if(times == 0xFFFFF) return ERROR_DISK_BUSY;//{kprintf("%lCOULD NOT REACH DEVICE (TIMED OUT)\n", 2);return 0x01;}
+	if(status & 0x1) return ERROR_DISK_UNREACHABLE;//{kprintf("%lDRIVE ERR !\n", 2); return 0x01;}
+	return ERROR_NONE;
 }
 
 void ata_read_partitions(block_device_t* drive)
@@ -211,7 +209,7 @@ void ata_read_partitions(block_device_t* drive)
 	#else
 	master_boot_record_t* mbr = kmalloc(sizeof(master_boot_record_t));
 	#endif
-	if(ata_pio_read_flexible(0, 0, ((u8*) mbr), 512, current) != DISK_SUCCESS)
+	if(ata_pio_read_flexible(0, 0, ((u8*) mbr), 512, current) != ERROR_NONE)
 	{kfree(mbr); return;}
 
 	if(mbr->magic_number != 0xAA55) {kfree(mbr); return;}

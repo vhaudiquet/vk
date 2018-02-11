@@ -78,8 +78,8 @@ file_descriptor_t* cache_file(file_descriptor_t* file);
 fd_t* open_file(char* path);
 void close_file(fd_t* file);
 u64 flength(fd_t* file);
-u8 read_file(fd_t* file, void* buffer, u64 count);
-u8 write_file(fd_t* file, void* buffer, u64 count);
+error_t read_file(fd_t* file, void* buffer, u64 count);
+error_t write_file(fd_t* file, void* buffer, u64 count);
 bool rename_file(char* path, char* newname);
 bool link(char* oldpath, char* newpath);
 bool unlink(char* path);
@@ -101,8 +101,8 @@ typedef struct fat32fs_specific
 file_system_t* fat32fs_init(block_device_t* drive, u8 partition);
 void fat32fs_close(file_system_t* fs);
 list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size);
-u8 fat32fs_read_file(fd_t* file, void* buffer, u64 count);
-u8 fat32fs_write_file(fd_t* file, u8* buffer, u64 count);
+error_t fat32fs_read_file(fd_t* file, void* buffer, u64 count);
+error_t fat32fs_write_file(fd_t* file, u8* buffer, u64 count);
 file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
 bool fat32fs_delete_file(file_descriptor_t* file);
 bool fat32fs_rename(file_descriptor_t* file, char* newname);
@@ -126,8 +126,8 @@ typedef struct ext2fs_specific
 
 file_system_t* ext2fs_init(block_device_t* drive, u8 partition);
 list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
-u8 ext2fs_read_file(fd_t* file, void* buffer, u64 count);
-u8 ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
+error_t ext2fs_read_file(fd_t* file, void* buffer, u64 count);
+error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
 u8 ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname);
 u8 ext2fs_unlink(file_descriptor_t* file);
 file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor_t* dir);
@@ -143,8 +143,8 @@ extern file_system_t* devfs;
 
 file_system_t* devfs_init();
 list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size);
-u8 devfs_read_file(fd_t* fd, void* buffer, u64 count);
-u8 devfs_write_file(fd_t* fd, void* buffer, u64 count);
+error_t devfs_read_file(fd_t* fd, void* buffer, u64 count);
+error_t devfs_write_file(fd_t* fd, void* buffer, u64 count);
 void devfs_register_device(char* name, void* device, u8 device_type, u8 device_info);
 
 #endif

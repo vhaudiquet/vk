@@ -17,7 +17,7 @@
 
 #include "../storage.h"
 
-u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
+error_t atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
 {
     outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xA0 : 0xB0)); //select drive
     ata_io_wait(drive); //wait for drive selection
@@ -30,8 +30,8 @@ u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
 
     outb(COMMAND_PORT(drive), 0xA0); //send PACKET command
 
-    u8 status = ata_pio_poll_status(drive); //poll status
-    if(status & 1) return DISK_FAIL_BUSY;
+    error_t status = ata_pio_poll_status(drive); //poll status
+    if(status != ERROR_NONE) return status;
 
     u8 atapi_read_sectors[] = 
     {
@@ -50,5 +50,5 @@ u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
         outw(DATA_PORT(drive), ((u16*)&atapi_read_sectors)[i]);
     }
 
-    return DISK_SUCCESS;
+    return ERROR_NONE;
 }

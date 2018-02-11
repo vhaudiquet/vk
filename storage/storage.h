@@ -64,12 +64,6 @@ typedef struct master_boot_record
 #define CD_DRIVE 2
 #define USB_DRIVE 3
 
-#define DISK_SUCCESS 0 //operation suceeded
-#define DISK_FAIL_UNREACHABLE 1 //disk was not reachable (either media removed or temp bug)
-#define DISK_FAIL_OUT 2 //block or size > disk capacity
-#define DISK_FAIL_BUSY 3 //disk is already busy
-#define DISK_FAIL_INTERNAL 4 //internal function failure
-
 typedef struct block_device
 {
 	void* device_struct;
@@ -82,8 +76,8 @@ typedef struct block_device
 extern block_device_t** block_devices;
 extern u16 block_device_count;
 
-u8 block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
-u8 block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
+error_t block_read_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
+error_t block_write_flexible(u64 sector, u32 offset, u8* data, u64 count, block_device_t* drive);
 
 void install_block_devices();
 
@@ -103,20 +97,20 @@ typedef struct ata_device
 } ata_device_t;
 //global functions
 void ata_install();
-u8 ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+error_t ata_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 
 //ata driver internal functions
 void ata_io_wait(ata_device_t* drive);
 void ata_cmd_28(u32 sector, u32 scount, u8 cmd, ata_device_t* drive);
 void ata_cmd_48(u64 sector, u32 scount, u8 cmd, ata_device_t* drive);
 void ata_read_partitions(block_device_t* drive);
-u8 ata_pio_poll_status(ata_device_t* drive);
-u8 ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
-u8 ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
-u8 ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
-u8 atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive);
+error_t ata_pio_poll_status(ata_device_t* drive);
+error_t ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+error_t ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
+error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
+error_t atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive);
 
 #define ATA_CMD_PIO_READ_MULTIPLE_28 0xC4
 #define ATA_CMD_PIO_READ_MULTIPLE_48 0x29

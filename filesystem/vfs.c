@@ -66,11 +66,11 @@ u8 detect_fs_type(block_device_t* drive, u8 partition)
     kmalloc(512);
     #endif
 
-    if(block_read_flexible(offset, 0, buff, 2048, drive) != DISK_SUCCESS)
+    if(block_read_flexible(offset, 0, buff, 2048, drive) != ERROR_NONE)
     {
         kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
     }
-    if(block_read_flexible(offset+0x10, 0, buff2, 512, drive) != DISK_SUCCESS)
+    if(block_read_flexible(offset+0x10, 0, buff2, 512, drive) != ERROR_NONE)
     {
         kprintf("%lDisk failure during attempt to detect fs type...\n", 2);
     }
@@ -282,20 +282,20 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
     else return 0;
 }
 
-u8 read_file(fd_t* fd, void* buffer, u64 count)
+error_t read_file(fd_t* fd, void* buffer, u64 count)
 {
     file_descriptor_t* file = fd->file;
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
+    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
 
     if(file->length) //if file->length is 0, it's a special file (blockdev/tty...)
     {
-        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return 0;}
+        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return ERROR_NONE;}
 	    if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
     }
 
-	if(count == 0) {*((u8*) buffer) = 0; return 0;}
+	if(count == 0) {*((u8*) buffer) = 0; return ERROR_NONE;}
 
-    u8 tr = 2;
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
@@ -315,14 +315,14 @@ u8 read_file(fd_t* fd, void* buffer, u64 count)
     return tr;
 }
 
-u8 write_file(fd_t* fd, void* buffer, u64 count)
+error_t write_file(fd_t* fd, void* buffer, u64 count)
 {
     file_descriptor_t* file = fd->file;
 
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return 1;
+    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
     if(count == 0) return 0;
 
-    u8 tr = 2;
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:

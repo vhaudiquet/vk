@@ -19,6 +19,7 @@
 #define SYS_HEAD
 
 #include "util/util.h"
+#include "error/error.h"
 
 //Memory constants
 #define KERNEL_VIRTUAL_BASE 0xC0000000

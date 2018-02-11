@@ -86,7 +86,6 @@ file_system_t* devfs_init()
             devfs_create_file(&tr->root_dir, xdiskloc, xname, blockdev->partitions[j]->length); //care: length is in sectors ?
         }
     }
-
     devfs = tr;
     return tr;
 }
@@ -120,7 +119,7 @@ list_entry_t* devfs_read_dir(file_descriptor_t* dir, u32* size)
     return tr;
 }
 
-u8 devfs_read_file(fd_t* fd, void* buffer, u64 count)
+error_t devfs_read_file(fd_t* fd, void* buffer, u64 count)
 {
     file_descriptor_t* file = fd->file;
     devfs_diskloc_t* diskloc = (devfs_diskloc_t*) ((uintptr_t) file->fsdisk_loc);
@@ -140,15 +139,15 @@ u8 devfs_read_file(fd_t* fd, void* buffer, u64 count)
         if(count == 1)
         {
             *((u8*) buffer) = tty_getch(tty);
-            return 0;
+            return ERROR_NONE;
         }
-        return 1;
+        return ERROR_FILE_FS_INTERNAL;
     }
 
-    return 1;
+    return ERROR_FILE_FS_INTERNAL;
 }
 
-u8 devfs_write_file(fd_t* fd, void* buffer, u64 count)
+error_t devfs_write_file(fd_t* fd, void* buffer, u64 count)
 {
     file_descriptor_t* file = fd->file;
     devfs_diskloc_t* diskloc = (devfs_diskloc_t*) ((uintptr_t) file->fsdisk_loc);
@@ -168,7 +167,7 @@ u8 devfs_write_file(fd_t* fd, void* buffer, u64 count)
         return tty_write(buffer, (u32) count, tty);
     }
 
-    return 1;
+    return ERROR_FILE_FS_INTERNAL;
 }
 
 void devfs_register_device(char* name, void* device, u8 device_type, u8 device_info)

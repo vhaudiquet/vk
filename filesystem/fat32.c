@@ -125,7 +125,7 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 	else offset = 0;
 
 	u8 attempts = 0;
-	while(block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive) != DISK_SUCCESS)
+	while(block_read_flexible(offset, 0, (u8*) bpb, sizeof(bpb_t), drive) != ERROR_NONE)
 	{
 		attempts++;
 		if(attempts > 2) {kfree(bpb); return 0;}
@@ -403,7 +403,7 @@ list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size)
 /*
 * Read the data of a file
 */
-u8 fat32fs_read_file(fd_t* fd, void* buffer, u64 count)
+error_t fat32fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
 	file_descriptor_t* file = fd->file;
 	u64 offset = fd->offset;
@@ -450,14 +450,14 @@ u8 fat32fs_read_file(fd_t* fd, void* buffer, u64 count)
 	//freeing the cluster list, we dont need it, we read them already
 	list_free(cluslist, (u32) cluss);
 
-	//returning 0, everything went well
-	return 0;
+	//returning error_none, everything went well
+	return ERROR_NONE;
 }
 
 /*
 * Write data to a file
 */
-u8 fat32fs_write_file(fd_t* fd, u8* buffer, u64 count)
+error_t fat32fs_write_file(fd_t* fd, u8* buffer, u64 count)
 {
 	file_descriptor_t* file = fd->file;
 	u64 count_bckp = count;
@@ -542,7 +542,7 @@ u8 fat32fs_write_file(fd_t* fd, u8* buffer, u64 count)
 		fat32fs_resize_dirent(file, ((u32)count_bckp)+((u32) fd->offset));
 	}
 
-	return 0;
+	return ERROR_NONE;
 }
 
 /*
@@ -1177,7 +1177,7 @@ static u8 fat32fs_read_fat(file_system_t* fs)
 	//note : same as part->start_lba
 
 	u8 attempts = 0;
-	while(block_read_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive) != DISK_SUCCESS)
+	while(block_read_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive) != ERROR_NONE)
 	{	
 		attempts++;
 		if(attempts > 2) return 1;
