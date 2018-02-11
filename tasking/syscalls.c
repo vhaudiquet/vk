@@ -129,7 +129,26 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //9:Syscall STAT
         case 9:
         {
-            //TODO : Stat
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            file_descriptor_t* file = current_process->files[ebx]->file;
+            
+            u32* ptr = (u32*) edx;
+            ptr[0] = (u32) file->file_system->drive;
+            ptr[1] = (u32) file->fsdisk_loc;
+            ptr[2] = 0;//TODO: ptr[2] = current_process->files[ebx]->mode;
+            ptr[3] = 1; //TODO : hard links if ext2, 1 else
+            ptr[4] = 0; // user id
+            ptr[5] = 0; // group id
+            ptr[6] = 0; // device id
+            ptr[7] = (u32) file->length;
+            ptr[8] = (u32) file->last_access_time;
+            ptr[9] = (u32) file->last_modification_time;
+            ptr[10] = (u32) file->last_modification_time;
+            ptr[11] = 512; //todo: cluster size or ext2 blocksize
+            ptr[12] = (u32) (file->length/512); //todo: clusters or blocks
+            
+            asm("mov $1, %eax");
             break;
         }
         //11:Syscall EXEC
@@ -151,7 +170,14 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //13:Syscall FORK
         case 13:
         {
-            break;
+            process_t* new = fork(current_process);
+            asm("mov %0, %%eax"::"g"(new->pid));
+
+            new->gregs.eax = 0;
+            new->eip = (u32) &&fork_ret;
+            scheduler_add_process(new);
+
+            fork_ret:break;
         }
         //17:Syscall SBRK
         case 17:

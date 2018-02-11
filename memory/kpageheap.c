@@ -55,6 +55,7 @@ u32* pt_alloc()
         if(kpheap_blocks[i] == KPHEAP_BLOCK_FREE)
 	    {
 		    kpheap_blocks[i] = KPHEAP_BLOCK_USED;
+            memset((u32*) (KPHEAP_VIRT_BASE+KPHEAP_BLOCK_SIZE*i), 0, 1024);
 		    return ((u32*) (KPHEAP_VIRT_BASE+KPHEAP_BLOCK_SIZE*i));
 	    }
     }

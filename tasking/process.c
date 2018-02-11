@@ -218,6 +218,44 @@ u32 sbrk(process_t* process, u32 incr)
     return process->heap_addr+process->heap_size;
 }
 
+process_t* fork(process_t* process)
+{
+    //copy from original process
+    process_t* tr = kmalloc(sizeof(process_t));
+    memcpy(tr, process, sizeof(process_t));
+
+    //get own adress space
+    u32* page_directory = copy_adress_space(process->page_directory);
+    tr->page_directory = page_directory;
+
+    //get own copies of file_descriptors
+    tr->files = kmalloc(process->files_size*sizeof(fd_t));
+    u32 i = 0;
+    for(;i<process->files_size;i++)
+    {
+        fd_t* tocopy = process->files[i];
+        fd_t* toadd = kmalloc(sizeof(fd_t));
+        memcpy(toadd, tocopy, sizeof(fd_t));
+        tr->files[i] = toadd;
+    }
+
+    //get own pid / register in the process list
+    u32 j = 0;
+    for(;j<processes_size;j++)
+    {
+        if(!processes[j]) {processes[j] = tr; tr->pid = j;}
+    }
+
+    if(!tr->pid)
+    {
+        processes_size*=2;
+        processes = krealloc(processes, processes_size);
+        processes[j+1] = tr; tr->pid = (j+1);
+    }
+
+    return tr;
+}
+
 extern void idle_loop();
 asm(".global idle_loop\n \
 idle_loop:\n \

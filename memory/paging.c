@@ -24,6 +24,9 @@
 * This file provides function to map physical memory at virtual adresses
 */
 
+#define PD_BIT_4KB_PAGE 0x80
+#define PD_ADDRESS_MASK 0xFFFFF000
+
 //PAGE DIRECTORY : Must be 4 KiB aligned (0x1000)
 u32 kernel_page_directory[1024] __attribute__((aligned(4096))) = {0};
 u32 kernel_page_table[1024] __attribute__((aligned(4096)));
@@ -48,7 +51,6 @@ void pd_switch(u32* pd)
         asm("mov %0, %%cr3"::"r"((u32) pd-KERNEL_VIRTUAL_BASE));
         current_page_directory = pd;
     }
-    //kprintf("%lpd switched.\n", 1);
 }
 
 u32* get_kernel_pd_clone()
@@ -59,6 +61,53 @@ u32* get_kernel_pd_clone()
     {
         tr[i] = kernel_page_directory[i];
     }
+    return tr;
+}
+
+u32* copy_adress_space(u32* page_directory)
+{
+    u32* cpd = current_page_directory;
+
+    u32* tr = get_kernel_pd_clone();
+    u32 i = 0;
+    for(i = 0; i < 768; i++)
+    {
+        if(!page_directory[i]) continue;
+        u32 pt_addr = page_directory[i] & PD_ADDRESS_MASK;
+        if(page_directory[i] & PD_BIT_4KB_PAGE)
+        {
+            map_memory(0x400000, i << 22, tr);
+            
+            void* kbuffer = kmalloc(0x400000);
+            
+            pd_switch(page_directory);
+            memcpy(kbuffer, (void*) (i << 22), 0x400000);
+            pd_switch(tr);
+            memcpy((void*) (i << 22), kbuffer, 0x400000);
+            pd_switch(cpd);
+        }
+        else
+        {
+            u32* pt = (u32*) pt_addr;
+            u32 j;
+            for(j = 0;j < 1024;j++)
+            {
+                if(!pt[j]) continue;
+                
+                map_memory(4096, (i << 22)+(j << 22), tr);
+                
+                void* kbuffer = kmalloc(4096);
+
+                pd_switch(page_directory);
+                memcpy(kbuffer, (void*) ((i << 22)+(j << 22)), 4096);
+                pd_switch(tr);
+                memcpy((void*) ((i << 22)+(j << 22)), kbuffer, 4096);
+                pd_switch(cpd);
+            }
+        }
+    }
+
+    pd_switch(cpd);
     return tr;
 }
 
@@ -241,33 +290,6 @@ void unmap_flexible(u32 size, u32 virt_addr, u32* page_directory)
         add += 4096;
     }
 }
-//void* map_physical(u32 phys_addr, u32 size);
-//vois unmap_physical(void* pointer, u32 size);
-/*void map_physical(p_block_t* tm, u32 virt_addr)
-{
-    u32 ca = tm->base_addr;
-    aligndown(ca, 0x1000);
-    u32 cs = tm->size;
-    while(cs > 0)
-    {
-        if(cs > 0x400000 && ca % 0x400000 == 0 && virt_addr % 0x400000 == 0)
-        {
-            map_page_table(ca, virt_addr, true);
-            ca+=0x400000;
-            virt_addr+=0x400000;
-            cs-=0x400000;
-        }
-        else
-        {
-            map_page(ca, virt_addr, true);
-            ca+=0x1000;
-            virt_addr+=0x1000;
-            if(cs >= 0x1000) cs-=0x1000;
-            else cs = 0;
-        }
-    }
-}
-*/
 
 //if we need some memory (to do task loading as example, or setuping a stack, or ...)
 void map_memory(u32 size, u32 virt_addr, u32* page_directory)
@@ -321,8 +343,8 @@ bool is_mapped(u32 virt_addr, u32* page_directory)
     u32 pt_index = virt_addr >> 12 & 0x03FF;
     u32* page_table = (u32*) page_directory[pd_index];
     if(!page_table) return false;
-    if((((u32)page_table) << 24 >> 31) == 1) return true;
-    page_table = (u32*) (((u32)page_table) >> 12 << 12);
+    if(((u32)page_table) & PD_BIT_4KB_PAGE) return true;
+    page_table = (u32*) (((u32)page_table) & PD_ADDRESS_MASK);
     u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
     if(*page) return true;
     else return false;

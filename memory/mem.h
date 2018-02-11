@@ -84,6 +84,7 @@ extern u32 kernel_page_table[1024];
 void finish_paging();
 void pd_switch(u32* pd);
 u32* get_kernel_pd_clone();
+u32* copy_adress_space(u32* page_directory);
 void map_memory(u32 size, u32 virt_addr, u32* page_directory);
 void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory);
 void unmap_flexible(u32 size, u32 virt_addr, u32* page_directory);
