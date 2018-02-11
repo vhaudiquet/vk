@@ -509,13 +509,14 @@ static fd_t* do_open_fs(char* path, mount_point_t* mp)
                 kmalloc(strlen(ce->name)+1);
                 #endif
                 fd_copy(nextdir, ce);
+                nextdir = cache_file(nextdir);
 
                 //free the current dir list
 				fd_list_free(cdir, dirsize);
 
 				if((ce->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return 0;
                 cdir = lbuf = read_directory(nextdir, &dirsize);
-                kfree(nextdir);
+                //with that, parent_dirs are not safe anymore : kfree(nextdir);
 
 				//we have found a subdirectory, explore it
 				break;

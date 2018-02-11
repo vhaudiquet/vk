@@ -165,7 +165,7 @@ file_system_t* ext2fs_init(block_device_t* drive, u8 partition)
     tr->flags = 0;
     tr->partition = partition;
 
-    if(superblock->read_only_features)
+    if(superblock->read_only_features & 5) //masking 64-bits file sizes (supported) //TODO: support sparse superblocks..
     {
         tr->flags |= FS_FLAG_READ_ONLY;
     }
@@ -281,7 +281,6 @@ u8 ext2fs_unlink(file_descriptor_t* file)
     ext2_inode_t* inode = &inode_desc->inode;
 
     if(!ext2_remove_dirent(file->name, file->parent_directory)) return 0;
-
     inode->hard_links--;
     if(!inode->hard_links)
     {
@@ -593,6 +592,9 @@ static u8 ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_sys
         u64 size_high = ((u64) inode->directory_acl << 32);
         inode_size |= size_high;
     }
+
+    //resetting inode size (it will have a larger size cause we write to it)
+    if(size + offset > inode_size) inode->size_low = (size+offset);
 
     //checking offsets conflicts
     if(offset > inode_size) return 1;
@@ -1047,15 +1049,16 @@ static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir)
 
     u8* dirent_buffer = kmalloc((u32) length);
     if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) {kfree(dirent_buffer); return 0;}
-    
+
     u32 offset = 0;
     while(length)
     {
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
-        
+        if(!dirent->inode) {kfree(dirent_buffer); return 0;}
+
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
 
-        if(!strcmp((char*) dirent->name, name)) {memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-((u32)8+name_len_real));}
+        if(strcfirst(name, (char*) dirent->name) == strlen(name)) {memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-((u32)8+name_len_real)); break;}
 
         offset += (u32)(8+name_len_real);
         length -= (u32)(8+name_len_real);
