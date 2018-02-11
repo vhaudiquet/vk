@@ -206,8 +206,12 @@ void free_block(u32 base_addr)
     {
         if(curr->base_addr == base_addr)
         {
-            if(curr->type != PHYS_KERNELF_BLOCK_TYPE && curr->type != PHYS_USER_BLOCK_TYPE)
+            if((curr->type != PHYS_KERNELF_BLOCK_TYPE) && (curr->type != PHYS_USER_BLOCK_TYPE))
+            {
+                kprintf("%lPHYSICAL FREE_BLOCK() ERROR\n", 2);
+                kprintf("Block address (physical) : 0x%X\n", curr->base_addr);
                 fatal_kernel_error("Trying to free a non-freeable block", "FREE_BLOCK");
+            }
             curr->type = PHYS_FREE_BLOCK_TYPE;
             //block merging before and after
             p_block_t* m = curr->prev;

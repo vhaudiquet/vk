@@ -40,9 +40,9 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             char* path = (char*) ebx;
             fd_t* file = open_file(path);
             if(!file) {asm("mov $0, %eax"); return;}
-                
+            
             if(current_process->files_count == current_process->files_size)
-            {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size);}
+            {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));}
 
             current_process->files[current_process->files_count] = file;
             current_process->files_count++;

@@ -57,6 +57,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     map_memory(8192, (u32) stack_offset-8192, page_directory);
     pd_switch(page_directory);
     memset((void*)(stack_offset-8192), 0, 8192);
+    u32 base_stack = (u32) stack_offset-8192;
 
     /* ARGUMENTS PASSING */
     int i;
@@ -100,7 +101,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->data_loc = data_loc;
     tr->data_size = data_size;
 
-    tr->base_stack = (u32) stack_offset-8192;
+    tr->base_stack = base_stack;
 
     //set default registers to 0
     tr->gregs.eax = 0;
@@ -183,10 +184,12 @@ void exit_process(process_t* process)
     //mark all data/code blocks reserved for the process as free
     u32 i = 0;
     list_entry_t* dloc = process->data_loc;
+    list_entry_t* ptr = dloc;
     for(i=0;i<process->data_size;i++)
     {
-        u32 phys = get_physical(((u32*)dloc->element)[0], process->page_directory);
+        u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
         free_block(phys);
+        ptr = ptr->next;
     }
     list_free(dloc, process->data_size);
 
