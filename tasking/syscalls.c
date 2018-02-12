@@ -82,35 +82,35 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //5:Syscall RENAME
         case 5:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
             char* oldpath = (char*) ebx;
             char* newname = (char*) ecx;
 
-            u8 tr = rename_file(oldpath, newname);
-            asm("mov %0, %%eax"::"g"((u32) tr));
+            error_t tr = rename_file(oldpath, newname);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //6:Syscall LINK
         case 6:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
             char* oldpath = (char*) ebx;
             char* newpath = (char*) ecx;
 
-            u8 tr = link(oldpath, newpath);
-            asm("mov %0, %%eax"::"g"((u32) tr));
+            error_t tr = link(oldpath, newpath);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //7:Syscall UNLINK
         case 7:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
             char* path = (char*) ebx;
 
-            u8 tr = unlink(path);
-            asm("mov %0, %%eax"::"g"((u32) tr));
+            error_t tr = unlink(path);
+            asm("mov %0, %%eax"::"g"(tr));
             break;
         }
         //8:Syscall SEEK

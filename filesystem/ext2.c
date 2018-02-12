@@ -127,10 +127,10 @@ static void ext2_get_fd(file_descriptor_t* dest, ext2_dirent_t* dirent, file_des
 static error_t ext2_inode_read_content(ext2_inode_t* inode, file_system_t* fs, u32 offset, u32 size, u8* buffer);
 static error_t ext2_inode_write_content(ext2_inode_descriptor_t* inode_desc, file_system_t* fs, u32 offset, u32 size, u8* buffer);
 static u32 ext2_block_alloc(file_system_t* fs);
-static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir);
+static error_t ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir);
 static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len);
 static void ext2_inode_write(ext2_inode_descriptor_t* inode, file_system_t* fs);
-static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir);
+static error_t ext2_remove_dirent(char* name, file_descriptor_t* dir);
 static u32 ext2_inode_alloc(file_system_t* fs);
 static void ext2_inode_free(u32 inode, file_system_t* fs);
 static void ext2_bitmap_mark_bit_free(u8* bitmap, u32 bit);
@@ -269,18 +269,19 @@ error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
     return ext2_inode_write_content(inode, fd->file->file_system, (u32) fd->offset, (u32) count, buffer);
 }
 
-u8 ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname)
+error_t ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname)
 {
     u32 inode = ((ext2_inode_descriptor_t*)((uintptr_t)file->fsdisk_loc))->inode_number;
     return ext2_create_dirent(inode, newname, newdir);
 }
 
-u8 ext2fs_unlink(file_descriptor_t* file)
+error_t ext2fs_unlink(file_descriptor_t* file)
 {
     ext2_inode_descriptor_t* inode_desc = ((ext2_inode_descriptor_t*)((uintptr_t)file->fsdisk_loc));
     ext2_inode_t* inode = &inode_desc->inode;
 
-    if(!ext2_remove_dirent(file->name, file->parent_directory)) return 0;
+    error_t direntop = ext2_remove_dirent(file->name, file->parent_directory);
+    if(direntop != ERROR_NONE) return direntop;
     inode->hard_links--;
     if(!inode->hard_links)
     {
@@ -288,7 +289,7 @@ u8 ext2fs_unlink(file_descriptor_t* file)
     }
     else ext2_inode_write(inode_desc, file->file_system);
 
-    return 1;
+    return ERROR_NONE;
 }
 
 file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor_t* dir)
@@ -997,7 +998,7 @@ static void ext2_bitmap_mark_bit_free(u8* bitmap, u32 bit)
     *(bitmap+byte) &= (0 << inbit);
 }
 
-static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
+static error_t ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
 {
     file_system_t* fs = dir->file_system;
 
@@ -1017,7 +1018,8 @@ static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
     u64 length = dir->length;
 
     u8* dirent_buffer = kmalloc((u32) length);
-    if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) {kfree(dirent_buffer); return 0;}
+    error_t readop = ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) {kfree(dirent_buffer); return readop;}
     
     u32 offset = 0;
     while(length)
@@ -1032,12 +1034,12 @@ static u8 ext2_create_dirent(u32 inode, char* name, file_descriptor_t* dir)
     kfree(dirent_buffer);
 
     //write the dirent
-    if(ext2_inode_write_content(dir_inode_desc, fs, offset, towrite.size, (u8*) &towrite)) return 0;
-
-    return 1;
+    error_t writeop = ext2_inode_write_content(dir_inode_desc, fs, offset, towrite.size, (u8*) &towrite);
+    
+    return writeop;
 }
 
-static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir)
+static error_t ext2_remove_dirent(char* name, file_descriptor_t* dir)
 {
     file_system_t* fs = dir->file_system;
 
@@ -1048,13 +1050,14 @@ static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir)
     u64 length = dir->length;
 
     u8* dirent_buffer = kmalloc((u32) length);
-    if(ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer)) {kfree(dirent_buffer); return 0;}
+    error_t readop = ext2_inode_read_content(dir_inode, fs, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) {kfree(dirent_buffer); return readop;}
 
     u32 offset = 0;
     while(length)
     {
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
-        if(!dirent->inode) {kfree(dirent_buffer); return 0;}
+        if(!dirent->inode) {kfree(dirent_buffer); return ERROR_FILE_NOT_FOUND;}
 
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
 
@@ -1065,11 +1068,12 @@ static u8 ext2_remove_dirent(char* name, file_descriptor_t* dir)
     }
 
     //rewrite the buffer
-    if(ext2_inode_write_content(dir_inode_desc, fs, offset, (u32) dir->length, (u8*) dirent_buffer)) {kfree(dirent_buffer); return 0;}
+    error_t writeop = ext2_inode_write_content(dir_inode_desc, fs, offset, (u32) dir->length, (u8*) dirent_buffer);
+    if(writeop != ERROR_NONE) {kfree(dirent_buffer); return writeop;}
 
     kfree(dirent_buffer);
 
-    return 1;
+    return ERROR_NONE;
 }
 
 /*

@@ -40,3 +40,4 @@ typedef u32 error_t;
 #define ERROR_FILE_FS_INTERNAL 16 //internal file system driver error
 #define ERROR_FILE_OUT 17 //tried to read/write out of file/fs space
 #define ERROR_FILE_CORRUPTED_FS 18 //the file system/file might be corrupted : pointer to void or like that
+#define ERROR_DIRECTORY_NOT_EMPTY 19 //directory is not empty

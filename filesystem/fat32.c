@@ -592,10 +592,10 @@ file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_
 * Delete a file
 * Note : carefull, when used on a directory, the directory MUST be empty (and there is no check)
 */
-bool fat32fs_delete_file(file_descriptor_t* file)
+error_t fat32fs_delete_file(file_descriptor_t* file)
 {
 	//Step 1 : Delete dirent (mark it as 0xE5)
-	if(!fat32fs_delete_dirent(file)) return false;
+	if(!fat32fs_delete_dirent(file)) return ERROR_FILE_FS_INTERNAL;
 	
 	//Step 2 : mark all the clusters of this file as free
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) file->file_system->specific;
@@ -611,16 +611,16 @@ bool fat32fs_delete_file(file_descriptor_t* file)
 	list_free(clulist, clusize);
 	fat32fs_write_fat(file->file_system);
 
-	return true;
+	return ERROR_NONE;
 }
 
 /*
 * Rename a file
 */
-bool fat32fs_rename(file_descriptor_t* file, char* newname)
+error_t fat32fs_rename(file_descriptor_t* file, char* newname)
 {
 	//delete old dirent
-	if(!fat32fs_delete_dirent(file)) return false;
+	if(!fat32fs_delete_dirent(file)) return ERROR_FILE_FS_INTERNAL;
 
 	char* oldname = file->name;
 	char* nn = 
@@ -638,11 +638,11 @@ bool fat32fs_rename(file_descriptor_t* file, char* newname)
 		file->name = oldname;
 		kfree(nn);
 		fat32fs_create_dirent(file->parent_directory, file);
-		return false;
+		return ERROR_FILE_FS_INTERNAL;
 	}
 
 	kfree(oldname);
-	return true;
+	return ERROR_NONE;
 }
 
 /*

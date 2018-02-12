@@ -359,11 +359,11 @@ fd_t* create_file(u8* name, u8 attributes, fd_t* dir)
 	return trf;
 }
 
-bool unlink(char* path)
+error_t unlink(char* path)
 {
     //open file
     fd_t* file = open_file(path);
-    if(!file) return false;
+    if(!file) return ERROR_FILE_NOT_FOUND;
 
     //if the file is a directory, checks if it's empty
     if(file->file->attributes & FILE_ATTR_DIR)
@@ -371,10 +371,10 @@ bool unlink(char* path)
         u32 dirsize = 0;
         list_entry_t* list = read_directory(file->file, &dirsize);
         list_free(list, dirsize);
-        if(dirsize) return false;
+        if(dirsize) return ERROR_DIRECTORY_NOT_EMPTY;
     }
 
-    bool tr = false;
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
@@ -390,10 +390,10 @@ bool unlink(char* path)
     return tr;
 }
 
-bool link(char* oldpath, char* newpath)
+error_t link(char* oldpath, char* newpath)
 {
     fd_t* file = open_file(oldpath);
-    if(!file) return false;
+    if(!file) return ERROR_FILE_NOT_FOUND;
 
     char* newname = strrchr(newpath, '/')+1;
     
@@ -402,9 +402,9 @@ bool link(char* oldpath, char* newpath)
     strncpy(newdir, newpath, newdirlen);
     *(newdir+newdirlen) = 0;
     fd_t* newdir_fd = open_file(newdir);
-    if(!newdir_fd) {close_file(file); kfree(newdir); return false;}
+    if(!newdir_fd) {close_file(file); kfree(newdir); return ERROR_FILE_NOT_FOUND;}
 
-    bool tr = false;
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_EXT2:
@@ -419,12 +419,12 @@ bool link(char* oldpath, char* newpath)
     return tr;
 }
 
-bool rename_file(char* path, char* newname)
+error_t rename_file(char* path, char* newname)
 {
     fd_t* file = open_file(path);
-    if(!file) return false;
+    if(!file) return ERROR_FILE_NOT_FOUND;
 
-    bool tr = false;
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
