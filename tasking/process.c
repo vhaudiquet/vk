@@ -41,7 +41,7 @@ void process_init()
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 {
     //check if the file is really an ELF executable
-    if(!elf_check(executable)) return 0;
+    if(elf_check(executable) != ERROR_NONE) return 0;
 
     u32* page_directory = get_kernel_pd_clone();
 

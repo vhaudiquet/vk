@@ -70,7 +70,7 @@ typedef struct elf_section_header
     u32 ent_size;
 } elf_section_header_t;
 
-bool elf_check(fd_t* file)
+error_t elf_check(fd_t* file)
 {
     //ignoring offset
     u64 old_offset = file->offset;
@@ -84,18 +84,18 @@ bool elf_check(fd_t* file)
     file->offset = old_offset;
 
     //check magic
-    if((eh.magic[0] != 0x7F) | (eh.magic[1] != 'E') | (eh.magic[2] != 'L') | (eh.magic[3] != 'F')) return false;
+    if((eh.magic[0] != 0x7F) | (eh.magic[1] != 'E') | (eh.magic[2] != 'L') | (eh.magic[3] != 'F')) return ERROR_IS_NOT_ELF;
 
     //check 32bits
-    if(eh.bits != 1) return false;
+    if(eh.bits != 1) return ERROR_IS_64_BITS;
 
     //check executable
-    if(eh.type != 2) return false;
+    if(eh.type != 2) return ERROR_IS_NOT_EXECUTABLE;
 
     //check instruction set
-    if((eh.instruction_set != 0) & (eh.instruction_set != 3)) return false;
+    if((eh.instruction_set != 0) & (eh.instruction_set != 3)) return ERROR_WRONG_INSTRUCTION_SET;
 
-    return true;
+    return ERROR_NONE;
 }
 
 void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size)

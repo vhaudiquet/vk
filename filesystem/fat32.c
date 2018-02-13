@@ -97,8 +97,8 @@ typedef struct LFN_ENTRY
 //Static methods : look at method body (FAT32 utilities basically)
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
-static u8 fat32fs_read_fat(file_system_t* fs);
-static void fat32fs_write_fat(file_system_t* fs);
+static error_t fat32fs_read_fat(file_system_t* fs);
+static error_t fat32fs_write_fat(file_system_t* fs);
 static u32 fat32fs_get_free_cluster(file_system_t* fs);
 static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs);
 static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize);
@@ -1169,7 +1169,7 @@ static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster)
 /*
 * this function reads the fat from disk
 */
-static u8 fat32fs_read_fat(file_system_t* fs)
+static error_t fat32fs_read_fat(file_system_t* fs)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 	u32 fat_size = spe->bpb->fat_size * spe->bpb->bytes_per_sector;
@@ -1177,23 +1177,24 @@ static u8 fat32fs_read_fat(file_system_t* fs)
 	//note : same as part->start_lba
 
 	u8 attempts = 0;
-	while(block_read_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive) != ERROR_NONE)
-	{	
+	error_t berr = ERROR_NONE;
+	while((berr = block_read_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive)) != ERROR_NONE)
+	{
 		attempts++;
-		if(attempts > 2) return 1;
+		if(attempts > 2) return berr;
 	}
-	return 0;
+	return ERROR_NONE;
 }
 
 /*
 * this function writes the cached fat on disk
 */
-static void fat32fs_write_fat(file_system_t* fs)
+static error_t fat32fs_write_fat(file_system_t* fs)
 {
 	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
 	u32 fat_size = spe->bpb->fat_size * spe->bpb->bytes_per_sector;
 	u32 fat_sector = spe->bpb_offset + spe->bpb->reserved_sectors;
-	block_write_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive);
+	return block_write_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive);
 }
 
 /*

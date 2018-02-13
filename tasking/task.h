@@ -23,7 +23,7 @@
 #include "io/io.h"
 
 //ELF loading
-bool elf_check(fd_t* file);
+error_t elf_check(fd_t* file);
 void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
 
 //Process
