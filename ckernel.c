@@ -163,7 +163,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     tty_init();
 
     //reading /sys/init
-    fd_t* init_file = open_file("/sys/init");
+    fd_t* init_file = open_file("/sys/init", OPEN_MODE_R);
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
     char* init_buffer =
     #ifdef MEMLEAK_DBG
@@ -176,7 +176,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     init_buffer[flength(init_file)-1] = 0;
 
     kprintf("INIT: Opening %s...", init_buffer);
-    fd_t* elf_task = open_file(init_buffer);
+    fd_t* elf_task = open_file(init_buffer, OPEN_MODE_R);
     if(!elf_task) {vga_text_failmsg(); fatal_kernel_error("Could not open init process file", "INIT_RUN");}
     else vga_text_okmsg();
 

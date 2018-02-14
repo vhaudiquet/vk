@@ -38,7 +38,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
             
             char* path = (char*) ebx;
-            fd_t* file = open_file(path);
+            fd_t* file = open_file(path, (u8) ecx);
             if(!file) {asm("mov $0, %eax"); return;}
             
             if(current_process->files_count == current_process->files_size)

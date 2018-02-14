@@ -41,8 +41,9 @@ typedef u32 error_t;
 #define ERROR_FILE_OUT 17 //tried to read/write out of file/fs space
 #define ERROR_FILE_CORRUPTED_FS 18 //the file system/file might be corrupted : pointer to void or like that
 #define ERROR_DIRECTORY_NOT_EMPTY 19 //directory is not empty
+#define ERROR_EOF 20
 //process errors
-#define ERROR_IS_NOT_ELF 20 //the file you tried to execute is not an elf file
-#define ERROR_IS_64_BITS 21 //the elf file needs a 64 bits architecture
-#define ERROR_IS_NOT_EXECUTABLE 22 //the elf file is not an executable (library, ...)
-#define ERROR_WRONG_INSTRUCTION_SET 23 //the elf file is not using good instruction set
+#define ERROR_IS_NOT_ELF 21 //the file you tried to execute is not an elf file
+#define ERROR_IS_64_BITS 22 //the elf file needs a 64 bits architecture
+#define ERROR_IS_NOT_EXECUTABLE 23 //the elf file is not an executable (library, ...)
+#define ERROR_WRONG_INSTRUCTION_SET 24 //the elf file is not using good instruction set

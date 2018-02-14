@@ -38,10 +38,9 @@ typedef struct file_descriptor
     char* name; //file name
     struct file_system* file_system; //file system
     struct file_descriptor* parent_directory; //parent directory
-    u64 fsdisk_loc;//location of the file on the drive (ex: first cluster if FAT32fs)
+    u64 fsdisk_loc; //location of the file on the drive (ex: first cluster if FAT32fs)
     u8 attributes; //dir/file, hidden , (system/prgm/user), 
     u64 length; //lenght in bytes
-    ///* out */ u64 offset; //offset (file only)
     time_t creation_time;
     time_t last_access_time;
     time_t last_modification_time;
@@ -74,8 +73,15 @@ void mount(char* path, file_system_t* fs);
 //file cache
 file_descriptor_t* cache_file(file_descriptor_t* file);
 
+#define OPEN_MODE_R 0 //read-only, at the beginning of the file
+#define OPEN_MODE_W 1 //write-only, at the beginning of the file, creating it if doesnt exist, erasing if exists
+#define OPEN_MODE_A 2 //append: write-only at end of file, creating it if doesnt exist
+#define OPEN_MODE_RP 3 //r+ : update (read and write) at the beginning
+#define OPEN_MODE_WP 4 //w+ : update (read and write) at the beginning, creating it if it doesnt exist, erasing if exists
+#define OPEN_MODE_AP 5 //a+ : update (read and write) at end of file
+
 //accessing files
-fd_t* open_file(char* path);
+fd_t* open_file(char* path, u8 mode);
 void close_file(fd_t* file);
 u64 flength(fd_t* file);
 error_t read_file(fd_t* file, void* buffer, u64 count);
@@ -83,6 +89,7 @@ error_t write_file(fd_t* file, void* buffer, u64 count);
 error_t rename_file(char* path, char* newname);
 error_t link(char* oldpath, char* newpath);
 error_t unlink(char* path);
+fd_t* create_file(char* path, u8 attributes);
 list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize);
 
 //FILESYSTEM utils

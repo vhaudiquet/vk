@@ -155,7 +155,7 @@ void mount(char* path, file_system_t* fs)
 
     //we are mounting a standard point
     //first lets get the folder pointed by path, check if it is really a folder, and make it mount_point
-    fd_t* mf = open_file(path);
+    fd_t* mf = open_file(path, OPEN_MODE_R);
     if(!mf) fatal_kernel_error("Can't find mount point", "MOUNT");
     if((mf->file->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) fatal_kernel_error("Trying to mount to a file ?!", "MOUNT");
 
@@ -216,7 +216,7 @@ file_descriptor_t* cache_file(file_descriptor_t* file)
     return file;
 }
 
-fd_t* open_file(char* path)
+fd_t* open_file(char* path, u8 mode)
 {
     //we are trying to access the root path : simplest case
     if(*path == '/' && strlen(path) == 1)
@@ -253,10 +253,27 @@ fd_t* open_file(char* path)
         tr->offset = 0;
         return tr;
     }
-    if(best != 0) return do_open_fs(path+strlen(best->path), best);
-    
-    fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); //TEMP
-    return 0;
+
+    if(!best) {fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); return 0;}
+    fd_t* tr = do_open_fs(path+strlen(best->path), best);
+
+    //depending on mode
+    if((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP)) return tr;
+    else
+    {
+        if(tr == 0) tr = create_file(path, 0);
+        if((mode == OPEN_MODE_W) | (mode == OPEN_MODE_WP))
+        {
+            u8* zero_buffer = kmalloc((u32) flength(tr)); memset(zero_buffer, 0, (size_t) flength(tr));
+            write_file(tr, zero_buffer, flength(tr));
+        }
+        if((mode == OPEN_MODE_A) | (mode == OPEN_MODE_AP))
+        {
+            tr->offset = flength(tr);
+        }
+    }
+
+    return tr;
 }
 
 void close_file(fd_t* file)
@@ -289,7 +306,7 @@ error_t read_file(fd_t* fd, void* buffer, u64 count)
 
     if(file->length) //if file->length is 0, it's a special file (blockdev/tty...)
     {
-        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return ERROR_NONE;}
+        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return ERROR_EOF;}
 	    if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
     }
 
@@ -339,16 +356,22 @@ error_t write_file(fd_t* fd, void* buffer, u64 count)
     return tr;
 }
 
-fd_t* create_file(u8* name, u8 attributes, fd_t* dir)
+fd_t* create_file(char* path, u8 attributes)
 {
+    char* name = strrchr(path, '/');
+    u32 dirlen = strlen(path) - strlen(name);
+    char* dirpath = kmalloc(dirlen + 1);
+    strncpy(dirpath, path, dirlen);
+    fd_t* dir = open_file(dirpath, OPEN_MODE_R);
+
     file_descriptor_t* tr = 0;
     switch(dir->file->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            tr = fat32fs_create_file(name, attributes, dir->file);
+            tr = fat32fs_create_file((u8*) name, attributes, dir->file);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_create_file((char*) name, attributes, dir->file);
+            tr = ext2fs_create_file(name, attributes, dir->file);
             break;
     }
     if(!tr) return 0;
@@ -362,7 +385,7 @@ fd_t* create_file(u8* name, u8 attributes, fd_t* dir)
 error_t unlink(char* path)
 {
     //open file
-    fd_t* file = open_file(path);
+    fd_t* file = open_file(path, OPEN_MODE_R);
     if(!file) return ERROR_FILE_NOT_FOUND;
 
     //if the file is a directory, checks if it's empty
@@ -392,7 +415,7 @@ error_t unlink(char* path)
 
 error_t link(char* oldpath, char* newpath)
 {
-    fd_t* file = open_file(oldpath);
+    fd_t* file = open_file(oldpath, OPEN_MODE_R);
     if(!file) return ERROR_FILE_NOT_FOUND;
 
     char* newname = strrchr(newpath, '/')+1;
@@ -401,7 +424,7 @@ error_t link(char* oldpath, char* newpath)
     char* newdir = kmalloc(newdirlen+1);
     strncpy(newdir, newpath, newdirlen);
     *(newdir+newdirlen) = 0;
-    fd_t* newdir_fd = open_file(newdir);
+    fd_t* newdir_fd = open_file(newdir, OPEN_MODE_R);
     if(!newdir_fd) {close_file(file); kfree(newdir); return ERROR_FILE_NOT_FOUND;}
 
     error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
@@ -421,7 +444,7 @@ error_t link(char* oldpath, char* newpath)
 
 error_t rename_file(char* path, char* newname)
 {
-    fd_t* file = open_file(path);
+    fd_t* file = open_file(path, OPEN_MODE_R);
     if(!file) return ERROR_FILE_NOT_FOUND;
 
     error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;

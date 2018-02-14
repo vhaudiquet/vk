@@ -37,7 +37,7 @@ void tty_init()
     tty1->keyboard_stream = iostream_alloc();
     tty_write((u8*) "VK 0.0-indev (tty1)\n", 20, tty1);
     devfs_register_device("tty1", tty1, DEVICE_TYPE_TTY, 0);
-    fd_t* tty1f = open_file("/dev/tty1");
+    fd_t* tty1f = open_file("/dev/tty1", OPEN_MODE_RP);
     if(!tty1f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 1 (file can't be opened)", "TTY_INIT");}
     tty1->pointer = tty1f;
 
@@ -46,7 +46,7 @@ void tty_init()
     tty2->keyboard_stream = iostream_alloc();
     tty_write((u8*) "VK 0.0-indev (tty2)\n", 20, tty2);
     devfs_register_device("tty2", tty2, DEVICE_TYPE_TTY, 0);
-    fd_t* tty2f = open_file("/dev/tty2");
+    fd_t* tty2f = open_file("/dev/tty2", OPEN_MODE_RP);
     if(!tty2f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 2 (file can't be opened)", "TTY_INIT");}
     tty2->pointer = tty2f;
 
@@ -55,7 +55,7 @@ void tty_init()
     tty3->keyboard_stream = iostream_alloc();
     tty_write((u8*) "VK 0.0-indev (tty3)\n", 20, tty3);
     devfs_register_device("tty3", tty3, DEVICE_TYPE_TTY, 0);
-    fd_t* tty3f = open_file("/dev/tty3");
+    fd_t* tty3f = open_file("/dev/tty3", OPEN_MODE_RP);
     if(!tty3f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 3 (file can't be opened)", "TTY_INIT");}
     tty3->pointer = tty3f;
 
