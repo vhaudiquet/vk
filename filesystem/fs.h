@@ -32,7 +32,11 @@
 #define DIR_ATTR_MOUNTPOINT 0x3
 
 //VFS, GLOBAL LAYER
+
+/* 1 cache per fs (best way for speed/performance and memory usage), so that will go away */
 extern list_entry_t* file_cache;
+
+/* we want to remove that structure */
 typedef struct file_descriptor
 {
     char* name; //file name
@@ -45,6 +49,23 @@ typedef struct file_descriptor
     time_t last_access_time;
     time_t last_modification_time;
 } file_descriptor_t;
+
+typedef struct fsnode
+{
+    struct file_system* file_system;
+    u64 length;
+    u8 attributes;
+    time_t creation_time;
+    time_t last_access_time;
+    time_t last_modification_time;
+    void* specific;
+} fsnode_t;
+
+typedef struct dirent
+{
+    u32 inode;
+    char name[];
+} dirent_t;
 
 typedef struct fd
 {
@@ -62,6 +83,8 @@ typedef struct file_system
     u8 fs_type;
     u8 flags;
     struct file_descriptor root_dir;
+    list_entry_t* inode_cache;
+    u32 inode_cache_size;
     void* specific;
 } file_system_t;
 
@@ -127,8 +150,6 @@ typedef struct ext2fs_specific
     u32 superblock_offset;
     u32 block_size;
     u32 blockgroup_count;
-    list_entry_t* inode_cache;
-    u32 inode_cache_size;
 } ext2fs_specific_t;
 
 file_system_t* ext2fs_init(block_device_t* drive, u8 partition);

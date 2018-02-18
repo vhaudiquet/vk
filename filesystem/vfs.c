@@ -120,7 +120,7 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
         }
         case FS_TYPE_EXT2:
         {
-            fs = ext2fs_init(drive, partition);
+            //fs = ext2fs_init(drive, partition);
             break;
         }
     }
@@ -292,8 +292,8 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
         return fat32fs_read_dir(directory, dirsize);
     else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
         return iso9660fs_read_dir(directory, dirsize);
-    else if(directory->file_system->fs_type == FS_TYPE_EXT2)
-        return ext2fs_read_dir(directory, dirsize);
+    //else if(directory->file_system->fs_type == FS_TYPE_EXT2)
+        //return ext2fs_read_dir(directory, dirsize);
     else if(directory->file_system->fs_type == FS_TYPE_DEVFS)
         return devfs_read_dir(directory, dirsize);
     else return 0;
@@ -322,7 +322,7 @@ error_t read_file(fd_t* fd, void* buffer, u64 count)
             tr = iso9660fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_read_file(fd, buffer, count);
+            //tr = ext2fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_DEVFS:
             tr = devfs_read_file(fd, buffer, count);
@@ -349,7 +349,7 @@ error_t write_file(fd_t* fd, void* buffer, u64 count)
             tr = devfs_write_file(fd, buffer, count);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_write_file(fd, buffer, count);
+            //tr = ext2fs_write_file(fd, buffer, count);
             break;
     }
     if(!tr) fd->offset += count;
@@ -371,7 +371,7 @@ fd_t* create_file(char* path, u8 attributes)
             tr = fat32fs_create_file((u8*) name, attributes, dir->file);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_create_file(name, attributes, dir->file);
+            //tr = ext2fs_create_file(name, attributes, dir->file);
             break;
     }
     if(!tr) return 0;
@@ -404,7 +404,7 @@ error_t unlink(char* path)
             tr = fat32fs_delete_file(file->file);
             break;
         case FS_TYPE_EXT2:
-            tr = ext2fs_unlink(file->file);
+            //tr = ext2fs_unlink(file->file);
             break;
     }
 
@@ -431,7 +431,7 @@ error_t link(char* oldpath, char* newpath)
     switch(file->file->file_system->fs_type)
     {
         case FS_TYPE_EXT2:
-            tr = ext2fs_link(file->file, newdir_fd->file, newname);
+            //tr = ext2fs_link(file->file, newdir_fd->file, newname);
             break;
     }
 
