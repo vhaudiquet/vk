@@ -64,6 +64,7 @@ typedef struct fsnode
 typedef struct dirent
 {
     u32 inode;
+    u32 name_len;
     char name[];
 } dirent_t;
 
