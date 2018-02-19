@@ -165,7 +165,12 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
         if(!dirent->inode) break;
 
-        if(!strcmp((char*) dirent->name, name)) {kfree(dirent_buffer); return ext2_std_inode_read(dirent->inode, dir->file_system);}
+        if(!strcmp((char*) dirent->name, name)) 
+        {
+            fsnode_t* tr = ext2_std_inode_read(dirent->inode, dir->file_system);
+            kfree(dirent_buffer); 
+            return tr;
+        }
 
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
         offset += (u32)(8+name_len_real);

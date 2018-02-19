@@ -121,7 +121,12 @@ typedef struct ISO9660_PATH_TABLE_ENTRY
     u8 name[];
 } __attribute__((packed)) iso9660_path_table_entry_t;
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, file_system_t* fs);
+typedef struct iso9660_node_specific
+{
+    u32 extent_start;
+} iso9660_node_specific_t;
+
+static fsnode_t* iso9660_dirent_normalize_cache(iso9660_dir_entry_t* dirent, file_system_t* fs);
 
 file_system_t* iso9660fs_init(block_device_t* drive)
 {
@@ -132,9 +137,13 @@ file_system_t* iso9660fs_init(block_device_t* drive)
     #else
     kmalloc(sizeof(file_system_t), "iso9660 file_system_t struct");
     #endif
+
     tr->drive = drive;
     tr->fs_type = FS_TYPE_ISO9660;
     tr->flags = 0 | FS_FLAG_CASE_INSENSITIVE | FS_FLAG_READ_ONLY;
+
+    tr->inode_cache = 0;
+    tr->inode_cache_size = 0;
 
     //reading primary volume descriptor
     iso9660_primary_volume_descriptor_t pvd;
@@ -142,159 +151,120 @@ file_system_t* iso9660fs_init(block_device_t* drive)
 
     //making root_dir file descriptor
     iso9660_dir_entry_t* rd = (iso9660_dir_entry_t*) pvd.root_directory;
-    tr->root_dir = kmalloc(sizeof(file_descriptor_t));
-    iso9660_get_fd(tr->root_dir, rd, 0, tr);
-    kfree(tr->root_dir->name);
-    tr->root_dir->name = 0;
+    tr->root_dir = iso9660_dirent_normalize_cache(rd, tr);
 
     return tr;
 }
 
-void iso9660fs_close(file_system_t* fs)
-{
-    if(fs->fs_type != FS_TYPE_ISO9660) return;
-    kfree(fs);
-}
-
-list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size)
+fsnode_t* iso9660_open(fsnode_t* dir, char* name)
 {
     file_system_t* fs = dir->file_system;
-    u64 lba = dir->fsdisk_loc;
+    iso9660_node_specific_t* spe = dir->specific;
+    
     u32 length = (u32) dir->length;
-    u8* dirent_data = 
-    #ifdef MEMLEAK_DBG
-    kmalloc(length, "iso9660_read_dir dirent buffer");
-    #else
-    kmalloc(length);
-    #endif
+    u8* dirent_data = kmalloc(length);
 
     //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
-    if(block_read_flexible(lba, 0, dirent_data, length, fs->drive) != ERROR_NONE)
-        return 0;
-    
-    list_entry_t* tr = 
-    #ifdef MEMLEAK_DBG
-    kmalloc(sizeof(list_entry_t), "iso9660_read_dir first list entry");
-    #else
-    kmalloc(sizeof(list_entry_t));
-    #endif
-    list_entry_t* ptr = tr;
-    *size = 0;
+    error_t readop0 = block_read_flexible(spe->extent_start, 0, dirent_data, length, fs->drive);
+    if(readop0 != ERROR_NONE) return 0;
 
     u32 offset = (u32) dirent_data;
     u32 index = 0;
     while(length)
     {
         iso9660_dir_entry_t* dirptr = (iso9660_dir_entry_t*) offset;
-        if(dirptr->length == 0) 
+        if(dirptr->length == 0)
         {
             offset++;
             length--;
             continue;
         }
-        
-        file_descriptor_t* fd = 
-        #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(file_descriptor_t), "iso9660_read_dir dirent file_descriptor");
-        #else
-        kmalloc(sizeof(file_descriptor_t));
-        #endif
 
-        if(index == 0)
+        if(strcfirst(dirptr->name, name) == dirptr->name_len) 
         {
-            //current dir (.)
-            fd->name = 0;
-            fd_copy(fd, dir);
-            fd->name = 
-            #ifdef MEMLEAK_DBG
-            kmalloc(2, "iso9660_read_dir dirent name");
-            #else
-            kmalloc(2);
-            #endif
-            *(fd->name+1) = 0; strcpy(fd->name, ".");
+            fsnode_t* tr = iso9660_dirent_normalize_cache(dirptr, fs);
+            kfree(dirent_data);
+            return tr;
         }
-        else if(index == 1)
-        {
-            //parent dir (..)
-            fd->name = 0;
-            if(dir->parent_directory) 
-                fd_copy(fd, dir->parent_directory); 
-            else 
-                fd_copy(fd, dir); 
-            
-            fd->name = 
-            #ifdef MEMLEAK_DBG
-            kmalloc(3, "iso9660_read_dir dirent name");
-            #else
-            kmalloc(3);
-            #endif
-            *(fd->name+2) = 0; strcpy(fd->name, "..");
-        }
-        else
-            iso9660_get_fd(fd, dirptr, dir, fs);
         
-        //kprintf("%s\n", fd->name);
-        ptr->element = fd;
-        ptr->next = 
-        #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(list_entry_t), "iso9660_read_dir list entry");
-        #else
-        kmalloc(sizeof(list_entry_t));
-        #endif
-        ptr = ptr->next;
         offset+= dirptr->length;
         length-= dirptr->length;
-        (*size)++;
         index++;
     }
-    kfree(ptr);
 
     kfree(dirent_data);
 
-    return tr;
+    return 0;
 }
 
 error_t iso9660fs_read_file(fd_t* fd, void* buffer, u64 count)
 {
-    file_descriptor_t* file = fd->file;
+    fsnode_t* file = fd->file;
+    iso9660_node_specific_t* spe = file->specific;
     u64 offset = fd->offset;
-
     file_system_t* fs = file->file_system;
-    u64 lba = file->fsdisk_loc;
 
-    while(offset > 2048) {offset -= 2048; lba++;}
-
-    return block_read_flexible(lba, (u32) offset, buffer, count, fs->drive);
+    return block_read_flexible(spe->extent_start, (u32) offset, buffer, count, fs->drive);
 }
 
-static void iso9660_get_fd(file_descriptor_t* dest, iso9660_dir_entry_t* dirent, file_descriptor_t* parent, file_system_t* fs)
+static fsnode_t* iso9660_dirent_normalize_cache(iso9660_dir_entry_t* dirent, file_system_t* fs)
 {
-    //copy name
-    dest->name = 
-    #ifdef MEMLEAK_DBG
-    kmalloc((u32) dirent->name_len+1, "iso9660 fd name");
-    #else
-    kmalloc((u32) dirent->name_len+1);
-    #endif
-    *(dest->name+dirent->name_len) = 0;
-    strncpy(dest->name, dirent->name, dirent->name_len);
-    if(dirent->name_len > 2) if(*(dest->name+dirent->name_len-2) == ';') *(dest->name+dirent->name_len-2) = 0;
-    if(dirent->name_len > 1) {u32 len = strlen(dest->name); if(*(dest->name+len-1) == '.') *(dest->name+len-1) = 0;}
-    
-    //set infos
-    dest->file_system = fs;
-    dest->parent_directory = parent;
-    dest->fsdisk_loc = dirent->extent_start_lsb;
-    dest->length = dirent->extent_size_lsb;
-    //TODO : maybe better scale dest->offset = 0;
+    /* try to read node from the cache */
+    list_entry_t* iptr = fs->inode_cache;
+    u32 isize = fs->inode_cache_size;
+    while(iptr && isize)
+    {
+        fsnode_t* element = iptr->element;
+        iso9660_node_specific_t* espe = element->specific;
+        if(espe->extent_start == dirent->extent_start_lsb) return element;
+        iptr = iptr->next;
+        isize--;
+    }
+
+    /* parse inode from dirent */
+    fsnode_t* std_node = kmalloc(sizeof(fsnode_t));
+
+    std_node->file_system = fs;
+    std_node->length = dirent->extent_size_lsb;
 
     //parse time (check for year-100)
-    dest->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year));
-    dest->last_modification_time = dest->creation_time;
-    dest->last_access_time = 0; //0 as NO value or -1 ? NO Value or creation_time ?
+    std_node->creation_time = convert_to_std_time(dirent->record_time.second, dirent->record_time.minute, dirent->record_time.hour, dirent->record_time.day, dirent->record_time.month, (u8)(dirent->record_time.year));
+    std_node->last_modification_time = std_node->creation_time;
+    std_node->last_access_time = 0; //0 as NO value or -1 ? NO Value or creation_time ?
 
     //set attributes
-    dest->attributes = 0;
-    if(dirent->flags & ISO9660_FLAG_HIDDEN) dest->attributes |= FILE_ATTR_HIDDEN;
-    if(dirent->flags & ISO9660_FLAG_DIR) dest->attributes |= FILE_ATTR_DIR;
+    std_node->attributes = 0;
+    if(dirent->flags & ISO9660_FLAG_HIDDEN) std_node->attributes |= FILE_ATTR_HIDDEN;
+    if(dirent->flags & ISO9660_FLAG_DIR) std_node->attributes |= FILE_ATTR_DIR;
+
+    //set specific
+    iso9660_node_specific_t* spe = kmalloc(sizeof(iso9660_node_specific_t));
+    spe->extent_start = dirent->extent_start_lsb;
+    std_node->specific = spe;
+
+    /* cache the object */
+    if(!fs->inode_cache)
+    {
+        fs->inode_cache = kmalloc(sizeof(list_entry_t));
+        fs->inode_cache->element = std_node;
+        fs->inode_cache_size++;
+    }
+    else
+    {
+        list_entry_t* ptr = fs->inode_cache;
+        list_entry_t* last = 0;
+        u32 size = fs->inode_cache_size;
+        while(ptr && size)
+        {
+            last = ptr;
+            ptr = ptr->next;
+            size--;
+        }
+        ptr = kmalloc(sizeof(list_entry_t));
+        ptr->element = std_node;
+        last->next = ptr;
+        fs->inode_cache_size++;
+    }
+
+    return std_node;
 }

@@ -120,7 +120,7 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
         }
         case FS_TYPE_EXT2:
         {
-            //fs = ext2fs_init(drive, partition);
+            fs = ext2_init(drive, partition);
             break;
         }
     }
@@ -290,8 +290,8 @@ list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
 {
     if(directory->file_system->fs_type == FS_TYPE_FAT32)
         return fat32fs_read_dir(directory, dirsize);
-    else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
-        return iso9660fs_read_dir(directory, dirsize);
+    //else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
+        //return iso9660fs_read_dir(directory, dirsize);
     //else if(directory->file_system->fs_type == FS_TYPE_EXT2)
         //return ext2fs_read_dir(directory, dirsize);
     else if(directory->file_system->fs_type == FS_TYPE_DEVFS)
@@ -319,7 +319,7 @@ error_t read_file(fd_t* fd, void* buffer, u64 count)
             tr = fat32fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_ISO9660:
-            tr = iso9660fs_read_file(fd, buffer, count);
+            //tr = iso9660fs_read_file(fd, buffer, count);
             break;
         case FS_TYPE_EXT2:
             //tr = ext2fs_read_file(fd, buffer, count);
