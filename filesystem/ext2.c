@@ -35,11 +35,67 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
 static error_t ext2_inode_write_content(fsnode_t* node, u32 offset, u32 size, void* buffer);
 
 static u32 ext2_block_alloc(file_system_t* fs);
-static error_t ext2_block_free(u32 block, file_system_t* fs);
+static void ext2_block_free(u32 block, file_system_t* fs);
 static u32 ext2_inode_alloc(file_system_t* fs);
-static error_t ext2_inode_free(u32 inode, file_system_t* fs);
+static void ext2_inode_free(fsnode_t* node);
 static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len);
 static void ext2_bitmap_mark_bit_free(u8* bitmap, u32 bit);
+
+/*
+* This function initializes a new ext2 file_system_t
+*/
+file_system_t* ext2_init(block_device_t* drive, u8 partition)
+{
+    //read superblock
+    u32 start_offset = 0;
+    if(partition) start_offset = drive->partitions[partition-1]->start_lba;
+
+    ext2_superblock_t* superblock = kmalloc(sizeof(ext2_superblock_t));
+    block_read_flexible(start_offset+2, 0, (u8*) superblock, sizeof(ext2_superblock_t), drive);
+
+    if((superblock->signature != 0xef53) | ((superblock->version_major >= 1) & (superblock->required_features)))
+    {
+        kfree(superblock);
+        return 0;
+    }
+
+    //allocating data struct
+    file_system_t* tr = 
+    #ifndef MEMLEAK_DBG
+    kmalloc(sizeof(file_system_t));
+    #else
+    kmalloc(sizeof(file_system_t), "ext2 file_system_t struct");
+    #endif
+    tr->drive = drive;
+    tr->fs_type = FS_TYPE_EXT2;
+    tr->flags = 0;
+    tr->partition = partition;
+
+    if(superblock->read_only_features & 5) //masking 64-bits file sizes (supported) //TODO: support sparse superblocks..
+    {
+        tr->flags |= FS_FLAG_READ_ONLY;
+    }
+
+    tr->inode_cache = 0;
+    tr->inode_cache_size = 0;
+
+    //allocating specific data struct
+    ext2fs_specific_t* ext2spe = kmalloc(sizeof(ext2fs_specific_t));
+    ext2spe->superblock = superblock;
+    ext2spe->superblock_offset = start_offset;
+    ext2spe->block_size = (u32)(1024 << superblock->block_size);
+    
+    ext2spe->blockgroup_count = (superblock->blocks-superblock->superblock_number)/superblock->blocks_per_blockgroup;
+    if((superblock->blocks-superblock->superblock_number)%superblock->blocks_per_blockgroup) ext2spe->blockgroup_count++;
+    
+    tr->specific = ext2spe;
+
+    //root directory is on inode 2
+    
+    tr->root_dir = ext2_std_inode_read(2, tr);
+
+    return tr;
+}
 
 /*
 * This function lists the content of a directory to a linked list of dirent_t
@@ -780,6 +836,295 @@ static u32 ext2_block_alloc(file_system_t* fs)
     }
 
     return 0;
+}
+
+/*
+* Free an allocated block
+*/
+static void ext2_block_free(u32 block, file_system_t* fs)
+{
+    ext2fs_specific_t* ext2 = fs->specific;
+
+    //calculating inode block group
+    u32 blocks_per_blockgroup = ext2->superblock->blocks_per_blockgroup;
+    u32 block_group = (block) / blocks_per_blockgroup;
+
+    //calculating block_group_descriptor offset
+    u32 bg_read_offset = block_group*sizeof(ext2_block_group_descriptor_t);
+
+    //reading block group descriptor
+    ext2_block_group_descriptor_t bg;
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+    //reading block bitmap
+    u8* bitmap_buffer = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg.block_address_block_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+    //marking bit free in bitmap
+    u32 bit_to_mark = block - block_group*ext2->superblock->blocks_per_blockgroup;
+    ext2_bitmap_mark_bit_free(bitmap_buffer, bit_to_mark);
+
+    //rewrite marked bitmap on disk
+    block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg.block_address_block_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+}
+
+/*
+* Allocates a new inode
+*/
+static u32 ext2_inode_alloc(file_system_t* fs)
+{
+    ext2fs_specific_t* ext2 = fs->specific;
+
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+
+    u32 i = 0;
+    for(;i<ext2->blockgroup_count;i++)
+    {
+        //read bg_desc of blockgroup i
+        ext2_block_group_descriptor_t bg_desc;
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table),  i*sizeof(ext2_block_group_descriptor_t),
+        (u8*) &bg_desc, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+        //read inode bitmap of blockgroup i
+        u8* bitmap_buffer = kmalloc(ext2->block_size);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg_desc.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+        //find first free bit of bitmap
+        u32 first_zero_bit = ext2_bitmap_mark_first_zero_bit(bitmap_buffer, ext2->block_size);
+        if(first_zero_bit == ((u32)-1)) {kfree(bitmap_buffer); continue;} //this blockgroup has no free inode
+
+        //rewrite marked bitmap on disk
+        block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(bg_desc.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+        
+        //calculate inode to return
+        u32 inode = i*ext2->superblock->inodes_per_blockgroup + first_zero_bit + 1;
+
+        //update bg_desc and rewrite it
+        bg_desc.unallocated_inodes--;
+        block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table),  i*sizeof(ext2_block_group_descriptor_t),
+        (u8*) &bg_desc, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+        //update superblock and rewrite it
+        ext2->superblock->unallocated_inodes--;
+        block_write_flexible(ext2->superblock_offset+2, 0,
+        (u8*) ext2->superblock, sizeof(ext2_superblock_t), fs->drive);
+
+        //return the free block that we have marked
+        return inode;
+    }
+
+    return 0;
+}
+
+/*
+* Free an allocated inode
+*/
+static void ext2_inode_free(fsnode_t* node)
+{
+    file_system_t* fs = node->file_system;
+    ext2fs_specific_t* ext2 = fs->specific;
+    ext2_node_specific_t* inode = node->specific;
+    u32 inode_nbr = inode->inode_nbr;
+
+    /* freeing inode blocks */
+    u64 size = node->length;
+    u32 i = 0;
+    for(i=0;i<12;i++)
+    {
+        //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+        if(!inode->direct_block_pointers[i]) 
+        {
+            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (direct block pointer %u ->0)\n", 0b00000110, i);
+            return;// ERROR_FILE_CORRUPTED_FS;
+        }
+
+        ext2_block_free(inode->direct_block_pointers[i], fs);
+
+        if(size >= ext2->block_size) size -= ext2->block_size;
+        else size = 0;
+
+        if(!size) goto free_inode;
+    }
+
+    if(!inode->singly_indirect_block_pointer)
+    {
+        kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->0)\n", 0b00000110);
+        return;// ERROR_FILE_CORRUPTED_FS;
+    }
+    u32* singly_indirect_block = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
+
+    for(i=0;i<(ext2->block_size/4);i++)
+    {
+        //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+        if(!singly_indirect_block[i]) 
+        {
+            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->direct block pointer->0)\n", 0b00000110);
+            kfree(singly_indirect_block);
+            return;// ERROR_FILE_CORRUPTED_FS;
+        }
+
+        ext2_block_free(singly_indirect_block[i], fs);
+
+        if(size >= ext2->block_size) size -= ext2->block_size;
+        else size = 0;
+        
+        if(!size) {kfree(singly_indirect_block); ext2_block_free(inode->singly_indirect_block_pointer, fs); goto free_inode;}
+    }
+        
+    kfree(singly_indirect_block);
+    ext2_block_free(inode->singly_indirect_block_pointer, fs);
+
+    if(!inode->doubly_indirect_block_pointer)
+    {
+        kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->0)\n", 0b00000110);
+        return;// ERROR_FILE_CORRUPTED_FS;
+    }
+    u32* doubly_indirect_block = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
+    
+    u32 j;
+    for(j = 0;j<(ext2->block_size/4);j++)
+    {
+        //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+        if(!doubly_indirect_block[j]) 
+        {
+            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->singly indirect pointer->0)\n", 0b00000110);
+            kfree(doubly_indirect_block);
+            return;// ERROR_FILE_CORRUPTED_FS;
+        }
+        u32* sib = kmalloc(ext2->block_size);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+
+        for(i=0;i<(ext2->block_size/4);i++)
+        {
+            //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+            if(!sib[i]) 
+            {
+                kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly->singly->direct->0)\n", 0b00000110);
+                kfree(sib); kfree(doubly_indirect_block);
+                return;// ERROR_FILE_CORRUPTED_FS;
+            }
+
+            ext2_block_free(sib[i], fs);
+
+            if(size >= ext2->block_size) size -= ext2->block_size;
+            else size = 0;
+            
+            if(!size) {kfree(sib); kfree(doubly_indirect_block); ext2_block_free(doubly_indirect_block[j], fs); ext2_block_free(inode->doubly_indirect_block_pointer, fs); goto free_inode;}
+        }
+
+        kfree(sib);
+        ext2_block_free(doubly_indirect_block[j], fs);
+    }
+
+    kfree(doubly_indirect_block);
+    ext2_block_free(inode->doubly_indirect_block_pointer, fs);
+
+    if(!inode->triply_indirect_block_pointer)
+    {
+        kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->0)\n", 0b00000110);
+        return;// ERROR_FILE_CORRUPTED_FS;
+    }
+    u32* triply_indirect_block = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
+
+    u32 k;
+    for(k=0;k<(ext2->block_size/4);k++)
+    {
+        if(!triply_indirect_block[j]) 
+        {
+            kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->doubly indirect pointer->0)\n", 0b00000110);
+            kfree(triply_indirect_block);
+            return;// ERROR_FILE_CORRUPTED_FS;
+        }
+        u32* dib = kmalloc(ext2->block_size);
+        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
+
+        for(j=0;j<(ext2->block_size/4);j++)
+        {
+            //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+            if(!dib[j]) 
+            {
+                kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->0)\n", 0b00000110);
+                kfree(triply_indirect_block); kfree(dib);
+                return;// ERROR_FILE_CORRUPTED_FS;
+            }
+            u32* sib = kmalloc(ext2->block_size);
+            block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+
+            for(i=0;i<(ext2->block_size/4);i++)
+            {
+                //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
+                if(!sib[i]) 
+                {
+                    kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->direct->0)\n", 0b00000110);
+                    kfree(sib); kfree(dib); kfree(triply_indirect_block);
+                    return;// ERROR_FILE_CORRUPTED_FS;
+                }
+
+                ext2_block_free(sib[i], fs);
+
+                if(size >= ext2->block_size) size -= ext2->block_size;
+                else size = 0;
+            
+                if(!size) {kfree(sib); kfree(dib); kfree(triply_indirect_block); ext2_block_free(dib[j], fs); ext2_block_free(triply_indirect_block[k], fs); ext2_block_free(inode->triply_indirect_block_pointer, fs); goto free_inode;}
+            }
+
+            kfree(sib);
+            ext2_block_free(dib[j], fs);
+        }
+
+        kfree(dib);
+        ext2_block_free(triply_indirect_block[k], fs);
+    }
+
+    kfree(triply_indirect_block);
+    ext2_block_free(inode->triply_indirect_block_pointer, fs);
+
+    /* freeing the inode */
+    free_inode:
+    {
+    //calculating inode block group
+    u32 inodes_per_blockgroup = ext2->superblock->inodes_per_blockgroup;
+    u32 inode_block_group = (inode_nbr - 1) / inodes_per_blockgroup;
+
+    //calculating block_group_descriptor offset
+    u32 bg_read_offset = inode_block_group*sizeof(ext2_block_group_descriptor_t);
+
+    //reading block group descriptor
+    ext2_block_group_descriptor_t inode_bg;
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+
+    //reading inode bitmap
+    u8* bitmap_buffer = kmalloc(ext2->block_size);
+    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+    //marking bit free in bitmap
+    u32 bit_to_mark = inode_nbr - 1 - inode_block_group*ext2->superblock->inodes_per_blockgroup;
+    ext2_bitmap_mark_bit_free(bitmap_buffer, bit_to_mark);
+
+    //rewrite marked bitmap on disk
+    block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.block_address_inode_usage), 0, bitmap_buffer, ext2->block_size, fs->drive);
+
+    /* free inode from the cache */
+    //TODO: here we assume that inode we want to free is not the first in the cache (cause the first is theorically inode 2)
+    //this is a little risquy tho
+    list_entry_t* iptr = fs->inode_cache;
+    list_entry_t* last = 0;
+    u32 isize = fs->inode_cache_size;
+    while(iptr && isize)
+    {
+        fsnode_t* element = iptr->element;
+        ext2_node_specific_t* spe = element->specific;
+        if(spe->inode_nbr == inode_nbr) {last->next = iptr->next; kfree(element->specific); kfree(element); kfree(iptr);}
+        last = iptr;
+        iptr = iptr->next;
+        isize--;
+    }
+    }
 }
 
 static u32 ext2_bitmap_mark_first_zero_bit(u8* bitmap, u32 len)

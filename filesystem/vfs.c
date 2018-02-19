@@ -223,7 +223,7 @@ fd_t* open_file(char* path, u8 mode)
     {
         file_system_t* fs = root_point->fs;
         fd_t* tr = kmalloc(sizeof(fd_t));
-        tr->file = &fs->root_dir;
+        tr->file = fs->root_dir;
         tr->offset = 0;
         return tr;
     }
@@ -249,7 +249,7 @@ fd_t* open_file(char* path, u8 mode)
     if(!strcmp(path, best->path))
     {
         fd_t* tr = kmalloc(sizeof(fd_t));
-        tr->file = &best->fs->root_dir;
+        tr->file = best->fs->root_dir;
         tr->offset = 0;
         return tr;
     }
@@ -473,7 +473,7 @@ static fd_t* do_open_fs(char* path, mount_point_t* mp)
     
     /* Step 2 : iterate from the root directory and continue on as we found dirs/files on the list (splitted) */
 	u32 dirsize = 0;
-	list_entry_t* cdir = read_directory(&mp->fs->root_dir, &dirsize);
+	list_entry_t* cdir = read_directory(mp->fs->root_dir, &dirsize);
 	if(!cdir) return 0;
 	list_entry_t* lbuf = cdir;
 	u32 j = 0;

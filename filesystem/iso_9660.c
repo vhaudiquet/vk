@@ -142,9 +142,10 @@ file_system_t* iso9660fs_init(block_device_t* drive)
 
     //making root_dir file descriptor
     iso9660_dir_entry_t* rd = (iso9660_dir_entry_t*) pvd.root_directory;
-    iso9660_get_fd(&tr->root_dir, rd, 0, tr);
-    kfree(tr->root_dir.name);
-    tr->root_dir.name = 0;
+    tr->root_dir = kmalloc(sizeof(file_descriptor_t));
+    iso9660_get_fd(tr->root_dir, rd, 0, tr);
+    kfree(tr->root_dir->name);
+    tr->root_dir->name = 0;
 
     return tr;
 }

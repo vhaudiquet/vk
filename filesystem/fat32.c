@@ -161,11 +161,12 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 	tr->drive = drive;
 	tr->partition = partition;
 
-	tr->root_dir.name = 0;
-	tr->root_dir.file_system = tr;
-	tr->root_dir.fsdisk_loc = bpb->root_directory_cluster;
-	tr->root_dir.attributes = FILE_ATTR_DIR;
-	tr->root_dir.length = 0;
+	tr->root_dir = kmalloc(sizeof(file_descriptor_t));
+	tr->root_dir->name = 0;
+	tr->root_dir->file_system = tr;
+	tr->root_dir->fsdisk_loc = bpb->root_directory_cluster;
+	tr->root_dir->attributes = FILE_ATTR_DIR;
+	tr->root_dir->length = 0;
 
 	//reading the FAT and caching it in memory
 	spe->fat_table = 

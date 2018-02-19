@@ -55,7 +55,8 @@ file_system_t* devfs_init()
     root_dirent.diskloc->device_struct = kmalloc(root_dirent.length);
     memset(root_dirent.diskloc->device_struct, 0, root_dirent.length);
     root_dirent.diskloc->device_info = 0;
-    devfs_get_fd(&tr->root_dir, &root_dirent, 0, tr);
+    tr->root_dir = kmalloc(sizeof(file_descriptor_t));
+    devfs_get_fd(tr->root_dir, &root_dirent, 0, tr);
 
     /* add block devices */
     u32 i = 0;
@@ -71,7 +72,7 @@ file_system_t* devfs_init()
         diskloc->device_info = 0;
         char* name = kmalloc(4);
         name[0] = 's'; name[1] = 'd'; name[2] = (char) ('a'+i); name[3] = 0;
-        devfs_create_file(&tr->root_dir, diskloc, name, blockdev->device_size*512); //care: size is in sectors
+        devfs_create_file(tr->root_dir, diskloc, name, blockdev->device_size*512); //care: size is in sectors
 
         //create sdxX entry
         u8 j = 0;
@@ -83,7 +84,7 @@ file_system_t* devfs_init()
             xdiskloc->device_info = j;
             char* xname = kmalloc(5);
             xname[0] = 's'; xname[1] = 'd'; xname[2] = (char) ('a'+i); xname[3] = (char) ('1' + j); xname[4] = 0;
-            devfs_create_file(&tr->root_dir, xdiskloc, xname, blockdev->partitions[j]->length); //care: length is in sectors ?
+            devfs_create_file(tr->root_dir, xdiskloc, xname, blockdev->partitions[j]->length); //care: length is in sectors ?
         }
     }
     devfs = tr;
@@ -180,7 +181,7 @@ void devfs_register_device(char* name, void* device, u8 device_type, u8 device_i
     diskloc->device_type = device_type;
     diskloc->device_info = device_info;
 
-    devfs_create_file(&devfs->root_dir, diskloc, name_bck, 0);
+    devfs_create_file(devfs->root_dir, diskloc, name_bck, 0);
 }
 
 static void devfs_create_file(file_descriptor_t* dir, devfs_diskloc_t* diskloc, char* name, u32 length)

@@ -83,7 +83,7 @@ typedef struct file_system
     u8 partition;
     u8 fs_type;
     u8 flags;
-    struct file_descriptor root_dir;
+    struct file_descriptor* root_dir;
     list_entry_t* inode_cache;
     u32 inode_cache_size;
     void* specific;

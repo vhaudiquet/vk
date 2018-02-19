@@ -102,5 +102,6 @@ typedef struct EXT2_DIRENT
 
 error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size);
 fsnode_t* ext2_open(fsnode_t* dir, char* name);
+file_system_t* ext2_init(block_device_t* drive, u8 partition);
 
 #endif
