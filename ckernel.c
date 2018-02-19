@@ -29,8 +29,6 @@
 #include "io/io.h"
 void args_parse(char* cmdline);
 
-//TODO : ATA PIO driver -> check for solutions on write_28, write_48, or delete them (as we dont need write on PIO if we have it on DMA)
-
 void kmain(multiboot_info_t* mbt, void* stack_pointer)
 {
     //Current status : 32 bits, protected mode, interrupts off, paging on (0-4MiB mapped to 0xC0000000) 
