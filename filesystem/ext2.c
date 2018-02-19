@@ -336,7 +336,7 @@ static error_t ext2_std_inode_write(fsnode_t* node)
     //if file is not a directory and fs has feature activated, file_size is 64 bits long (directory_acl is size_high)
     if((!(node->attributes & FILE_ATTR_DIR)) && (ext2->superblock->version_major >= 1) && (ext2->superblock->read_only_features & EXT2_ROFEATURE_SIZE_64))
     {
-        ext2_inode.directory_acl = (u32)(node->length & 0xFFFFFFFF00000000);
+        ext2_inode.directory_acl = (u32)(node->length >> 32);
     }
 
     ext2_inode.creation_time = node->creation_time;
