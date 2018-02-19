@@ -121,29 +121,6 @@ void fd_list_free(list_entry_t* list, u32 list_size);
 void fd_copy(file_descriptor_t* dest, file_descriptor_t* src);
 void fd_free(file_descriptor_t* fd);
 
-//FAT32 specific
-typedef struct fat32fs_specific
-{
-    struct BPB* bpb;
-    u32 bpb_offset;
-    u32* fat_table;
-} fat32fs_specific_t;
-
-file_system_t* fat32fs_init(block_device_t* drive, u8 partition);
-void fat32fs_close(file_system_t* fs);
-list_entry_t* fat32fs_read_dir(file_descriptor_t* dir, u32* size);
-error_t fat32fs_read_file(fd_t* file, void* buffer, u64 count);
-error_t fat32fs_write_file(fd_t* file, u8* buffer, u64 count);
-file_descriptor_t* fat32fs_create_file(u8* name, u8 attributes, file_descriptor_t* dir);
-error_t fat32fs_delete_file(file_descriptor_t* file);
-error_t fat32fs_rename(file_descriptor_t* file, char* newname);
-
-//ISO9660 specific
-file_system_t* iso9660fs_init(block_device_t* drive);
-void iso9660fs_close(file_system_t* fs);
-//list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
-error_t iso9660fs_read_file(fd_t* file, void* buffer, u64 count);
-
 //DEVFS specific
 #define DEVFS_TYPE_DIRECTORY 1
 #define DEVICE_TYPE_BLOCK 2
