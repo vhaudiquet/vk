@@ -100,8 +100,27 @@ typedef struct EXT2_DIRENT
     u8 name[];
 } __attribute__((packed)) ext2_dirent_t;
 
+typedef struct ext2_node_specific
+{
+    u32 inode_nbr;
+    u32 direct_block_pointers[12];
+    u32 singly_indirect_block_pointer;
+    u32 doubly_indirect_block_pointer;
+    u32 triply_indirect_block_pointer;
+} ext2_node_specific_t;
+
+typedef struct ext2fs_specific
+{
+    struct EXT2_SUPERBLOCK* superblock;
+    u32 superblock_offset;
+    u32 block_size;
+    u32 blockgroup_count;
+} ext2fs_specific_t;
+
 error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size);
 fsnode_t* ext2_open(fsnode_t* dir, char* name);
 file_system_t* ext2_init(block_device_t* drive, u8 partition);
+error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
+error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count);
 
 #endif

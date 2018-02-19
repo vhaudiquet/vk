@@ -17,15 +17,6 @@
 
 #include "ext2.h"
 
-typedef struct ext2_node_specific
-{
-    u32 inode_nbr;
-    u32 direct_block_pointers[12];
-    u32 singly_indirect_block_pointer;
-    u32 doubly_indirect_block_pointer;
-    u32 triply_indirect_block_pointer;
-} ext2_node_specific_t;
-
 #define BLOCK_OFFSET(block) ((block)*(ext2->block_size/512))
 
 static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs);
@@ -146,6 +137,26 @@ error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
 
     kfree(dirent_buffer);
     return ERROR_NONE;
+}
+
+/*
+* Reads data from an ext2 file
+* Returns ERROR_NONE if it went well, errno instead
+*/
+error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
+{
+    if(count > U32_MAX) return ERROR_FILE_OUT;
+    return ext2_inode_read_content(fd->file, (u32) fd->offset, (u32) count, buffer);
+}
+
+/*
+* Write data to an ext2 file
+* Returns ERROR_NONE if it went well, errno instead
+*/
+error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
+{
+    if(count > U32_MAX) return ERROR_FILE_OUT;
+    return ext2_inode_write_content(fd->file, (u32) fd->offset, (u32) count, buffer);
 }
 
 /*

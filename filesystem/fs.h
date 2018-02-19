@@ -144,23 +144,6 @@ void iso9660fs_close(file_system_t* fs);
 //list_entry_t* iso9660fs_read_dir(file_descriptor_t* dir, u32* size);
 error_t iso9660fs_read_file(fd_t* file, void* buffer, u64 count);
 
-//EXT2 specific
-typedef struct ext2fs_specific
-{
-    struct EXT2_SUPERBLOCK* superblock;
-    u32 superblock_offset;
-    u32 block_size;
-    u32 blockgroup_count;
-} ext2fs_specific_t;
-
-file_system_t* ext2_init(block_device_t* drive, u8 partition);
-//list_entry_t* ext2fs_read_dir(file_descriptor_t* dir, u32* size);
-//error_t ext2fs_read_file(fd_t* file, void* buffer, u64 count);
-//error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
-//error_t ext2fs_link(file_descriptor_t* file, file_descriptor_t* newdir, char* newname);
-//error_t ext2fs_unlink(file_descriptor_t* file);
-//file_descriptor_t* ext2fs_create_file(char* name, u8 attributes, file_descriptor_t* dir);
-
 //DEVFS specific
 #define DEVFS_TYPE_DIRECTORY 1
 #define DEVICE_TYPE_BLOCK 2
