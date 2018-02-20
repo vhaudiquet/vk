@@ -88,7 +88,7 @@ fsnode_t* iso9660_open(fsnode_t* dir, char* name)
     return 0;
 }
 
-error_t iso9660fs_read_file(fd_t* fd, void* buffer, u64 count)
+error_t iso9660_read_file(fd_t* fd, void* buffer, u64 count)
 {
     fsnode_t* file = fd->file;
     iso9660_node_specific_t* spe = file->specific;

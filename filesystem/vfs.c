@@ -40,6 +40,7 @@ mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 
 static fsnode_t* do_open_fs(char* path, mount_point_t* mp);
+static fsnode_t* create_file(char* path, u8 attributes);
 
 u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
@@ -225,6 +226,9 @@ fd_t* open_file(char* path, u8 mode)
     if(!best) {fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); return 0;}
 
     fsnode_t* node = do_open_fs(path+strlen(best->path), best);
+    
+    if((!node) && ((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP))) return 0;
+    
     fd_t* tr = kmalloc(sizeof(fd_t));
     tr->file = node;
     tr->offset = 0;
@@ -233,11 +237,12 @@ fd_t* open_file(char* path, u8 mode)
     if((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP)) return tr;
     else
     {
-        if(tr == 0) tr = create_file(path, 0);
+        if(node == 0) {tr->file = create_file(path, 0); if(!tr->file) return 0;}
         if((mode == OPEN_MODE_W) | (mode == OPEN_MODE_WP))
         {
             u8* zero_buffer = kmalloc((u32) flength(tr)); memset(zero_buffer, 0, (size_t) flength(tr));
             write_file(tr, zero_buffer, flength(tr));
+            tr->file->length = 0;
         }
         if((mode == OPEN_MODE_A) | (mode == OPEN_MODE_AP))
         {
@@ -245,6 +250,73 @@ fd_t* open_file(char* path, u8 mode)
         }
     }
 
+    return tr;
+}
+
+void close_file(fd_t* file)
+{
+    kfree(file);
+}
+
+u64 flength(fd_t* file)
+{
+    return file->file->length;
+}
+
+error_t read_file(fd_t* fd, void* buffer, u64 count)
+{
+    fsnode_t* inode = fd->file;
+    if((inode->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
+
+    if(flength(fd)) //if file->length is 0, it's a special file (blockdev/tty...)
+    {
+        if(fd->offset >= flength(fd)) {*((u8*) buffer) = 0; return ERROR_EOF;}
+	    if(count+fd->offset > flength(fd)) count = flength(fd) - fd->offset; //if we want to read more, we just reajust
+    }
+
+	if(count == 0) {*((u8*) buffer) = 0; return ERROR_NONE;}
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(inode->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            //tr = fat32_read_file(fd, buffer, count);
+            break;
+        case FS_TYPE_ISO9660:
+            tr = iso9660_read_file(fd, buffer, count);
+            break;
+        case FS_TYPE_EXT2:
+            tr = ext2_read_file(fd, buffer, count);
+            break;
+        case FS_TYPE_DEVFS:
+            tr = devfs_read_file(fd, buffer, count);
+            break;
+    }
+    if(tr == ERROR_NONE) fd->offset += count;
+    return tr;
+}
+
+error_t write_file(fd_t* fd, void* buffer, u64 count)
+{
+    fsnode_t* inode = fd->file;
+
+    if((inode->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
+    if(count == 0) return 0;
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(inode->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            //tr = fat32_write_file(fd, buffer, count);
+            break;
+        case FS_TYPE_DEVFS:
+            tr = devfs_write_file(fd, buffer, count);
+            break;
+        case FS_TYPE_EXT2:
+            tr = ext2_write_file(fd, buffer, count);
+            break;
+    }
+    if(tr == ERROR_NONE) fd->offset += count;
     return tr;
 }
 
@@ -279,5 +351,10 @@ static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
     }
 
     //the code should never reach that part
+    return 0;
+}
+
+static fsnode_t* create_file(char* path, u8 attributes)
+{
     return 0;
 }

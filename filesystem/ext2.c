@@ -143,7 +143,7 @@ error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
 * Reads data from an ext2 file
 * Returns ERROR_NONE if it went well, errno instead
 */
-error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
+error_t ext2_read_file(fd_t* fd, void* buffer, u64 count)
 {
     if(count > U32_MAX) return ERROR_FILE_OUT;
     return ext2_inode_read_content(fd->file, (u32) fd->offset, (u32) count, buffer);
@@ -153,7 +153,7 @@ error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count)
 * Write data to an ext2 file
 * Returns ERROR_NONE if it went well, errno instead
 */
-error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
+error_t ext2_write_file(fd_t* fd, void* buffer, u64 count)
 {
     if(count > U32_MAX) return ERROR_FILE_OUT;
     return ext2_inode_write_content(fd->file, (u32) fd->offset, (u32) count, buffer);
@@ -165,6 +165,7 @@ error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count)
 fsnode_t* ext2_open(fsnode_t* dir, char* name)
 {
     u64 length = dir->length;
+    u32 name_len = strlen(name);
 
     u8* dirent_buffer = kmalloc((u32) length);
     error_t readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
@@ -176,7 +177,7 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
         if(!dirent->inode) break;
 
-        if(!strcmp((char*) dirent->name, name)) 
+        if(strcfirst((char*) dirent->name, name) == name_len) 
         {
             fsnode_t* tr = ext2_std_inode_read(dirent->inode, dir->file_system);
             kfree(dirent_buffer); 

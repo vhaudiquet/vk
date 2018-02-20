@@ -135,8 +135,8 @@ typedef struct ext2fs_specific
 
 file_system_t* ext2_init(block_device_t* drive, u8 partition);
 fsnode_t* ext2_open(fsnode_t* dir, char* name);
-error_t ext2fs_write_file(fd_t* fd, void* buffer, u64 count);
-error_t ext2fs_read_file(fd_t* fd, void* buffer, u64 count);
+error_t ext2_write_file(fd_t* fd, void* buffer, u64 count);
+error_t ext2_read_file(fd_t* fd, void* buffer, u64 count);
 error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size);
 
 #endif

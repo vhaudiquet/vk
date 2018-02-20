@@ -165,9 +165,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
     char* init_buffer =
     #ifdef MEMLEAK_DBG
-    kmalloc((u32) init_file->file->length+1, "init file buffer");
+    kmalloc((u32) flength(init_file)+1, "init file buffer");
     #else
-    kmalloc((u32) init_file->file->length+1);
+    kmalloc((u32) flength(init_file)+1);
     #endif
     memset(init_buffer, 0, (size_t) flength(init_file)+1);
     read_file(init_file, init_buffer, flength(init_file));
