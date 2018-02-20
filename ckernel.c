@@ -24,6 +24,7 @@
 #include "storage/storage.h"
 #include "error/error.h"
 #include "filesystem/fs.h"
+#include "filesystem/devfs.h"
 #include "tasking/task.h"
 #include "time/time.h"
 #include "io/io.h"
@@ -154,10 +155,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     }
 
     //initializing/mounting devfs
-    kprintf("Mounting /dev filesystem...");
-    file_system_t* devfs = devfs_init();
-    mount("/dev", devfs);
-    vga_text_okmsg();
+    devfs_init();
 
     //initializing ttys
     tty_init();

@@ -16,7 +16,6 @@
 */
 
 #include "system.h"
-#include "filesystem/fs.h"
 #include "memory/mem.h"
 
 /* Some basic data structures
@@ -102,38 +101,4 @@ void list_free_eonly(list_entry_t* list, u32 list_size)
         list = list->next;
         kfree(buf);
     }
-}
-
-//FILESYSTEM UTILS
-
-void fd_free(file_descriptor_t* fd)
-{
-    if(fd->name) kfree(fd->name);
-    kfree(fd);
-}
-
-void fd_list_free(list_entry_t* list, u32 list_size)
-{
-    u32 i = 0;
-    for(i = 0;i < list_size;i++)
-    {
-        file_descriptor_t* fd = (file_descriptor_t*) list->element;
-        if(fd)
-            fd_free(fd);
-        void* buf = list;
-        list = list->next;
-        kfree(buf);
-    }
-}
-
-void fd_copy(file_descriptor_t* dest, file_descriptor_t* src)
-{
-    if((src->name != 0) & (dest->name != 0)) strcpy(dest->name, src->name);
-    else dest->name = 0;
-    dest->file_system = src->file_system;
-    dest->fsdisk_loc = src->fsdisk_loc;
-    dest->attributes = src->attributes;
-    dest->length = src->length;
-    //TODO : maybe better scale dest->offset = src->offset;
-    dest->parent_directory = src->parent_directory;
 }

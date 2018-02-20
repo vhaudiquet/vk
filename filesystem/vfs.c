@@ -20,13 +20,15 @@
 #include "error/error.h"
 #include "memory/mem.h"
 
+#include "fat32.h"
+#include "ext2.h"
+#include "iso9660.h"
+#include "devfs.h"
+
 /*
 * This is the virtual file system, that contains all of the mount points and dialogs with every individual filesystem
 * to provides general functions to open a file from a path, either the file is on disk/ram/external, fat32/ext2/... (once supported)
 */
-
-list_entry_t* file_cache = 0;
-u32 file_cache_size = 0;
 
 typedef struct mount_point
 {
@@ -37,7 +39,7 @@ typedef struct mount_point
 mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 
-static fd_t* do_open_fs(char* path, mount_point_t* mp);
+static fsnode_t* do_open_fs(char* path, mount_point_t* mp);
 
 u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
@@ -110,7 +112,7 @@ u8 mount_volume(char* path, block_device_t* drive, u8 partition)
         case 0: return 0;
         case FS_TYPE_FAT32:
         {
-            //fs = fat32fs_init(drive, partition);
+            fs = fat32fs_init(drive, partition);
             break;
         }
         case FS_TYPE_ISO9660:
@@ -182,40 +184,6 @@ void mount(char* path, file_system_t* fs)
     current_mount_points++;
 }
 
-file_descriptor_t* cache_file(file_descriptor_t* file)
-{
-    if(!file_cache)
-    {
-        file_cache = kmalloc(sizeof(list_entry_t));
-        file_cache->element = file;
-        file_cache_size = 1;
-        return file;
-    }
-
-    list_entry_t* ptr = file_cache;
-    list_entry_t* bef = 0;
-    u32 size = file_cache_size;
-    while(ptr && size)
-    {
-        file_descriptor_t* element = ptr->element;
-        if(element->file_system == file->file_system && element->fsdisk_loc == file->fsdisk_loc) 
-        {
-            kfree(file);
-            return element;
-        }
-
-        bef = ptr;
-        ptr = ptr->next;
-        size--;
-    }
-
-    ptr = kmalloc(sizeof(list_entry_t));
-    ptr->element = file;
-    bef->next = ptr;
-    file_cache_size++;
-    return file;
-}
-
 fd_t* open_file(char* path, u8 mode)
 {
     //we are trying to access the root path : simplest case
@@ -255,7 +223,11 @@ fd_t* open_file(char* path, u8 mode)
     }
 
     if(!best) {fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); return 0;}
-    fd_t* tr = do_open_fs(path+strlen(best->path), best);
+
+    fsnode_t* node = do_open_fs(path+strlen(best->path), best);
+    fd_t* tr = kmalloc(sizeof(fd_t));
+    tr->file = node;
+    tr->offset = 0;
 
     //depending on mode
     if((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP)) return tr;
@@ -276,291 +248,36 @@ fd_t* open_file(char* path, u8 mode)
     return tr;
 }
 
-void close_file(fd_t* file)
+static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
 {
-    kfree(file);
-}
+    if(*path == '/') path++;
 
-u64 flength(fd_t* file)
-{
-    return file->file->length;
-}
-
-list_entry_t* read_directory(file_descriptor_t* directory, u32* dirsize)
-{
-    //if(directory->file_system->fs_type == FS_TYPE_FAT32)
-    //    return fat32fs_read_dir(directory, dirsize);
-    //else if(directory->file_system->fs_type == FS_TYPE_ISO9660)
-        //return iso9660fs_read_dir(directory, dirsize);
-    //else if(directory->file_system->fs_type == FS_TYPE_EXT2)
-        //return ext2fs_read_dir(directory, dirsize);
-    //else 
-    if(directory->file_system->fs_type == FS_TYPE_DEVFS)
-        return devfs_read_dir(directory, dirsize);
-    else return 0;
-}
-
-error_t read_file(fd_t* fd, void* buffer, u64 count)
-{
-    file_descriptor_t* file = fd->file;
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
-
-    if(file->length) //if file->length is 0, it's a special file (blockdev/tty...)
-    {
-        if(fd->offset >= file->length) {*((u8*) buffer) = 0; return ERROR_EOF;}
-	    if(count+fd->offset > file->length) count = file->length - fd->offset; //if we want to read more, well, NO BASTARD GTFO
-    }
-
-	if(count == 0) {*((u8*) buffer) = 0; return ERROR_NONE;}
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            //tr = fat32fs_read_file(fd, buffer, count);
-            break;
-        case FS_TYPE_ISO9660:
-            //tr = iso9660fs_read_file(fd, buffer, count);
-            break;
-        case FS_TYPE_EXT2:
-            //tr = ext2fs_read_file(fd, buffer, count);
-            break;
-        case FS_TYPE_DEVFS:
-            tr = devfs_read_file(fd, buffer, count);
-            break;
-    }
-    if(!tr) fd->offset += count;
-    return tr;
-}
-
-error_t write_file(fd_t* fd, void* buffer, u64 count)
-{
-    file_descriptor_t* file = fd->file;
-
-    if((file->attributes & FILE_ATTR_DIR) == FILE_ATTR_DIR) return ERROR_FILE_IS_DIRECTORY;
-    if(count == 0) return 0;
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            //tr = fat32fs_write_file(fd, buffer, count);
-            break;
-        case FS_TYPE_DEVFS:
-            tr = devfs_write_file(fd, buffer, count);
-            break;
-        case FS_TYPE_EXT2:
-            //tr = ext2fs_write_file(fd, buffer, count);
-            break;
-    }
-    if(!tr) fd->offset += count;
-    return tr;
-}
-
-fd_t* create_file(char* path, u8 attributes)
-{
-    char* name = strrchr(path, '/');
-    u32 dirlen = strlen(path) - strlen(name);
-    char* dirpath = kmalloc(dirlen + 1);
-    strncpy(dirpath, path, dirlen);
-    fd_t* dir = open_file(dirpath, OPEN_MODE_R);
-
-    file_descriptor_t* tr = 0;
-    switch(dir->file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            //tr = fat32fs_create_file((u8*) name, attributes, dir->file);
-            break;
-        case FS_TYPE_EXT2:
-            //tr = ext2fs_create_file(name, attributes, dir->file);
-            break;
-    }
-    if(!tr) return 0;
-    file_descriptor_t* cached = cache_file(tr);
-    fd_t* trf = kmalloc(sizeof(fd_t));
-    trf->file = cached;
-    trf->offset = 0;
-	return trf;
-}
-
-error_t unlink(char* path)
-{
-    //open file
-    fd_t* file = open_file(path, OPEN_MODE_R);
-    if(!file) return ERROR_FILE_NOT_FOUND;
-
-    //if the file is a directory, checks if it's empty
-    if(file->file->attributes & FILE_ATTR_DIR)
-    {
-        u32 dirsize = 0;
-        list_entry_t* list = read_directory(file->file, &dirsize);
-        list_free(list, dirsize);
-        if(dirsize) return ERROR_DIRECTORY_NOT_EMPTY;
-    }
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(file->file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            //tr = fat32fs_delete_file(file->file);
-            break;
-        case FS_TYPE_EXT2:
-            //tr = ext2fs_unlink(file->file);
-            break;
-    }
-
-    close_file(file);
-
-    return tr;
-}
-
-error_t link(char* oldpath, char* newpath)
-{
-    fd_t* file = open_file(oldpath, OPEN_MODE_R);
-    if(!file) return ERROR_FILE_NOT_FOUND;
-
-    char* newname = strrchr(newpath, '/')+1;
-    
-    u32 newdirlen = (strlen(newpath) - ((u32)(newname - newpath)));
-    char* newdir = kmalloc(newdirlen+1);
-    strncpy(newdir, newpath, newdirlen);
-    *(newdir+newdirlen) = 0;
-    fd_t* newdir_fd = open_file(newdir, OPEN_MODE_R);
-    if(!newdir_fd) {close_file(file); kfree(newdir); return ERROR_FILE_NOT_FOUND;}
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(file->file->file_system->fs_type)
-    {
-        case FS_TYPE_EXT2:
-            //tr = ext2fs_link(file->file, newdir_fd->file, newname);
-            break;
-    }
-
-    close_file(file);
-    close_file(newdir_fd);
-    kfree(newdir);
-
-    return tr;
-}
-
-error_t rename_file(char* path, char* newname)
-{
-    fd_t* file = open_file(path, OPEN_MODE_R);
-    if(!file) return ERROR_FILE_NOT_FOUND;
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(file->file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32:
-            //tr = fat32fs_rename(file->file, newname);
-            break;
-    }
-
-    close_file(file);
-
-    return tr;
-}
-
-static fd_t* do_open_fs(char* path, mount_point_t* mp)
-{
-    //todo: increase perfs (by not copying but just updating ptr)
-    if(*path == '/') {strcpy(path, path+1);}
-    
-    //The path should be relative to the mount point (excluded) of this fs
-	/* Step 1 : Split the path on '/' */
+    /* Step 1 : Split the path on '/' */
 	u32 i = 0;
 	u32 split_size = 0;
 	char** spath = strsplit(path, '/', &split_size);
     
     /* Step 2 : iterate from the root directory and continue on as we found dirs/files on the list (splitted) */
-	u32 dirsize = 0;
-	list_entry_t* cdir = read_directory(mp->fs->root_dir, &dirsize);
-	if(!cdir) return 0;
-	list_entry_t* lbuf = cdir;
-	u32 j = 0;
-	file_descriptor_t* ce = 0;
-	while(i < split_size)
-	{
-		//looking for the i element in the directory
-		j = 0;
-		while(j < dirsize)
-		{
-			ce = lbuf->element;
-			//looking at each element in the directory
-			if(!ce) break;
-			// kprintf("%llooking %s for %s...\n", 3, ce->name, spath[i]);
-            if(((mp->fs->flags & FS_FLAG_CASE_INSENSITIVE) & (!strcmpnc(ce->name, spath[i]))) | 
-            ((!(mp->fs->flags & FS_FLAG_CASE_INSENSITIVE)) & (!strcmp(ce->name, spath[i]))))
-			{
-                //if it is the last entry we need to find, return ; else continue exploring path
-				if((i+1) == split_size)
-				{
-					file_descriptor_t* tr = 
-					#ifdef MEMLEAK_DBG
-					kmalloc(sizeof(file_descriptor_t), "open_file file descriptor struct tr");
-					#else
-					kmalloc(sizeof(file_descriptor_t));
-					#endif
-					tr->name = 
-					#ifdef MEMLEAK_DBG
-					kmalloc(strlen(ce->name)+1, "open_file tr file name");
-					#else
-					kmalloc(strlen(ce->name)+1);
-                    #endif
-					fd_copy(tr, ce);
-					fd_list_free(cdir, dirsize);
-					kfree(spath[i]);
-                    kfree(spath);
+    fsnode_t* node = mp->fs->root_dir;
+    while(i < split_size)
+    {
+        switch(mp->fs->fs_type)
+        {
+            case FS_TYPE_FAT32: {node = fat32_open(node, spath[i]); break;}
+            case FS_TYPE_EXT2: {node = ext2_open(node, spath[i]); break;}
+            case FS_TYPE_ISO9660: {node = iso9660_open(node, spath[i]); break;}
+            case FS_TYPE_DEVFS: {node = devfs_open(node, spath[i]); break;}
+        }
 
-                    file_descriptor_t* cached = cache_file(tr);
-                    fd_t* trf = kmalloc(sizeof(fd_t));
-                    trf->file = cached;
-                    trf->offset = 0;
-					return trf;
-				}
+        //this is the last entry we needed : we found our file !
+        if((i+1) == split_size) return node;
+        
+        //we need to continue iterating, but an element on the path is not a directory...
+        if(!(node->attributes & FILE_ATTR_DIR)) return 0;
 
-                //copy 'dir to explore' file descriptor
-                file_descriptor_t* nextdir = 
-                #ifdef MEMLEAK_DBG
-                kmalloc(sizeof(file_descriptor_t), "open_file dir to explore copy fd");
-                #else
-                kmalloc(sizeof(file_descriptor_t));
-                #endif
-                nextdir->name = 
-                #ifdef MEMLEAK_DBG
-                kmalloc(strlen(ce->name)+1, "open_file dir to explore copy name");
-                #else
-                kmalloc(strlen(ce->name)+1);
-                #endif
-                fd_copy(nextdir, ce);
-                nextdir = cache_file(nextdir);
+        i++;
+    }
 
-                //free the current dir list
-				fd_list_free(cdir, dirsize);
-
-				if((ce->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return 0;
-                cdir = lbuf = read_directory(nextdir, &dirsize);
-                //with that, parent_dirs are not safe anymore : kfree(nextdir);
-
-				//we have found a subdirectory, explore it
-				break;
-            }
-			lbuf = lbuf->next;
-			j++;
-			//at this point, if we havent break yet, there is no such dir/file as we look for ; return 0
-			if(j == dirsize) 
-			{
-				kfree(spath[i]);
-				kfree(spath);
-				fd_list_free(cdir, dirsize);
-				return 0;
-			}
-		}
-		kfree(spath[i]);
-		i++;
-	}
-	kfree(spath[i-1]);
-	kfree(spath);
-	fd_list_free(cdir, dirsize);
-	return 0;
+    //the code should never reach that part
+    return 0;
 }

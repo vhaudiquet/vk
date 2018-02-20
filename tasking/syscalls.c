@@ -131,11 +131,11 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         {
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
             if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
-            file_descriptor_t* file = current_process->files[ebx]->file;
+            fsnode_t* file = current_process->files[ebx]->file;
             
             u32* ptr = (u32*) edx;
             ptr[0] = (u32) file->file_system->drive;
-            ptr[1] = (u32) file->fsdisk_loc;
+            ptr[1] = (u32) file->specific; //st_ino
             ptr[2] = 0;//TODO: ptr[2] = current_process->files[ebx]->mode;
             ptr[3] = 1; //TODO : hard links if ext2, 1 else
             ptr[4] = 0; // user id
