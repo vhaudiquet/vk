@@ -37,6 +37,7 @@ char* strtrim(char* str);
 
 char** strsplit(char* str, char regex, u32* osize);
 u16 strcfirst(char* str0, char* str1);
+u16 strcfirstnc(char* str0, char* str1);
 u32 strcmpnc(const char* s1, const char* s2);
 
 unsigned char* toupper(unsigned char* s);

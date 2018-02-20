@@ -173,7 +173,14 @@ char** strsplit(char* str, char regex, u32* osize)
 u16 strcfirst(char* str0, char* str1)
 {
     u16 tr = 0;
-    while((*str0 == *str1) && (*str0 != 0)) {tr++;str0++;str1++;}
+    while((*str0) && (*str0 == *str1)) {tr++;str0++;str1++;}
+    return tr;
+}
+
+u16 strcfirstnc(char* str0, char* str1)
+{
+    u16 tr = 0;
+    while((*str0) && ((*str0 == *str1) | (invCase((u8) *str0) == *str1))) {tr++;str0++;str1++;}
     return tr;
 }
 

@@ -71,7 +71,12 @@ fsnode_t* iso9660_open(fsnode_t* dir, char* name)
             continue;
         }
 
-        if(strcfirst(dirptr->name, name) == dirptr->name_len) 
+        char* dname = kmalloc(dirptr->name_len+1);
+        strncpy(dname, dirptr->name, dirptr->name_len);
+        if(dirptr->name_len > 2) {if(*(dname+dirptr->name_len-2) == ';') *(dname+dirptr->name_len-2) = 0;}
+        if(dirptr->name_len > 1) {u32 len = strlen(dname); if(*(dname+len-1) == '.') *(dname+len-1) = 0;}
+
+        if(!strcmpnc(dname, name)) 
         {
             fsnode_t* tr = iso9660_dirent_normalize_cache(dirptr, fs);
             kfree(dirent_data);
