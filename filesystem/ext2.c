@@ -177,6 +177,7 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
         if(!dirent->inode) break;
 
+        // kprintf("%llooking %s for %s...\n", 3, dirent->name, name);
         if(strcfirst((char*) dirent->name, name) == name_len) 
         {
             fsnode_t* tr = ext2_std_inode_read(dirent->inode, dir->file_system);

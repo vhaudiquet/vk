@@ -340,6 +340,7 @@ static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
             case FS_TYPE_ISO9660: {node = iso9660_open(node, spath[i]); break;}
             case FS_TYPE_DEVFS: {node = devfs_open(node, spath[i]); break;}
         }
+        if(!node) return 0;
 
         //this is the last entry we needed : we found our file !
         if((i+1) == split_size) return node;
