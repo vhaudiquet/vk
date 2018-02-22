@@ -71,7 +71,7 @@ fsnode_t* iso9660_open(fsnode_t* dir, char* name)
             continue;
         }
 
-        char* dname = kmalloc(dirptr->name_len+1);
+        char* dname = kmalloc((u32) dirptr->name_len+1);
         strncpy(dname, dirptr->name, dirptr->name_len);
         if(dirptr->name_len > 2) {if(*(dname+dirptr->name_len-2) == ';') *(dname+dirptr->name_len-2) = 0;}
         if(dirptr->name_len > 1) {u32 len = strlen(dname); if(*(dname+len-1) == '.') *(dname+len-1) = 0;}
@@ -119,6 +119,8 @@ static fsnode_t* iso9660_dirent_normalize_cache(iso9660_dir_entry_t* dirent, fil
 
     /* parse inode from dirent */
     fsnode_t* std_node = kmalloc(sizeof(fsnode_t));
+
+    std_node->hard_links = 1;
 
     std_node->file_system = fs;
     std_node->length = dirent->extent_size_lsb;

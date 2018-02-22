@@ -333,7 +333,9 @@ static fsnode_t* fat32_dirent_normalize_cache(fat32_dir_entry_t* dirent, file_sy
 
 	/* parse inode from dirent */
 	fsnode_t* std_node = kmalloc(sizeof(fsnode_t));
-	
+
+	std_node->hard_links = 1;
+
 	std_node->length = dirent->file_size;
 
 	std_node->attributes = 0;

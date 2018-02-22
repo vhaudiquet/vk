@@ -320,6 +320,72 @@ error_t write_file(fd_t* fd, void* buffer, u64 count)
     return tr;
 }
 
+error_t unlink(char* path)
+{
+    //get file name
+    char* name = strrchr(path, '/')+1;
+
+    //get file directory
+    u32 dirlen = (strlen(path) - ((u32)(name - path)));
+    char* dir = kmalloc(dirlen+1);
+    strncpy(dir, path, dirlen);
+    *(dir+dirlen) = 0;
+
+    fd_t* directory = open_file(dir, OPEN_MODE_R);
+    if(!directory) return ERROR_FILE_NOT_FOUND;
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(directory->file->file_system->fs_type)
+    {
+        case FS_TYPE_EXT2:
+            tr = ext2_unlink(name, directory->file);
+            break;
+    }
+
+    close_file(directory);
+
+    return tr;
+}
+
+error_t link(char* src_path, char* dest_path)
+{
+    //get dest name
+    char* dest_name = strrchr(dest_path, '/')+1;
+
+    //get dest directory
+    u32 destdirlen = (strlen(dest_path) - ((u32)(dest_name - dest_path)));
+    char* destdir = kmalloc(destdirlen+1);
+    strncpy(destdir, dest_path, destdirlen);
+    *(destdir+destdirlen) = 0;
+
+    fd_t* dest_directory = open_file(destdir, OPEN_MODE_R);
+    if(!dest_directory) return ERROR_FILE_NOT_FOUND;
+    if(!(dest_directory->file->attributes & FILE_ATTR_DIR)) {close_file(dest_directory); return ERROR_FILE_IS_NOT_DIRECTORY;}
+    fd_t* source_file = open_file(src_path, OPEN_MODE_R);
+    if(!source_file) return ERROR_FILE_NOT_FOUND;
+
+    //we dont support inter-filesystem hard links
+    if(dest_directory->file->file_system != source_file->file->file_system)
+    {
+        close_file(dest_directory);
+        close_file(source_file);
+        return ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    }
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(dest_directory->file->file_system->fs_type)
+    {
+        case FS_TYPE_EXT2:
+            tr = ext2_link(source_file->file, dest_name, dest_directory->file);
+            break;
+    }
+
+    close_file(dest_directory);
+    close_file(source_file);
+
+    return tr;
+}
+
 static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
 {
     if(*path == '/') path++;

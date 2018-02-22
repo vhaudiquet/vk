@@ -25,6 +25,9 @@ static error_t ext2_std_inode_write(fsnode_t* node);
 static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, void* buffer);
 static error_t ext2_inode_write_content(fsnode_t* node, u32 offset, u32 size, void* buffer);
 
+static error_t ext2_remove_dirent(char* name, fsnode_t* dir);
+static error_t ext2_create_dirent(u32 inode, char* name, fsnode_t* dir);
+
 static u32 ext2_block_alloc(file_system_t* fs);
 static void ext2_block_free(u32 block, file_system_t* fs);
 static u32 ext2_inode_alloc(file_system_t* fs);
@@ -195,6 +198,40 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
 }
 
 /*
+* This function removes dirent for file_name in directory dir and frees inode of file if hard_links == 0
+*/
+error_t ext2_unlink(char* file_name, fsnode_t* dir)
+{
+    error_t direntop = ext2_remove_dirent(file_name, dir);
+    if(direntop != ERROR_NONE) return direntop;
+
+    fsnode_t* file = ext2_open(dir, file_name);
+    file->hard_links--;
+    if(!file->hard_links)
+    {
+        ext2_inode_free(file);
+    }
+    else ext2_std_inode_write(file);
+
+    return ERROR_NONE;
+}
+
+/*
+* This function creates a new dirent for src_file in directory dir and set hard_links++ for inode
+*/
+error_t ext2_link(fsnode_t* src_file, char* file_name, fsnode_t* dir)
+{
+    ext2_node_specific_t* spe = src_file->specific;
+    error_t direntop = ext2_create_dirent(spe->inode_nbr, file_name, dir);
+    if(direntop != ERROR_NONE) return direntop;
+
+    src_file->hard_links++;
+    ext2_std_inode_write(src_file);
+
+    return ERROR_NONE;
+}
+
+/*
 * This function reads an inode from his number to an std fsnode_t
 */
 static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
@@ -247,6 +284,8 @@ static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
     
     std_node->attributes = 0;
     if((ext2_inode.type_and_permissions >> 12) == 4) std_node->attributes |= FILE_ATTR_DIR;
+
+    std_node->hard_links = ext2_inode.hard_links;
 
     std_node->length = ext2_inode.size_low;
     //if file is not a directory and fs has feature activated, file_size is 64 bits long (directory_acl is size_high)
@@ -805,6 +844,80 @@ static error_t ext2_inode_write_content(fsnode_t* inode_desc, u32 offset, u32 si
     
     //rewrite inode
     return ext2_std_inode_write(inode_desc);
+}
+
+/*
+* This function removes a dirent from a directory using dirent name
+*/
+static error_t ext2_remove_dirent(char* name, fsnode_t* dir)
+{
+    //read the directory to determine offset to remove dirent
+    u64 length = dir->length;
+
+    u8* dirent_buffer = kmalloc((u32) length);
+    error_t readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) {kfree(dirent_buffer); return readop;}
+
+    u32 offset = 0;
+    while(length)
+    {
+        ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
+        if(!dirent->inode) {kfree(dirent_buffer); return ERROR_FILE_NOT_FOUND;}
+
+        u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
+
+        if(strcfirst(name, (char*) dirent->name) == strlen(name)) 
+        {memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-((u32)8+name_len_real)); break;}
+
+        offset += (u32)(8+name_len_real);
+        length -= (u32)(8+name_len_real);
+    }
+
+    //rewrite the buffer
+    error_t writeop = ext2_inode_write_content(dir, offset, (u32) dir->length, (u8*) dirent_buffer);
+
+    kfree(dirent_buffer);
+
+    return writeop;
+}
+
+/*
+* This function creates a dirent in a directory
+*/
+static error_t ext2_create_dirent(u32 inode, char* name, fsnode_t* dir)
+{
+    //prepare the dirent in memory
+    ext2_dirent_t towrite;
+    towrite.inode = inode;
+    towrite.name_len = (u8) strlen(name);
+    towrite.type = 0; //TODO : adapt type or name_len_high
+    strcpy((char*) towrite.name, name);
+    towrite.size = (u16) (8+towrite.name_len);
+    alignup(towrite.size, 4);
+
+    //read the directory to determine offset to add dirent
+    u64 length = dir->length;
+
+    u8* dirent_buffer = kmalloc((u32) length);
+    error_t readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) {kfree(dirent_buffer); return readop;}
+    
+    u32 offset = 0;
+    while(length)
+    {
+        ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
+        if(!dirent->inode) break;
+        u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
+        offset += (u32)(8+name_len_real);
+        length -= (u32)(8+name_len_real);
+    }
+    
+    kfree(dirent_buffer);
+
+    //write the dirent
+    error_t writeop = ext2_inode_write_content(dir, offset, towrite.size, (u8*) &towrite);
+    
+    return writeop;
 }
 
 /*

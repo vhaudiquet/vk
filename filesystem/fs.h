@@ -38,6 +38,7 @@ typedef struct fsnode
     struct file_system* file_system;
     u64 length;
     u8 attributes;
+    u32 hard_links;
     time_t creation_time;
     time_t last_access_time;
     time_t last_modification_time;
