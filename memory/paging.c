@@ -321,6 +321,38 @@ void map_memory(u32 size, u32 virt_addr, u32* page_directory)
     }
 }
 
+/*
+* TODO : updates, thats just temporary solution (wasting physical memory) (22/02/2O18 21h04)
+*/
+void map_memory_if_not_mapped(u32 size, u32 virt_addr, u32* page_directory)
+{
+    u32 bvaddr = virt_addr;
+    aligndown(virt_addr, 4096);
+    size += (bvaddr-virt_addr);
+    alignup(size, 4096);
+
+    u32 add = 0;
+
+    u32 phys_addr = reserve_block(size, page_directory == kernel_page_directory ? PHYS_KERNELF_BLOCK_TYPE : PHYS_USER_BLOCK_TYPE);
+
+    if((!(virt_addr % 0x400000)) && size > 0x400000)
+    {
+        while(size > 0x400000)
+        {
+            if(!is_mapped(virt_addr+add, page_directory)) map_page_table(phys_addr+add, virt_addr+add, page_directory);
+            size -= 0x400000;
+            add += 0x400000;
+        }
+    }
+    
+    while(size)
+    {
+        if(!is_mapped(virt_addr+add, page_directory)) map_page(phys_addr+add, virt_addr+add, page_directory);
+        size -= 4096;
+        add += 4096;
+    }
+}
+
 u32 get_physical(u32 virt_addr, u32* page_directory)
 {
     u32 pd_index = virt_addr >> 22;

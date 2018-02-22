@@ -214,8 +214,7 @@ u32 sbrk(process_t* process, u32 incr)
     u32 new_last_addr = process->heap_addr+process->heap_size+incr;
     if(!is_mapped(new_last_addr, process->page_directory))
     {
-        //TODO : Change that, it can actually cause a kernel panic (if the miss of mapped memory is after)
-        map_memory(incr, process->heap_addr+process->heap_size, process->page_directory);        
+        map_memory_if_not_mapped(incr, process->heap_addr+process->heap_size, process->page_directory);        
     }
     process->heap_size += incr;
     return process->heap_addr+process->heap_size;
