@@ -232,6 +232,106 @@ error_t ext2_link(fsnode_t* src_file, char* file_name, fsnode_t* dir)
 }
 
 /*
+* This function alloc an inode and creates a dirent for a new file
+*/
+fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
+{
+    file_system_t* fs = dir->file_system;
+    ext2fs_specific_t* ext2 = fs->specific;
+    if(fs->flags & FS_FLAG_READ_ONLY) return 0;
+
+    u32 inode_nbr = ext2_inode_alloc(fs);
+    if(!inode_nbr) return 0;
+
+    /* setting raw ext2_inode data */
+    ext2_inode_t inode;
+    
+    //setting type and permissions
+    inode.type_and_permissions = 0;
+    if(attributes | FILE_ATTR_DIR) inode.type_and_permissions |= 0x4000;
+    else inode.type_and_permissions |= 0x8000;
+
+    //set user_id/permissions
+    inode.user_id = 0;
+    inode.group_id = 0;
+    
+    //set inode time
+    time_t current_time = get_current_time_utc();
+    inode.last_access_time = (int32_t) current_time;
+    inode.creation_time = (int32_t) current_time;
+    inode.last_access_time = (int32_t) current_time;
+    inode.deletion_time = 0;
+
+    //set inode size
+    inode.size_low = 0;
+
+    //set hard links
+    inode.hard_links = 1;
+
+    //TODO: set inode used disk sectors
+    inode.used_disk_sectors = 0;
+
+    //set inode flags
+    inode.flags = 0;
+
+    //set os specific values
+    inode.os_specific_1 = 0;
+    memset(inode.os_specific_2, 0, 12);
+
+    //set block pointers
+    u32 i = 0;
+    for(;i<12;i++)
+    {
+        inode.direct_block_pointers[i] = 0;
+    }
+    inode.singly_indirect_block_pointer = 0;
+    inode.doubly_indirect_block_pointer = 0;
+    inode.triply_indirect_block_pointer = 0;
+
+    //TODO : set generation number ?
+    inode.generation_number = 0;
+
+    //set extended attributes
+    inode.extended_attributes = 0;
+    inode.directory_acl = 0;
+
+    //TODO: set fragment block adress ?
+    inode.fragment_block_adress = 0;
+
+    /* directly write inode on disk */
+    //getting inode size from superblock or standard depending on ext2 version
+    u32 inode_size = ((ext2->superblock->version_major >=1) ? ext2->superblock->inode_struct_size : 128);
+
+    //calculating inode block group
+    u32 inodes_per_blockgroup = ext2->superblock->inodes_per_blockgroup;
+    u32 inode_block_group = (inode_nbr - 1) / inodes_per_blockgroup;
+
+    //calculating inode index in the inode table
+    u32 index = (inode_nbr - 1) % inodes_per_blockgroup;
+
+    //calculating block_group_descriptor offset
+    u32 bg_read_offset = inode_block_group*sizeof(ext2_block_group_descriptor_t);
+
+    //reading block group descriptor
+    ext2_block_group_descriptor_t inode_bg;
+    u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
+    error_t readop0 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+    if(readop0 != ERROR_NONE) return 0;
+
+    //calculating inode location on the disk (based on inode table block start found in block group descriptor)
+    u32 inode_read_offset = (index * inode_size);
+
+    error_t writeop = block_write_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.starting_block_adress), inode_read_offset, (u8*) &inode, sizeof(ext2_inode_t), fs->drive);
+    if(writeop != ERROR_NONE) return 0;
+
+    /* create dirent */
+    if(ext2_create_dirent(inode_nbr, name, dir) != ERROR_NONE) return 0;
+
+    fsnode_t* tr = ext2_std_inode_read(inode_nbr, fs);
+    return tr;
+}
+
+/*
 * This function reads an inode from his number to an std fsnode_t
 */
 static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)

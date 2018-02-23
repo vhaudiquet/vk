@@ -332,7 +332,9 @@ error_t unlink(char* path)
     *(dir+dirlen) = 0;
 
     fd_t* directory = open_file(dir, OPEN_MODE_R);
+    kfree(dir);
     if(!directory) return ERROR_FILE_NOT_FOUND;
+    if(!(directory->file->attributes & FILE_ATTR_DIR)) {close_file(directory); return ERROR_FILE_IS_NOT_DIRECTORY;}
 
     error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
     switch(directory->file->file_system->fs_type)
@@ -359,10 +361,12 @@ error_t link(char* src_path, char* dest_path)
     *(destdir+destdirlen) = 0;
 
     fd_t* dest_directory = open_file(destdir, OPEN_MODE_R);
+    kfree(destdir);
     if(!dest_directory) return ERROR_FILE_NOT_FOUND;
     if(!(dest_directory->file->attributes & FILE_ATTR_DIR)) {close_file(dest_directory); return ERROR_FILE_IS_NOT_DIRECTORY;}
+    
     fd_t* source_file = open_file(src_path, OPEN_MODE_R);
-    if(!source_file) return ERROR_FILE_NOT_FOUND;
+    if(!source_file) {close_file(dest_directory); return ERROR_FILE_NOT_FOUND;}
 
     //we dont support inter-filesystem hard links
     if(dest_directory->file->file_system != source_file->file->file_system)
@@ -423,5 +427,29 @@ static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
 
 static fsnode_t* create_file(char* path, u8 attributes)
 {
-    return 0;
+    //get file name
+    char* name = strrchr(path, '/')+1;
+
+    //get file directory
+    u32 dirlen = (strlen(path) - ((u32)(name - path)));
+    char* dir = kmalloc(dirlen+1);
+    strncpy(dir, path, dirlen);
+    *(dir+dirlen) = 0;
+
+    fd_t* directory = open_file(dir, OPEN_MODE_R);
+    kfree(dir);
+    if(!directory) return 0;
+    if(!(directory->file->attributes & FILE_ATTR_DIR)) {close_file(directory); return 0;}
+
+    fsnode_t* tr = 0;
+    switch(directory->file->file_system->fs_type)
+    {
+        case FS_TYPE_EXT2:
+            tr = ext2_create_file(directory->file, name, attributes);
+            break;
+    }
+
+    close_file(directory);
+
+    return tr;
 }

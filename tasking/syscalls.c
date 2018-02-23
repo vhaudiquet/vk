@@ -99,7 +99,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             char* oldpath = (char*) ebx;
             char* newpath = (char*) ecx;
 
-            error_t tr = UNKNOWN_ERROR; //link(oldpath, newpath);
+            error_t tr = link(oldpath, newpath);
             asm("mov %0, %%eax"::"g"(tr));
             break;
         }
@@ -109,7 +109,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
             char* path = (char*) ebx;
 
-            error_t tr = UNKNOWN_ERROR; //unlink(path);
+            error_t tr = unlink(path);
             asm("mov %0, %%eax"::"g"(tr));
             break;
         }

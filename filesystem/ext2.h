@@ -140,5 +140,6 @@ error_t ext2_read_file(fd_t* fd, void* buffer, u64 count);
 error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size);
 error_t ext2_unlink(char* file_name, fsnode_t* dir);
 error_t ext2_link(fsnode_t* src_file, char* file_name, fsnode_t* dir);
+fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes);
 
 #endif
