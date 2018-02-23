@@ -19,8 +19,10 @@
 
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
+
 static error_t fat32fs_read_fat(file_system_t* fs);
 static error_t fat32fs_write_fat(file_system_t* fs);
+
 static fsnode_t* fat32_dirent_normalize_cache(fat32_dir_entry_t* dirent, file_system_t* fs);
 
 /*
@@ -219,6 +221,207 @@ fsnode_t* fat32_open(fsnode_t* dir, char* name)
 	kfree(dirents);
 
 	return 0;
+}
+
+/*
+* Read all the files and folders inside a directory into a linked list
+*/
+error_t fat32fs_list_dir(list_entry_t* tr, fsnode_t* dir, u32* size)
+{
+	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return ERROR_FILE_IS_NOT_DIRECTORY;
+
+	fat32_node_specific_t* fspe = dir->specific;
+	file_system_t* fs = dir->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	u32 cluster = fspe->cluster;
+
+	//get the cluster chain for this directory
+	u64 cluss = 0;
+	list_entry_t* cluslist = fat32fs_get_cluster_chain(cluster, fs, (u32*) &cluss);
+	list_entry_t* clusbuffer = cluslist;
+
+	//here we have the full dir size, and we allocate an equivalent buffer
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
+	fat32_dir_entry_t* dirents = 
+	#ifdef MEMLEAK_DBG
+	kmalloc((u32) dir_size, "fat32:list_dir dirents buffer");
+	#else
+	kmalloc((u32) dir_size);
+	#endif
+	fat32_dir_entry_t* buffer = dirents;
+
+	//reading all clusters inside this buffer
+	u32 i = 0;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//freeing the cluster list, we dont need it, we read them already
+	list_free(cluslist, (u32) cluss);
+
+	//get the first list_entry of the list that we'll return
+	list_entry_t* lbuf = tr;
+
+	//processing all the entries, and adding them to the list or skipping them (for LFN as example)
+	u32 falses_entries = 0;
+	char* lfn_name = 0;
+	u32 lfn_offset = 0;
+	//u8 lfn_checksum = 0;
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
+	{
+		//kprintf("entry %s -- ", *(dirents[i].name) == 0x0 ? "end" : *(dirents[i].name) == 0xE5 ? "deleted" : dirents[i].attributes == FAT_ATTR_LFN ? "lfn" : "8.3");
+		if(*(dirents[i].name) == 0x0) {falses_entries++; break;}
+		if(*(dirents[i].name) == 0xE5) {falses_entries++; continue;}
+		if(dirents[i].attributes == FAT_ATTR_LFN)
+		{
+			//long file name entry processing
+			lfn_entry_t* lfn = (lfn_entry_t*) &dirents[i];
+			//THIS is the part that is hmmm
+			//ASSUMING that the first lfn we will find is the 'top' lfn, the higher in order
+			//from what i have seen, this is true, but...
+			u16 lfn_nbr = (lfn->order & 0x40) == 0x40 ? lfn->order ^ 0x40 : lfn->order;
+
+			if(lfn_name == 0)
+			{
+				lfn_name = 
+				#ifdef MEMLEAK_DBG
+				kmalloc((u32) 13*lfn_nbr+1, "fat32:list_dir lfn name");
+				#else
+				kmalloc((u32) 13*lfn_nbr+1);
+				#endif
+				*(lfn_name+13*lfn_nbr) = 0;
+				//lfn_checksum = lfn->checksum;
+			}
+			
+			lfn_offset = 13*((u32) (lfn_nbr-1));
+
+			u32 fff = 0;
+			while(fff < 5) {*(lfn_name+fff+lfn_offset) = (char) lfn->firstn[fff]; fff++;}
+			fff = 0;
+			while(fff < 6) {*(lfn_name+fff+5+lfn_offset) = (char) lfn->nextn[fff]; fff++;}
+			fff = 0;
+			while(fff < 2) {*(lfn_name+fff+11+lfn_offset) = (char) lfn->lastn[fff]; fff++;}
+
+			falses_entries++; continue;
+		}
+
+		//TODO: check if file_cluster == cache->files->file_cluster (if the file is already cached)
+
+		dirent_t* tf;
+	
+		if(lfn_name != 0)
+		{
+			//long file name
+			//TODO : check the checksum kprintf("checksum is %d (0x%X)\n", lfn_checksum, lfn_checksum);
+			u32 lfn_len = strlen(lfn_name);
+			tf = kmalloc(sizeof(dirent_t) + lfn_len);
+			tf->name_len = lfn_len;
+			strcpy(tf->name, lfn_name);
+			lfn_name = 0;
+			lfn_offset = 0;
+		}
+		else
+		{
+			tf = kmalloc(sizeof(dirent_t) + FAT_NAME_MAX);
+			//legacy FAT32 no lfn support
+			tf->name_len = FAT_NAME_MAX;
+			strncpy(tf->name, (char*) dirents[i].name, 8);
+			strtrim(tf->name);
+			if(dirents[i].extension[0] != ' ' && dirents[i].extension[0] != 0)
+			{
+				strncat(tf->name, ".", 1);
+				strncat(tf->name, (char*) dirents[i].extension, 3);
+			}
+		}
+
+		//kprintf("%lfname : %s\n", 3, tf->name);
+
+		u32 file_cluster = (((u32)dirents[i].first_cluster_high) << 16) | ((u32)dirents[i].first_cluster_low);
+		file_cluster &= 0x0FFFFFFF;
+		tf->inode = file_cluster;
+
+		//kprintf("%lfile_descriptor : (%s) (0x%X)\n", 3, tf->name, tf->fsdisk_loc);
+	
+		lbuf->next = 
+		#ifdef MEMLEAK_DBG
+		kmalloc(sizeof(list_entry_t), "fat32:list_dir list entry");
+		#else
+		kmalloc(sizeof(list_entry_t));
+		#endif
+		lbuf = lbuf->next;
+	}
+	
+	//freeing the last list entry, that is empty and unused
+	kfree(lbuf);
+	//freeing the first dirents buffer, unused cause we have processed the entries
+	kfree(dirents);
+
+	//returning the size of the list and the list of entries
+	*size = (u32)(i-falses_entries+1);
+	//kprintf("size = %u (i=%u, f=%u)\n", *size, i, falses_entries);
+	return ERROR_NONE;
+}
+
+/*
+* This functions reads count bytes from file fd into buffer
+*/
+error_t fat32_read_file(fd_t* fd, void* buffer, u64 count)
+{
+	fsnode_t* file = fd->file;
+	fat32_node_specific_t* fspe = file->specific;
+	u64 offset = fd->offset;
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
+	if(count+offset < spe->bpb->sectors_per_cluster*512)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, fspe->cluster);
+		return block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
+	}
+	
+	//alright, we want to read more than 1 cluster, so we'll need to get the whole cluster chain
+	u32 cluster = fspe->cluster;
+	u64 cluss = 0;
+
+	list_entry_t* cluslist = fat32fs_get_cluster_chain(cluster, fs, (u32*) &cluss);
+	list_entry_t* clusbuffer = cluslist;
+
+	while(offset >= spe->bpb->sectors_per_cluster*512) {clusbuffer=clusbuffer->next; offset = (u64) (offset - ((u64) (spe->bpb->sectors_per_cluster*512)));}
+
+	//reading all needed clusters inside this buffer
+	error_t readop = ERROR_NONE;
+	u64 cluss2 = cluss;
+	while(count > 0 && cluss2 > 0)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		if(count >= spe->bpb->sectors_per_cluster*512)
+		{
+			readop = block_read_flexible(pos, (u32) offset, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+			if(readop != ERROR_NONE){list_free(cluslist, (u32) cluss); return readop;}
+			count = ((u32)(count - ((u64)spe->bpb->sectors_per_cluster*512)));
+			if(offset) offset = 0;
+		}
+		else
+		{
+			readop = block_read_flexible(pos, (u32) offset, (u8*) buffer, count, fs->drive);
+			if(readop != ERROR_NONE){list_free(cluslist, (u32) cluss); return readop;}
+			if(offset) offset = 0;
+			break;
+		}
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+		cluss2--;
+	}
+
+	//freeing the cluster list, we dont need it, we read them already
+	list_free(cluslist, (u32) cluss);
+
+	//returning error_none, everything went well
+	return ERROR_NONE;	
 }
 
 /*
