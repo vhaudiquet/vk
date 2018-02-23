@@ -98,6 +98,7 @@ typedef struct LFN_ENTRY
 typedef struct fat32_node_specific
 {
     u32 cluster;
+	u32 dir_cluster;
 } fat32_node_specific_t;
 
 typedef struct fat32fs_specific
@@ -111,5 +112,6 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition);
 fsnode_t* fat32_open(fsnode_t* dir, char* name);
 error_t fat32fs_list_dir(list_entry_t* tr, fsnode_t* dir, u32* size);
 error_t fat32_read_file(fd_t* fd, void* buffer, u64 count);
+error_t fat32_write_file(fd_t* fd, void* buffer, u64 count);
 
 #endif

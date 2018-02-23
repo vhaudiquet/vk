@@ -59,8 +59,8 @@ fsnode_t* devfs_open(fsnode_t* dir, char* name)
 
     while(((uintptr_t)dirptr) < ((uintptr_t)(spe->device_struct+dir->length)))
     {
-        if(!*dirptr) break;
         devfs_dirent_t* dirent = (devfs_dirent_t*) dirptr;
+        if(!dirent->node) break;
         if(!strcmp(dirent->name, name)) return dirent->node;
         dirptr += sizeof(devfs_dirent_t);
     }

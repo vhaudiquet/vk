@@ -226,7 +226,7 @@ fd_t* open_file(char* path, u8 mode)
     if(!best) {fatal_kernel_error("Failed to find mount point ? WTF?", "OPEN_FILE"); return 0;}
 
     fsnode_t* node = do_open_fs(path+strlen(best->path), best);
-    
+
     if((!node) && ((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP))) return 0;
     
     fd_t* tr = kmalloc(sizeof(fd_t));
@@ -280,7 +280,7 @@ error_t read_file(fd_t* fd, void* buffer, u64 count)
     switch(inode->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            //tr = fat32_read_file(fd, buffer, count);
+            tr = fat32_read_file(fd, buffer, count);
             break;
         case FS_TYPE_ISO9660:
             tr = iso9660_read_file(fd, buffer, count);
@@ -307,7 +307,7 @@ error_t write_file(fd_t* fd, void* buffer, u64 count)
     switch(inode->file_system->fs_type)
     {
         case FS_TYPE_FAT32:
-            //tr = fat32_write_file(fd, buffer, count);
+            tr = fat32_write_file(fd, buffer, count);
             break;
         case FS_TYPE_DEVFS:
             tr = devfs_write_file(fd, buffer, count);
