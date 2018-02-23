@@ -258,6 +258,27 @@ void close_file(fd_t* file)
     kfree(file);
 }
 
+error_t list_directory(char* path, list_entry_t* dest, u32* size)
+{
+    fd_t* dir = open_file(path, OPEN_MODE_R);
+    if(!dir) return ERROR_FILE_NOT_FOUND;
+    if(!(dir->file->attributes & FILE_ATTR_DIR)) {close_file(dir); return ERROR_FILE_IS_NOT_DIRECTORY;}
+
+    (*size) = 0;
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(dir->file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32: tr = fat32_list_dir(dest, dir->file, size); break;
+        case FS_TYPE_EXT2: tr = ext2_list_dir(dest, dir->file, size); break;
+        case FS_TYPE_ISO9660: tr = iso9660_list_dir(dest, dir->file, size); break;
+        case FS_TYPE_DEVFS: tr = devfs_list_dir(dest, dir->file, size); break;
+    }
+    
+    close_file(dir);
+    return tr;
+}
+
 u64 flength(fd_t* file)
 {
     return file->file->length;

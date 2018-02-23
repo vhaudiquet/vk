@@ -231,7 +231,7 @@ fsnode_t* fat32_open(fsnode_t* dir, char* name)
 /*
 * Read all the files and folders inside a directory into a linked list
 */
-error_t fat32fs_list_dir(list_entry_t* tr, fsnode_t* dir, u32* size)
+error_t fat32_list_dir(list_entry_t* tr, fsnode_t* dir, u32* size)
 {
 	if((dir->attributes & FILE_ATTR_DIR) != FILE_ATTR_DIR) return ERROR_FILE_IS_NOT_DIRECTORY;
 

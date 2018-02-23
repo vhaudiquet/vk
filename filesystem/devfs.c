@@ -68,6 +68,37 @@ fsnode_t* devfs_open(fsnode_t* dir, char* name)
     return 0;
 }
 
+error_t devfs_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
+{
+    devfs_node_specific_t* spe = dir->specific;
+    u8* dirptr = spe->device_struct;
+
+    list_entry_t* ptr = dest;
+
+    while(((uintptr_t)dirptr) < ((uintptr_t)(spe->device_struct+dir->length)))
+    {
+        devfs_dirent_t* dirent = (devfs_dirent_t*) dirptr;
+        if(!dirent->node) break;
+        
+        u32 name_len = strlen(dirent->name);
+        dirent_t* fd = kmalloc(sizeof(dirent)+name_len);
+        strcpy(fd->name, dirent->name);
+        fd->name_len = name_len;
+        fd->inode = (uintptr_t) dirent->node;
+
+        (*size)++;
+        ptr->element = fd;
+        ptr->next = kmalloc(sizeof(list_entry_t));
+        ptr = ptr->next;
+
+        dirptr += sizeof(devfs_dirent_t);
+    }
+
+    kfree(ptr);
+    
+    return ERROR_NONE;
+}
+
 error_t devfs_read_file(fd_t* fd, void* buffer, u64 count)
 {
     fsnode_t* file = fd->file;

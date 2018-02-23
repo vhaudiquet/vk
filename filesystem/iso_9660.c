@@ -93,6 +93,84 @@ fsnode_t* iso9660_open(fsnode_t* dir, char* name)
     return 0;
 }
 
+error_t iso9660_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
+{
+    file_system_t* fs = dir->file_system;
+    iso9660_node_specific_t* spe = dir->specific;
+    u64 lba = spe->extent_start;
+    u32 length = (u32) dir->length;
+    u8* dirent_data = 
+    #ifdef MEMLEAK_DBG
+    kmalloc(length, "iso9660_read_dir dirent buffer");
+    #else
+    kmalloc(length);
+    #endif
+
+    //TEMP : this can't work, because on multiple sector using, sectors are padded with 0s
+    error_t readop = block_read_flexible(lba, 0, dirent_data, length, fs->drive);
+    if(readop != ERROR_NONE) {kfree(dirent_data); return readop;}
+    
+    list_entry_t* ptr = dest;
+    *size = 0;
+
+    u32 offset = (u32) dirent_data;
+    u32 index = 0;
+    while(length)
+    {
+        iso9660_dir_entry_t* dirptr = (iso9660_dir_entry_t*) offset;
+        if(dirptr->length == 0) 
+        {
+            offset++;
+            length--;
+            continue;
+        }
+
+        dirent_t* fd;
+        if(index == 0)
+        {
+            //current dir (.)
+            fd = kmalloc(sizeof(dirent_t)+1);
+            strcpy(fd->name, ".");
+            fd->name_len = 1;
+            fd->inode = dirptr->extent_start_lsb; //todo: check if that really works
+        }
+        else if(index == 1)
+        {
+            //parent dir (..)
+            fd = kmalloc(sizeof(dirent_t)+2);
+            strcpy(fd->name, "..");
+            fd->name_len = 2;
+            fd->inode = dirptr->extent_start_lsb; //todo: check if that really works
+        }
+        else
+        {
+            fd = kmalloc(sizeof(dirent_t)+dirptr->name_len);
+            strncpy(fd->name, dirptr->name, dirptr->name_len);
+            fd->name_len = dirptr->name_len;
+            fd->inode = dirptr->extent_start_lsb;
+        }
+        
+        //kprintf("%s\n", fd->name);
+        ptr->element = fd;
+        ptr->next = 
+        #ifdef MEMLEAK_DBG
+        kmalloc(sizeof(list_entry_t), "iso9660_read_dir list entry");
+        #else
+        kmalloc(sizeof(list_entry_t));
+        #endif
+        ptr = ptr->next;
+        offset+= dirptr->length;
+        length-= dirptr->length;
+        (*size)++;
+        index++;
+    }
+    kfree(ptr);
+
+    kfree(dirent_data);
+
+    return ERROR_NONE;
+}
+
 error_t iso9660_read_file(fd_t* fd, void* buffer, u64 count)
 {
     fsnode_t* file = fd->file;

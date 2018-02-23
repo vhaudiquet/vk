@@ -44,6 +44,7 @@ typedef struct devfs_node_specific
 extern file_system_t* devfs;
 void devfs_init();
 fsnode_t* devfs_open(fsnode_t* dir, char* name);
+error_t devfs_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size);
 error_t devfs_read_file(fd_t* fd, void* buffer, u64 count);
 error_t devfs_write_file(fd_t* fd, void* buffer, u64 count);
 fsnode_t* devfs_register_device(fsnode_t* dir, char* name, void* device, u32 device_type, u32 device_info);

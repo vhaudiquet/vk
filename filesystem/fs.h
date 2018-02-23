@@ -94,6 +94,6 @@ error_t write_file(fd_t* file, void* buffer, u64 count);
 error_t rename_file(char* path, char* newname);
 error_t link(char* oldpath, char* newpath);
 error_t unlink(char* path);
-list_entry_t* read_directory(fsnode_t* directory, u32* dirsize);
+error_t list_directory(char* path, list_entry_t* dest, u32* size);
 
 #endif
