@@ -106,7 +106,9 @@ u8 tty_getch(tty_t* tty)
         return tty_getch(tty);
     }
 
-    return iostream_getch(tty->keyboard_stream);
+    u8 c = iostream_getch(tty->keyboard_stream);
+    tty_write(&c, 1, tty);
+    return c;
 }
 
 void tty_switch(tty_t* tty)

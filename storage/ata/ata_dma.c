@@ -100,7 +100,7 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     
     memcpy(data, (void*)(virtual+sizeof(prd_t)+offset), count);
     free_block(prdt_phys);
-    unmap_flexible(sizeof(prd_t)+scount*512, virtual, kernel_page_directory);
+    unmap_flexible(sizeof(prd_t)+scount*bps, virtual, kernel_page_directory);
     kvm_free_block(virtual);
 
     if(!(end_status & 5)) return ERROR_DISK_INTERNAL;

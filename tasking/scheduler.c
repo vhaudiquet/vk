@@ -220,7 +220,7 @@ void scheduler_remove_process(process_t* process)
         current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
         current_process->sregs.cs = 0x08;
         asm("mov %%esp, %%eax":"=a"(current_process->esp));
-        current_process->eip = (u32) (scheduler_remove_process+0xe8);//(c0108133);
+        current_process->eip = (u32) &&rmv; //(scheduler_remove_process+0xe8);//(c0108133);
 
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)
@@ -230,6 +230,7 @@ void scheduler_remove_process(process_t* process)
         }
         //asm("int $32"); //call clock int to schedule
         schedule(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0, 0, 0);
+        rmv: return;
     }
     else queue_remove(p_ready_queue, process);
 }

@@ -129,10 +129,10 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->files_size = 5;
     tr->files = kmalloc(tr->files_size*sizeof(fd_t));
 
-    //init stdout, stdin, stderr
-    tr->files[0] = tty->pointer;
-    tr->files[1] = tty->pointer;
-    tr->files[2] = tty->pointer;
+    //init stdin, stdout, stderr
+    tr->files[0] = tty->pointer; //stdin
+    tr->files[1] = tty->pointer; //stdout
+    tr->files[2] = tty->pointer; //stderr
     tr->files_count = 3;
 
     //set process heap
@@ -214,8 +214,7 @@ u32 sbrk(process_t* process, u32 incr)
     u32 new_last_addr = process->heap_addr+process->heap_size+incr;
     if(!is_mapped(new_last_addr, process->page_directory))
     {
-        //TODO : Change that, it can actually cause a kernel panic (if the miss of mapped memory is after)
-        map_memory(incr, process->heap_addr+process->heap_size, process->page_directory);        
+        map_memory_if_not_mapped(incr, process->heap_addr+process->heap_size, process->page_directory);        
     }
     process->heap_size += incr;
     return process->heap_addr+process->heap_size;

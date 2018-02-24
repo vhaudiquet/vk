@@ -197,14 +197,26 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         {
             break;
         }
-        //21:Syscall GET_CURENT_TIME
+        //21:Syscall MOUNT
         case 21:
         {
             break;
         }
-        //22:Syscall SUSPEND
+        //22:Syscall UMOUNT
         case 22:
         {
+            break;
+        }
+        //23:Syscall ISATTY
+        case 23:
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
+            file_descriptor_t* file = current_process->files[ebx]->file;
+
+            if((file == tty1->pointer->file) | (file == tty2->pointer->file) | (file == tty3->pointer->file)) 
+            {asm("mov $1, %eax"); return;}
+            
+            asm("mov $0, %eax");
             break;
         }
     }
