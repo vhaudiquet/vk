@@ -19,6 +19,7 @@
 
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
+static void fat32fs_free_cluster_chain(u32 fcluster, file_system_t* fs);
 static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs);
 static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize);
 static u8 fat32fs_lfn_checksum (u8* pFcbName);
@@ -28,6 +29,7 @@ static error_t fat32fs_write_fat(file_system_t* fs);
 
 static error_t fat32fs_create_dirent(fsnode_t* file, char* name, fsnode_t* dir);
 static error_t fat32fs_update_dirent(fsnode_t* file);
+static error_t fat32fs_delete_dirent(fsnode_t* file, fsnode_t* dir);
 static fsnode_t* fat32_dirent_normalize_cache(fat32_dir_entry_t* dirent, u32 dir_cluster, file_system_t* fs);
 
 /*
@@ -525,6 +527,39 @@ error_t fat32_write_file(fd_t* fd, void* buffer, u64 count)
 }
 
 /*
+* This function removes a file
+*/
+error_t fat32_unlink(char* file_name, fsnode_t* dir)
+{
+	fsnode_t* file = fat32_open(dir, file_name);
+	file_system_t* fs = file->file_system;
+	fat32_node_specific_t* fspe = file->specific;
+
+	error_t dirent = fat32fs_delete_dirent(file, dir);
+	if(dirent != ERROR_NONE) return dirent;
+
+	fat32fs_free_cluster_chain(fspe->cluster, fs);
+
+	/* free node from the cache */
+    //TODO: here we assume that node we want to free is not the first in the cache (cause the first is theorically root dir)
+    //this is a little risquy tho
+	list_entry_t* iptr = fs->inode_cache;
+    list_entry_t* last = 0;
+    u32 isize = fs->inode_cache_size;
+    while(iptr && isize)
+    {
+        fsnode_t* element = iptr->element;
+        fat32_node_specific_t* spe = element->specific;
+        if(spe->cluster == fspe->cluster) {last->next = iptr->next; kfree(element->specific); kfree(element); kfree(iptr);}
+        last = iptr;
+        iptr = iptr->next;
+        isize--;
+    }
+
+	return ERROR_NONE;
+}
+
+/*
 * This function creates a new file
 */
 fsnode_t* fat32_create_file(fsnode_t* dir, char* name, u8 attributes)
@@ -631,6 +666,33 @@ static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, 
 	kfree(lbuf);
 
 	return tr;
+}
+
+/*
+* this function frees all the cluster of a cluster chain
+*/
+static void fat32fs_free_cluster_chain(u32 fcluster, file_system_t* fs)
+{
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+
+	u32 cluster = fcluster;
+	u32 cchain = 0;
+
+	do
+	{
+		cchain = spe->fat_table[cluster] & 0x0FFFFFFF;
+
+		spe->fat_table[cluster] = 0; 
+
+		if(!cchain) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (->0) !\n", 0b00000110);
+		else if(cchain == 1) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (reserved cluster)\n", 0b00000110);
+		else if(cchain == 0x0FFFFFF7) kprintf("%v[WARNING] [SEVERE] FAT32 Filesystem might be corrupted (bad cluster)\n", 0b00000110);
+
+		cluster = cchain;
+	} while((cchain != 0) && !(cchain >= 0x0FFFFFF8));
+	spe->fat_table[cluster] = 0;
+
+	fat32fs_write_fat(fs);
 }
 
 /*
@@ -1170,6 +1232,144 @@ static error_t fat32fs_update_dirent(fsnode_t* file)
 				dirents[i].last_access_date |= (months << 5);
 				dirents[i].last_access_date |= (days);
 				#pragma GCC diagnostic pop
+
+				kfree(lfn_name);
+				found = true;
+				break;
+			}
+			kfree(lfn_name);
+			lfn_name = 0;
+			lfn_offset = 0;
+		}
+	}
+
+	if(!found) 
+	{
+		//free the cluster list
+		list_free(cluslist, (u32) cluss);
+		//free the dir entries buffer
+		kfree(dirents);
+		return ERROR_FILE_NOT_FOUND;
+	}
+
+	//write the buffer on the clusters
+	clusbuffer = cluslist;
+	buffer = dirents;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//free the cluster list
+	list_free(cluslist, (u32) cluss);
+	//free the dir entries buffer
+	kfree(dirents);
+
+	return ERROR_NONE;
+}
+
+/*
+* This function removes a dirent
+*/
+static error_t fat32fs_delete_dirent(fsnode_t* file, fsnode_t* dir)
+{
+	file_system_t* fs = file->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	fat32_node_specific_t* dirspe = dir->specific;
+	fat32_node_specific_t* fspe = file->specific;
+
+	//get the parent directory cluster
+	u32 dir_cluster = dirspe->cluster;
+
+	//get the cluster chain for the parent directory
+	u64 cluss = 0;
+	list_entry_t* cluslist = fat32fs_get_cluster_chain(dir_cluster, fs, (u32*) &cluss);
+	list_entry_t* clusbuffer = cluslist;
+
+	//here we have the full dir size, and we allocate an equivalent buffer
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
+	fat32_dir_entry_t* dirents = 
+	#ifdef MEMLEAK_DBG
+	kmalloc((u32) dir_size, "fat32:delete_dirent dir entries buffer");
+	#else
+	kmalloc((u32) dir_size);
+	#endif
+	fat32_dir_entry_t* buffer = dirents;
+
+	//reading all clusters inside this buffer
+	u32 i = 0;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//finding the corresponding entries
+	bool found = false;
+	char* lfn_name = 0;
+	u32 lfn_offset = 0;
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
+	{
+		//parsing the LFN entries
+		if(*(dirents[i].name) == 0x0) {break;}
+		if(*(dirents[i].name) == 0xE5) {continue;}
+		if(dirents[i].attributes == FAT_ATTR_LFN)
+		{
+			//long file name entry processing
+			lfn_entry_t* lfn = (lfn_entry_t*) &dirents[i];
+			//THIS is the part that is hmmm
+			//ASSUMING that the first lfn we will find is the 'top' lfn, the higher in order
+			//from what i have seen, this is true, but...
+			u16 lfn_nbr = (lfn->order & 0x40) == 0x40 ? lfn->order ^ 0x40 : lfn->order;
+
+			if(lfn_name == 0)
+			{
+				lfn_name = 
+				#ifdef MEMLEAK_DBG
+				kmalloc((u32) 13*lfn_nbr+1, "fat32:delete_dirent lfn name");
+				#else
+				kmalloc((u32) 13*lfn_nbr+1);
+				#endif
+				*(lfn_name+13*lfn_nbr) = 0;
+				//lfn_checksum = lfn->checksum;
+			}
+			
+			lfn_offset = 13*((u32) (lfn_nbr-1));
+
+			u32 fff = 0;
+			while(fff < 5) {*(lfn_name+fff+lfn_offset) = (char) lfn->firstn[fff]; fff++;}
+			fff = 0;
+			while(fff < 6) {*(lfn_name+fff+5+lfn_offset) = (char) lfn->nextn[fff]; fff++;}
+			fff = 0;
+			while(fff < 2) {*(lfn_name+fff+11+lfn_offset) = (char) lfn->lastn[fff]; fff++;}
+
+			continue;
+		}
+
+		u32 file_cluster = (((u32)dirents[i].first_cluster_high) << 16) | ((u32)dirents[i].first_cluster_low);
+		file_cluster &= 0x0FFFFFFF;
+
+		if(lfn_name)
+		{
+			if(file_cluster == fspe->cluster)
+			{
+				//we have found the right 8.3 entry
+				*(dirents[i].name) = 0xE5; //marks 0xE5
+				
+				//marks all lfns
+				u32 nlen = strlen(lfn_name); alignup(nlen, 13);
+				u32 counter = 0;
+				while(nlen)
+				{
+					*(dirents[i].name) = 0xE5;
+					counter++;
+					nlen -= 13;
+				}
 
 				kfree(lfn_name);
 				found = true;

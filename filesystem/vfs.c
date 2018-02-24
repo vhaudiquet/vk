@@ -363,6 +363,9 @@ error_t unlink(char* path)
         case FS_TYPE_EXT2:
             tr = ext2_unlink(name, directory->file);
             break;
+        case FS_TYPE_FAT32:
+            tr = fat32_unlink(name, directory->file);
+            break;
     }
 
     close_file(directory);
