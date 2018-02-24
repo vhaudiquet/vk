@@ -265,13 +265,18 @@ error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 		while(count > 31*ATAPI_SECTOR_SIZE)
 		{
 			err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+			if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+			if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+			if(err != ERROR_NONE) return err;
 			count -= 31*ATAPI_SECTOR_SIZE;
 			a += 31*ATAPI_SECTOR_SIZE;
 			as += 31;
 			offset = 0;
-			if(err != ERROR_NONE) return err;
 		}
-		return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+		err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+		if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+		if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 31*ATAPI_SECTOR_SIZE, drive);
+		return err;
     }
     else
     {
@@ -292,13 +297,18 @@ error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
             while(count > 255*BYTES_PER_SECTOR)
             {
                 err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
-                count -= 255*BYTES_PER_SECTOR;
+				if(err != ERROR_NONE) err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+                if(err != ERROR_NONE) err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+				if(err != ERROR_NONE) return err;
+				count -= 255*BYTES_PER_SECTOR;
                 a += 255*BYTES_PER_SECTOR;
                 as += 255;
                 offset = 0;
-                if(err != ERROR_NONE) return err;
             }
-            return ata_pio_read_flexible(sector+as, offset, data+a, count, drive);
+            err = ata_pio_read_flexible(sector+as, offset, data+a, count, drive);
+			if(err != ERROR_NONE) err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+            if(err != ERROR_NONE) err = ata_pio_read_flexible(sector+as, offset, data+a, 255*BYTES_PER_SECTOR, drive);
+			return err;
         }
         else
         {
@@ -307,13 +317,18 @@ error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
             while(count > 127*BYTES_PER_SECTOR)
             {
                 err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*BYTES_PER_SECTOR, drive);
+				if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*BYTES_PER_SECTOR, drive);
+				if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) 127*BYTES_PER_SECTOR, drive);
+				if(err != ERROR_NONE) return err;
                 count -= 127*BYTES_PER_SECTOR;
                 a += 127*BYTES_PER_SECTOR;
                 as += 127;
                 offset = 0;
-                if(err != ERROR_NONE) return err;
             }
-            return ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+            err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+			if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+            if(err != ERROR_NONE) err = ata_dma_read_flexible((u32) sector+as, offset, data+a, (u32) count, drive);
+			return err;
         }
     }
 }

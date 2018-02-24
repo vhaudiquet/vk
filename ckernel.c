@@ -180,6 +180,8 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
 
     //create init process in tty1
     process_t* init_process = create_process(elf_task, 0, 0, tty1);
+    if(!init_process) init_process = create_process(elf_task, 0, 0, tty1);
+    if(!init_process) init_process = create_process(elf_task, 0, 0, tty1);
     if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
     else vga_text_okmsg();
 

@@ -49,7 +49,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     u32 data_size = 0;
     void* code_offset = (void*) elf_load(executable, page_directory, data_loc, &data_size);
 
-    if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); return 0;}
+    if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); kfree(data_loc); return 0;}
 
     //TODO: check if this area isnt already mapped by elf code/data
     void* stack_offset = (void*) 0xC0000000;
