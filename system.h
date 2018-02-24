@@ -83,12 +83,12 @@ extern bool asilent;
 
 typedef struct g_regs
 {
-	unsigned int edi, esi, ebx, edx, ecx, eax;
+	u32 edi, esi, ebx, edx, ecx, eax;
 } g_regs_t;
 
 typedef struct s_regs
 {
-        unsigned int ds, es, fs, gs, ss, cs;
+        u32 ds, es, fs, gs, ss, cs;
 } s_regs_t;
 
 #endif

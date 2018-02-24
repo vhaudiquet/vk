@@ -280,7 +280,12 @@ error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 		sector += offset/BYTES_PER_SECTOR;
 		offset %= BYTES_PER_SECTOR;
         
-		if(!scheduler_started)
+		/*
+		* It apppears that when the count is not big, PIO is faster than DMA
+		* When reading time would be really small, we can take the overhead of CPU time and use PIO
+		* (i actually did that for the loading of ELF from an EXT2 fs with blocks of 1024B and loading time was divided by 5)
+		*/
+		if(!scheduler_started | (count <= 1024))
         {
             error_t err = ERROR_NONE;
             u32 a = 0; u32 as = 0;
