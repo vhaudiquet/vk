@@ -468,6 +468,9 @@ static fsnode_t* create_file(char* path, u8 attributes)
         case FS_TYPE_EXT2:
             tr = ext2_create_file(directory->file, name, attributes);
             break;
+        case FS_TYPE_FAT32:
+            tr = fat32_create_file(directory->file, name, attributes);
+            break;
     }
 
     close_file(directory);

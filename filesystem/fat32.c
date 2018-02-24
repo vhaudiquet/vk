@@ -20,10 +20,13 @@
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster);
 static list_entry_t* fat32fs_get_cluster_chain(u32 fcluster, file_system_t* fs, u32* size);
 static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs);
+static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize);
+static u8 fat32fs_lfn_checksum (u8* pFcbName);
 
 static error_t fat32fs_read_fat(file_system_t* fs);
 static error_t fat32fs_write_fat(file_system_t* fs);
 
+static error_t fat32fs_create_dirent(fsnode_t* file, char* name, fsnode_t* dir);
 static error_t fat32fs_update_dirent(fsnode_t* file);
 static fsnode_t* fat32_dirent_normalize_cache(fat32_dir_entry_t* dirent, u32 dir_cluster, file_system_t* fs);
 
@@ -522,6 +525,53 @@ error_t fat32_write_file(fd_t* fd, void* buffer, u64 count)
 }
 
 /*
+* This function creates a new file
+*/
+fsnode_t* fat32_create_file(fsnode_t* dir, char* name, u8 attributes)
+{
+	file_system_t* fs = dir->file_system;
+	fsnode_t* file = kmalloc(sizeof(fsnode_t));
+
+	/* cache the object */
+    if(!fs->inode_cache)
+    {
+        fs->inode_cache = kmalloc(sizeof(list_entry_t));
+        fs->inode_cache->element = file;
+        fs->inode_cache_size++;
+    }
+    else
+    {
+        list_entry_t* ptr = fs->inode_cache;
+        list_entry_t* last = 0;
+        u32 size = fs->inode_cache_size;
+        while(ptr && size)
+        {
+            last = ptr;
+            ptr = ptr->next;
+            size--;
+        }
+        ptr = kmalloc(sizeof(list_entry_t));
+        ptr->element = file;
+        last->next = ptr;
+        fs->inode_cache_size++;
+    }
+
+	/* fill the object informations */
+	file->file_system = fs;
+	file->length = 0;
+	file->attributes = attributes;
+	file->hard_links = 0;
+	fat32_node_specific_t* specific = kmalloc(sizeof(fat32_node_specific_t));
+	specific->cluster = fat32fs_gm_free_clusters(1, fs);
+	file->specific = specific;
+
+	/* create dirent */
+	fat32fs_create_dirent(file, name, dir);
+
+	return file;
+}
+
+/*
 * this function converts cluster address to LBA address
 */
 static u64 fat32fs_cluster_to_lba(file_system_t* fs, u32 cluster)
@@ -613,6 +663,96 @@ static u32 fat32fs_gm_free_clusters(u32 nbr, file_system_t* fs)
 	return last_free_cluster;
 }
 
+/*
+* this function returns the 8.3 name of a file
+* this is still experimental and full of bugs but as we dont really care about 8.3 and the code is horrible i'll see that later
+*/
+static void fat32fs_get_old_name(u8* oldname, u8* oldext, u8* name, list_entry_t* dirnames, u32 dirsize)
+{
+	u8* namebuffer = name;
+
+	while(*name == '.') name++;
+
+	bool generate_tail = false;
+	u8 temp[9] = {0};
+	u8* dest = temp;
+	u32 i = 0;
+	while ((i < 8) && (*dest++ = toUpper(*namebuffer++))) 
+	{
+		if((*dest) && !isalnum(*dest) && (*dest < 127)) {kprintf("gtail : no127 (%c) (%u)\n", *dest, *dest); *dest = '_'; generate_tail = true;}
+		if(*dest == ' '){dest--; generate_tail = true; kprintf("gtail : spaces\n");}
+		else i++;
+	}
+	*(dest++) = 0;
+	
+	i = 0;
+	while(*(temp+i) && *(temp+i) != '.' && i < 8)
+	{
+		*(oldname+i) = *(temp+i);
+		i++;
+		if(i==8 && *(temp+i)) {generate_tail = true; kprintf("gtail : name too big\n");}
+	}
+
+	u8* ext = (u8*) strrchr((char*) name, '.');
+	if(name)
+	{
+		*oldext = toUpper(*(ext+1));
+		*(oldext+1) = toUpper(*(ext+2));
+		*(oldext+2) = toUpper(*(ext+3));
+	}
+	//if(strchr((char*) name, '.') != strrchr((char*) name, '.')) {generate_tail = true; kprintf("gtail : dots\n");}
+
+	if(generate_tail)
+	{
+		kprintf("%lgenerating tail...\n", 3);
+		u32 n = 1;
+		u8 toCopy[7] = {0};
+		*toCopy = '~';
+		utoa(n, toCopy+1);
+		u32 len = strlen((char*) toCopy);
+		strncpy((char*) (oldext+7-len), (char*) toCopy, len);
+
+		i = 0;
+		while(i < dirsize)
+		{
+			u8* nn = (u8*) dirnames->element;
+			if(!strcmpnc((char*) oldname, (char*) nn))
+			{
+				n++;
+				u8 toCopy[7] = {0};
+				*toCopy = '~';
+				utoa(n, toCopy+1);
+				u32 len = strlen((char*) toCopy);
+				strncpy((char*) (oldext+7-len), (char*) toCopy, len);
+			}
+			list_entry_t* temp = dirnames;
+			dirnames = dirnames->next;
+			kfree(temp);
+			i++;
+		}
+	}
+
+	kprintf("%lname = %s\n", 3, name);
+	kprintf("%lreturning old name : %s , old ext : %s\n", 3, oldname, oldext);
+}
+
+/*
+* this function gets the checksum of a lfn entry from a name
+* it uses microsoft fatgen103.doc implementation
+*/
+static u8 fat32fs_lfn_checksum (u8* pFcbName)
+{
+	u16 FcbNameLen;
+	u8 Sum;
+
+	Sum = 0;
+	for (FcbNameLen=11; FcbNameLen!=0; FcbNameLen--) 
+	{
+		// NOTE: The operation is an unsigned char rotate right
+		Sum = (u8) (((Sum & 1) ? 0x80 : 0) + (Sum >> 1) + *pFcbName++);
+	}
+	return (Sum);
+}
 
 /*
 * this function reads the fat from disk
@@ -643,6 +783,272 @@ static error_t fat32fs_write_fat(file_system_t* fs)
 	u32 fat_size = spe->bpb->fat_size * spe->bpb->bytes_per_sector;
 	u32 fat_sector = spe->bpb_offset + spe->bpb->reserved_sectors;
 	return block_write_flexible(fat_sector, 0, (u8*) spe->fat_table, fat_size, fs->drive);
+}
+
+/*
+* This function creates a dirent for a file
+*/
+static error_t fat32fs_create_dirent(fsnode_t* file, char* name, fsnode_t* dir)
+{
+	if(file->hard_links) return ERROR_FILE_FS_INTERNAL;
+
+	file_system_t* fs = dir->file_system;
+	fat32fs_specific_t* spe = (fat32fs_specific_t*) fs->specific;
+	fat32_node_specific_t* fspe = file->specific;
+
+	//get the parent directory cluster
+	fat32_node_specific_t* dirspe = dir->specific;
+	u32 dir_cluster = dirspe->cluster;
+
+	//get the cluster chain for the parent directory
+	u64 cluss = 0;
+	list_entry_t* cluslist = fat32fs_get_cluster_chain(dir_cluster, fs, (u32*) &cluss);
+	list_entry_t* clusbuffer = cluslist;
+
+	//here we have the full dir size, and we allocate an equivalent buffer
+	u64 dir_size = cluss * spe->bpb->sectors_per_cluster * 512;
+	fat32_dir_entry_t* dirents = 
+	#ifdef MEMLEAK_DBG
+	kmalloc((u32) dir_size, "fat32:create_dirent dir entries buffer");
+	#else
+	kmalloc((u32) dir_size);
+	#endif
+	fat32_dir_entry_t* buffer = dirents;
+
+	//reading all clusters inside this buffer
+	u32 i = 0;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_read_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//getting the 'end of directory' entry and checking for name conflicts
+	list_entry_t* names = 
+	#ifdef MEMLEAK_DBG
+	kmalloc(sizeof(list_entry_t), "fat32:create_dirents name storing (first)");
+	#else
+	kmalloc(sizeof(list_entry_t));
+	#endif
+
+	//initializing the lfn entries
+	//each lfn entry can handle 13 chars
+	u32 name_len = strlen((char*) name);
+	u32 needed_lfns = name_len / 13;
+	if(name_len % 13) needed_lfns++;
+
+	list_entry_t* namesb = names;
+	u32 namess = 0;
+	char* lfn_name = 0;
+	u32 lfn_offset = 0;
+	u32 unused_entries = 0;
+	for(i = 0;i<dir_size/sizeof(fat32_dir_entry_t);i++)
+	{
+		if(*(dirents[i].name) == 0x0) {break;}
+		if(*(dirents[i].name) == 0xE5) {unused_entries++; continue;}
+		if(dirents[i].attributes == FAT_ATTR_LFN)
+		{
+			//long file name entry processing
+			lfn_entry_t* lfn = (lfn_entry_t*) &dirents[i];
+			
+			u16 lfn_nbr = (lfn->order & 0x40) == 0x40 ? lfn->order ^ 0x40 : lfn->order;
+			
+			if(lfn_name == 0)
+			{
+				lfn_name = 
+				#ifdef MEMLEAK_DBG
+				kmalloc((u32) 13*lfn_nbr+1, "fat32:create_dirent lfn name store");
+				#else
+				kmalloc((u32) 13*lfn_nbr+1);
+				#endif
+				*(lfn_name+13*lfn_nbr) = 0;
+			}
+						
+			lfn_offset = 13*((u32) (lfn_nbr-1));
+		
+			u32 fff = 0;
+			while(fff < 5) {*(lfn_name+fff+lfn_offset) = (char) lfn->firstn[fff]; fff++;}
+			fff = 0;
+			while(fff < 6) {*(lfn_name+fff+5+lfn_offset) = (char) lfn->nextn[fff]; fff++;}
+			fff = 0;
+			while(fff < 2) {*(lfn_name+fff+11+lfn_offset) = (char) lfn->lastn[fff]; fff++;}
+		}
+		else
+		{
+			//std entries processing
+			if(lfn_name != 0)
+			{
+				//long file name
+				if(!strcmpnc(lfn_name, (char*) name)) 
+				{
+					//kprintf("%lcant create, same long name...\n", 2);
+					kfree(lfn_name); kfree(dirents); list_free_eonly(names, namess); 
+					kfree(namesb); list_free(cluslist, (u32) cluss); 
+					return ERROR_FILE_NAME_ALREADY_EXISTS;
+				}
+				kfree(lfn_name);
+				lfn_name = 0;
+				lfn_offset = 0;
+			}
+
+			//reinit deleted entries
+			if(unused_entries) kprintf("unused_entries that were there: %d\n", unused_entries);
+			unused_entries = 0;
+
+			char tc[13] = {0};
+			strncpy(tc, (char*) dirents[i].name, 8);
+			strncat(tc, ".", 1);
+			strncat(tc, (char*) dirents[i].extension, 3);
+			if(!strcmpnc(tc, (char*) name)) 
+			{
+				kfree(dirents); list_free_eonly(names, namess); kfree(namesb); 
+				list_free(cluslist, (u32) cluss); 
+				return ERROR_FILE_NAME_ALREADY_EXISTS;
+			}
+			namesb->element = dirents[i].name;
+			namess++;
+			namesb->next = 
+			#ifdef MEMLEAK_DBG
+			kmalloc(sizeof(list_entry_t), "fat32:create_dirent names storing");
+			#else
+			kmalloc(sizeof(list_entry_t));
+			#endif
+			namesb = namesb->next;
+		}
+	}
+	kfree(namesb);
+
+	//verify is the dir can actually handle those entries
+	if(i+needed_lfns < dir_size/sizeof(fat32_dir_entry_t))
+	{
+		*(dirents[i+needed_lfns+1].name) = 0x0;
+		buffer = dirents;
+	}
+	else
+	{
+		//worst case, we are on cluster end...
+		//we need to allocate a new cluster to this directory, mark it as EOC and make the previous 'last cluster' point to it
+		clusbuffer = cluslist;
+		u32 clus_temp_i;
+		for(clus_temp_i = 0; clus_temp_i < cluss-1; clus_temp_i++) 
+		{
+			clusbuffer = clusbuffer->next;
+		}
+		u32* last_cluster = (u32*) clusbuffer->element;
+		u32 new_cluster = fat32fs_gm_free_clusters(1, fs);
+		
+		u32* nclv = 
+		#ifdef MEMLEAK_DBG
+		kmalloc(sizeof(u32), "Cluster number, fat32.c:create_dirent"); 
+		#else
+		kmalloc(sizeof(u32)); 
+		#endif
+		*nclv = new_cluster; 
+		clusbuffer->next = 
+		#ifdef MEMLEAK_DBG
+		kmalloc(sizeof(list_entry_t), "new cluster list element, fat32.c:create_dirent"); 
+		#else 
+		kmalloc(sizeof(list_entry_t)); 
+		#endif
+		clusbuffer->next->element = nclv;
+		
+		spe->fat_table[*last_cluster] = new_cluster;
+		dir_size += (u64) spe->bpb->sectors_per_cluster * 512;
+		cluss++;
+		buffer = dirents = krealloc(dirents, (u32) dir_size);
+		*(dirents[i+needed_lfns+1].name) = 0x0;
+	}
+
+	//initializing the 8.3 file entry
+	dirents[i+needed_lfns].attributes = 0;
+	if(file->attributes & FILE_ATTR_HIDDEN) {dirents[i+needed_lfns].attributes |= FAT_ATTR_HIDDEN;}
+	if(file->attributes & FILE_ATTR_DIR) {dirents[i+needed_lfns].attributes |= FAT_ATTR_DIRECTORY;}
+	fat32fs_get_old_name(dirents[i+needed_lfns].name, dirents[i+needed_lfns].extension, (u8*) name, names, namess);
+	dirents[i+needed_lfns].file_size = (u32) file->length;
+	dirents[i+needed_lfns].first_cluster_low = (u16) (fspe->cluster << 16 >> 16);
+	dirents[i+needed_lfns].first_cluster_high = (u16) (fspe->cluster >> 16);
+	
+	#pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wconversion"
+	//set time
+	u8 secs, mins, hours, days, months, years;
+	file->creation_time = get_current_time_utc();
+	file->last_modification_time = file->creation_time;
+	file->last_access_time = file->creation_time;
+	convert_to_readable_time(file->creation_time, &secs, &mins, &hours, &days, &months, &years);
+	dirents[i+needed_lfns].creation_time = (hours << 11);
+	dirents[i+needed_lfns].creation_time |= (mins << 5);
+	dirents[i+needed_lfns].creation_time |= (secs/2);
+	dirents[i+needed_lfns].creation_date = ((years-80) << 9);
+	dirents[i+needed_lfns].creation_date |= (months << 5);
+	dirents[i+needed_lfns].creation_date |= (days);
+	convert_to_readable_time(file->last_modification_time, &secs, &mins, &hours, &days, &months, &years);
+	dirents[i+needed_lfns].last_modification_time = (hours << 11);
+	dirents[i+needed_lfns].last_modification_time |= (mins << 5);
+	dirents[i+needed_lfns].last_modification_time |= (secs/2);
+	dirents[i+needed_lfns].last_modification_date = ((years-80) << 9);
+	dirents[i+needed_lfns].last_modification_date |= (months << 5);
+	dirents[i+needed_lfns].last_modification_date |= (days);
+	convert_to_readable_time(file->last_access_time, &secs, &mins, &hours, &days, &months, &years);
+	dirents[i+needed_lfns].last_access_date = ((years-80) << 9);
+	dirents[i+needed_lfns].last_access_date |= (months << 5);
+	dirents[i+needed_lfns].last_access_date |= (days);
+	#pragma GCC diagnostic pop
+
+	//free the dir old names
+	list_free_eonly(names, namess);
+
+	//back to the lfn entry
+	u32 j = 0;
+	
+	//getting checksum
+	u8 lfn_checksum = fat32fs_lfn_checksum(dirents[i+needed_lfns].name);
+
+	while(j < needed_lfns)
+	{
+		u32 curr_name_offset = ((needed_lfns-j-1)*13);
+
+		lfn_entry_t* currlfn = (lfn_entry_t*) &dirents[i+j];
+		//kprintf("writing lfn entry %d\n", i+j);
+
+		currlfn->order = (u8) (j ? (needed_lfns-j) : (needed_lfns|0x40));
+		currlfn->attributes = FAT_ATTR_LFN;
+		currlfn->zero = 0;
+		currlfn->checksum = lfn_checksum;
+
+		u32 fff = 0;
+		while(fff < 5) {currlfn->firstn[fff] = *((u8*) name+fff+curr_name_offset); fff++;}
+		fff = 0;
+		while(fff < 6) {currlfn->nextn[fff] = *((u8*) name+fff+curr_name_offset+5); fff++;}
+		fff = 0;
+		while(fff < 2) {currlfn->lastn[fff] = *((u8*) name+fff+curr_name_offset+11); fff++;}
+
+		j++;
+	}
+
+	//write the buffer on the clusters
+	clusbuffer = cluslist;
+	for(i = 0; i < cluss; i++)
+	{
+		u64 pos = fat32fs_cluster_to_lba(fs, *((u32*) clusbuffer->element));
+		block_write_flexible(pos, 0, (u8*) buffer, (u64) spe->bpb->sectors_per_cluster*512, fs->drive);
+		clusbuffer = clusbuffer->next;
+		buffer += (spe->bpb->sectors_per_cluster*512);
+	}
+
+	//free the cluster list
+	list_free(cluslist, (u32) cluss);
+	//free the dir entries buffer
+	kfree(dirents);
+	
+	//write the fat
+	fat32fs_write_fat(fs);
+
+	file->hard_links++;
+
+	return ERROR_NONE;
 }
 
 /*

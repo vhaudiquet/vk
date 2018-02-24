@@ -113,5 +113,6 @@ fsnode_t* fat32_open(fsnode_t* dir, char* name);
 error_t fat32_list_dir(list_entry_t* tr, fsnode_t* dir, u32* size);
 error_t fat32_read_file(fd_t* fd, void* buffer, u64 count);
 error_t fat32_write_file(fd_t* fd, void* buffer, u64 count);
+fsnode_t* fat32_create_file(fsnode_t* dir, char* name, u8 attributes);
 
 #endif
