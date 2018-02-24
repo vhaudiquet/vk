@@ -168,7 +168,10 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     kmalloc((u32) flength(init_file)+1);
     #endif
     memset(init_buffer, 0, (size_t) flength(init_file)+1);
-    read_file(init_file, init_buffer, flength(init_file));
+    error_t readop0 = read_file(init_file, init_buffer, flength(init_file));
+    if(readop0 != ERROR_NONE) readop0 = read_file(init_file, init_buffer, flength(init_file));
+    if(readop0 != ERROR_NONE) readop0 = read_file(init_file, init_buffer, flength(init_file));
+    if(readop0 != ERROR_NONE) fatal_kernel_error("Could not read init file.", "INIT_RUN");
     init_buffer[flength(init_file)-1] = 0;
 
     kprintf("INIT: Opening %s...", init_buffer);

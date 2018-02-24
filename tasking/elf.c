@@ -78,7 +78,10 @@ error_t elf_check(fd_t* file)
 
     //read header to check it
     elf_header_t eh;
-    read_file(file, &eh, sizeof(elf_header_t));
+    error_t readop = read_file(file, &eh, sizeof(elf_header_t));
+    if(readop != ERROR_NONE) readop = read_file(file, &eh, sizeof(elf_header_t));
+    if(readop != ERROR_NONE) readop = read_file(file, &eh, sizeof(elf_header_t));
+    if(readop != ERROR_NONE) return readop;
 
     //restoring offset
     file->offset = old_offset;
@@ -111,7 +114,10 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
     u64 old_offset = file->offset;
     file->offset = 0;
 
-    read_file(file, buffer, flength(file));
+    error_t readop = read_file(file, buffer, flength(file));
+    if(readop != ERROR_NONE) read_file(file, buffer, flength(file));
+    if(readop != ERROR_NONE) read_file(file, buffer, flength(file));
+    if(readop != ERROR_NONE) return 0;
 
     //restoring offset
     file->offset = old_offset;
