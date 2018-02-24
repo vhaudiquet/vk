@@ -414,6 +414,39 @@ error_t link(char* src_path, char* dest_path)
     return tr;
 }
 
+error_t rename(char* src_path, char* dest_name)
+{
+    //get src name
+    char* src_name = strrchr(src_path, '/')+1;
+
+    //get dest directory
+    u32 destdirlen = (strlen(src_path) - ((u32)(src_name - src_path)));
+    char* destdir = kmalloc(destdirlen+1);
+    strncpy(destdir, src_path, destdirlen);
+    *(destdir+destdirlen) = 0;
+
+    fd_t* dest_directory = open_file(destdir, OPEN_MODE_R);
+    kfree(destdir);
+    if(!dest_directory) return ERROR_FILE_NOT_FOUND;
+    if(!(dest_directory->file->attributes & FILE_ATTR_DIR)) {close_file(dest_directory); return ERROR_FILE_IS_NOT_DIRECTORY;}
+    
+    fd_t* source_file = open_file(src_path, OPEN_MODE_R);
+    if(!source_file) {close_file(dest_directory); return ERROR_FILE_NOT_FOUND;}
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(dest_directory->file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32:
+            tr = fat32_rename(source_file->file, src_name, dest_name, dest_directory->file);
+            break;
+    }
+
+    close_file(dest_directory);
+    close_file(source_file);
+
+    return tr;
+}
+
 static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
 {
     if(*path == '/') path++;

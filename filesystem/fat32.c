@@ -527,6 +527,26 @@ error_t fat32_write_file(fd_t* fd, void* buffer, u64 count)
 }
 
 /*
+* This function renames a file
+*/
+error_t fat32_rename(fsnode_t* src_file, char* src_file_name, char* new_file_name, fsnode_t* dir)
+{
+	//delete old dirent
+	error_t old_dirent = fat32fs_delete_dirent(src_file, dir);
+	if(old_dirent != ERROR_NONE) return old_dirent;
+
+	//create new dirent
+	error_t new_dirent = fat32fs_create_dirent(dir, new_file_name, src_file);
+	if(new_dirent != ERROR_NONE)
+	{
+		fat32fs_create_dirent(dir, src_file_name, src_file);
+		return new_dirent;
+	}
+
+	return ERROR_NONE;
+}
+
+/*
 * This function removes a file
 */
 error_t fat32_unlink(char* file_name, fsnode_t* dir)

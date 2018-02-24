@@ -87,7 +87,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             char* oldpath = (char*) ebx;
             char* newname = (char*) ecx;
 
-            error_t tr = UNKNOWN_ERROR; //rename_file(oldpath, newname);
+            error_t tr = rename(oldpath, newname);
             asm("mov %0, %%eax"::"g"(tr));
             break;
         }
