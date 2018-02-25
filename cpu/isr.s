@@ -46,7 +46,7 @@ CLOCK_IRQ:
     mov %ax, %es
     mov %ax, %fs
     mov %ax, %gs
-    cld
+    # cld
     # cli
     call schedule
     mov $0x20, %al

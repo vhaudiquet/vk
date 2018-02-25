@@ -129,8 +129,8 @@ static void map_page(u32 phys_addr, u32 virt_addr, u32* page_directory)
     {
         page_table = (u32*) (((u32) pt_alloc()) - KERNEL_VIRTUAL_BASE);
         memset(((u32*) (((u32)page_table)+KERNEL_VIRTUAL_BASE)), 0, 4096);
-        if(kernel) page_directory[pd_index] = ((u32) page_table) | 3;
-        else page_directory[pd_index] = ((u32) page_table) | 7;
+        if(kernel) page_directory[pd_index] = ((u32) page_table) | 259; //present, read/write, global
+        else page_directory[pd_index] = ((u32) page_table) | 7; //present, read/write, user
     }
     else
     {
@@ -143,10 +143,11 @@ static void map_page(u32 phys_addr, u32 virt_addr, u32* page_directory)
     //if(*page) kprintf("page=%x (virt=0x%X)\n", *page, virt_addr);
     if(*page) fatal_kernel_error("Trying to map physical to an already mapped virtual address", "MAP_PAGE");
 
-    if(kernel) *page = (phys_addr) | 3;
-    else *page = (phys_addr) | 7;
+    if(kernel) *page = (phys_addr) | 259; //present, read/write, global
+    else *page = (phys_addr) | 7; //present, read/write, user
 
     //flush, update or do something with the cache
+    asm("invlpg	4(%%eax)"::"a"(page));
 }
 
 static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory)
@@ -167,14 +168,14 @@ static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory)
 
     if(cpu_pse)
     {
-        if(kernel) page_directory[pd_index] = phys_addr | 131;
-        else page_directory[pd_index] = phys_addr | 135;
+        if(kernel) page_directory[pd_index] = phys_addr | 387; //present, read/write, 4MiB page_size, global
+        else page_directory[pd_index] = phys_addr | 135; //present, read/write, user, 4MiB page_size
     }
     else
     {
         page_table = (u32*) (((u32) pt_alloc()) - KERNEL_VIRTUAL_BASE);
-        if(kernel) page_directory[pd_index] = ((u32) page_table) | 3;
-        else page_directory[pd_index] = ((u32) page_table) | 7;
+        if(kernel) page_directory[pd_index] = ((u32) page_table) | 259; //present, read/write, global
+        else page_directory[pd_index] = ((u32) page_table) | 7; //present, read/write, user
 
         unsigned int i;
         for(i = 0;i<1024;i++)
@@ -185,7 +186,7 @@ static void map_page_table(u32 phys_addr, u32 virt_addr, u32* page_directory)
     }
 
     //flush, update, or do something with the cache
-
+    asm("invlpg	4(%%eax)"::"a"(page_table));
 }
 
 static void unmap_page(u32 virt_addr, u32* page_directory)
@@ -211,6 +212,7 @@ static void unmap_page(u32 virt_addr, u32* page_directory)
     *page = 0;
 
     //flush, update or do something with the cache
+    asm("invlpg	4(%%eax)"::"a"(page));
 }
 
 static void unmap_page_table(u32 virt_addr, u32* page_directory)
@@ -233,7 +235,7 @@ static void unmap_page_table(u32 virt_addr, u32* page_directory)
     }
 
     //flush, update, or do something with the cache
-
+    asm("invlpg	4(%%eax)"::"a"(page_table));
 }
 
 //if we need to access some defined point of physical memory (like the ACPI table)

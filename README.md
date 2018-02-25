@@ -5,12 +5,24 @@ C kernel project ; current architecture : x86
 
 Current status : the kernel can load an ELF executable, statically linked with newlib, and execute the code, 
 from an ATA disk with a FAT32/EXT2 fs or an ATAPI cd-rom with an ISO9660 fs.
-(even if for now almost every executable cause a page fault from iso9660, idk why...)
+(even if for now almost every executable cause a page fault from iso9660, idk why... (maybe scheduler bug))
 
-The scheduler is working, but i'm pretty sure it still contains some bugs.
+The scheduler is working, but it still contains some bugs (i'm currently trying to fix that).
 I want to get ACPI support, at least for ACPI shutdown but also to use things like HPET...
 
 I already ported Newlib and made my custom (i386-vk-*) toolchain ; i have successfully compiled and executed simple
 programs like hello world, and tested scanf()/getc().. and everything worked.
 I'm now trying to port real software but for that i'll have to add the 'termios' and 'dirent' header to newlib,
 and clean up everything in the kernel syscalls / code + in the toolchain.
+
+Source code organization:
+	/cpu			Contains code to detect cpu features, set up GDT/IDT, and handle interrupts
+	/devices		(TEMP) Contains temp keyboard driver (will be moved/changed later)
+	/error			Contains error handling (fatal_kernel_error + errcodes)
+	/filesystem		Contains VFS and FAT32/Ext2/Iso9660/DevFS implementations
+	/internal		Contains PCI device mapper and PIC remapper (will be moved later)
+	/time			Contains time (clock) layer (CMOS only for now)
+	/util			Contains data structures, string/standard functions and type definition
+	/video			Contains video drivers (vga_text only for now)
+	ckernel.c		Kernel C entry point (kmain())
+	loader.s		Kernel ASM entry point (loads the kernel in higher half and call kmain())
