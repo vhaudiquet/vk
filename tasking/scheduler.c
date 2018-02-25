@@ -54,6 +54,7 @@ process_t* toswitch = 0;
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp, u32 ebx, u32 edx, u32 ecx, u32 eax, u32 eip, u32 cs, u32 flags, u32 esp_2, u32 ss)
 {
+    /* put back on queue processes that were waiting a certain ammount of time if time elapsed */
     u32 il = 0;
     list_entry_t* lp = p_wait_list;
     for(il=0;il<p_wl_size;il++)
@@ -64,14 +65,11 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         lp = lp->next;
     }
 
-    //if there is no process to schedule, we return
+    /* if there is no process to schedule, we return */
     toswitch = queue_take(p_ready_queue);
     if(!toswitch) return;
 
-    //asm("mov %%ss, %%eax":"=a"(ss));
-    //kprintf("schedule : ring %u (cs = 0x%X) (ss = 0x%X)\n", cs & 0x3, cs, ss);
-
-    //if we are currently running idle process, lets throw it away
+    /* if we are currently running idle process, lets throw it away */
     if(current_process == idle_process)
     {
         list_entry_t* list_pointer = p_wait_list;
@@ -107,36 +105,40 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
         list_pointer->element = pdata;
         p_wl_size++;
     }
-    //else save the context of current process and put in back in queue
+    /* else save the context of current process and put it back in queue */
     else if(current_process)
     {
-        //save context of current process
+        /* save context of current process */
+        
+        current_process->eip = eip; //saving eip
+        current_process->ebp = ebp; //saving ebp
+
+        //saving segment registers
         current_process->sregs.cs  = cs;
-        current_process->eip = eip;
-        current_process->gregs.eax = eax;
-        current_process->gregs.ecx = ecx;
-        current_process->gregs.edx = edx;
-        current_process->gregs.ebx = ebx;
-        current_process->ebp = ebp;
-        current_process->gregs.esi = esi;
-        current_process->gregs.edi = edi;
         current_process->sregs.gs = gs;
         current_process->sregs.fs = fs;
         current_process->sregs.es = es;
         current_process->sregs.ds = ds;
 
+        //saving general registers (a,b,c,d,si,di)
+        current_process->gregs.eax = eax;
+        current_process->gregs.ebx = ebx;
+        current_process->gregs.ecx = ecx;
+        current_process->gregs.edx = edx;
+        current_process->gregs.esi = esi;
+        current_process->gregs.edi = edi;
+
         //if system call, theses are not pushed on the stack
         if (current_process->sregs.cs != 0x08) 
         {
             current_process->esp = esp_2;
-            //current_process->sregs.ss = ss;
+            current_process->sregs.ss = ss;
         }
-        else 
+        else
         {
             current_process->esp = esp+0xC;
             //kesp saving : why ? why not ? both seems to work, i'm so confused (maybe saving it and adding 0xC create stack corruption)
             //current_process->kesp = esp+0xC;
-            //kprintf("%lSaving p esp : 0x%X\n", 1, esp);
         }
 
         //current_process->flags = flags;
@@ -163,7 +165,7 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     //kprintf("%leax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", 3, current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
 
     //restore segments register
-    asm("mov %0, %%ds \n \
+    __asm__ __volatile__("mov %0, %%ds \n \
     mov %1, %%es \n \
 	mov %2, %%fs \n \
     mov %3, %%gs \n"::"r"(current_process->sregs.ds), "r"(current_process->sregs.es), "r"(current_process->sregs.fs), "r"(current_process->sregs.gs));
@@ -177,14 +179,14 @@ void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp
     //if we return to normal execution, we let iret do the stack switch
     {
         __asm__ __volatile__("pushl %0\n \
-             pushl %1\n"::"g"(0x23), "g"(current_process->esp));
+             pushl %1\n"::"g"(current_process->sregs.ss), "g"(current_process->esp));
     }
 
     //pushing flags, cs and eip (to be popped out by iret)
+    //note: we are not restoring flags for now, and resetting Hardware Interrupt flag on each schedule()...
     __asm__ __volatile__("pushfl\n \
          popl %%eax        \n \
          orl $0x200, %%eax \n \
-         and $0xffffbfff, %%eax \n \
          push %%eax        \n \
          pushl %0 \n \
          pushl %1 \n"::"g"(current_process->sregs.cs), "g"(current_process->eip):"%eax");
