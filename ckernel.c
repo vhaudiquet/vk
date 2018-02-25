@@ -71,13 +71,12 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //kprintf("%lKernel code : 0x%X - 0x%X\n", 3, &_kernel_start, &_kernel_end);
 
     kprintf("Getting kernel execution context...");
-    //argument interpretation doesn't work... ?
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
 
-    //getting live / root dir infos
+    //getting live / root dir infos (for now we are ignoring args, we'll update that later)
     u8 root_drive = 0;
     u8 part_index = 1;
-    u8 mode = aboot_hint_present;
+    u8 mode = 0; //aboot_hint_present
     if(!mode)
     {
         if(block_device_count == 0) {vga_text_failmsg(); fatal_kernel_error("No block device detected", "KERNEL_CONTEXT_GUESSING");}
