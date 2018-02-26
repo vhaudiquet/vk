@@ -16,10 +16,10 @@ Source code organization:
 /error		Contains error handling (fatal_kernel_error + errcodes)
 /filesystem	Contains VFS and FAT32/Ext2/Iso9660/DevFS implementations
 /internal	Contains PCI device mapper and PIC remapper (will be moved later)
-/io         Contains I/O structures/tty implementations
-/memory     Contains paging, kernel heap, physical memory manager and virtual memory heap
-/storage    Contains block devices drivers (ATA/ATAPI)
-/tasking    Contains scheduler, processes, elf parser and system calls
+/io			Contains I/O structures/tty implementations
+/memory		Contains paging, heap/page heap, physical and virtual memory manager
+/storage	Contains block devices drivers (ATA/ATAPI)
+/tasking	Contains scheduler, processes, elf parser and system calls
 /time		Contains time (clock) layer (CMOS only for now)
 /util		Contains data structures, string/standard functions and type definition
 /video		Contains video drivers (vga_text only for now)
