@@ -51,11 +51,6 @@ void scheduler_start()
 
 void scheduler_add_process(process_t* process)
 {
-    //if(!current_process)
-    //{
-    //    current_process = process;
-    //}
-    //else 
     queue_add(p_ready_queue, process);
 }
 
