@@ -1,10 +1,10 @@
-LDOBJ=kernel.o ckernel.o lib.o gdt.o cpu.o idt.o vga_text.o video.o isrs.o isr.o paging.o error.o pic.o kheap.o physical.o kpageheap.o ata_pio.o block_devices.o pci.o fat32.o vfs.o args.o elf.o syscalls.o process.o keyboard.o data_structs.o scheduler.o ata_dma.o ata_common.o atapi.o iso_9660.o kvmheap.o time.o ext2.o devfs.o stream.o ttys.o
+LDOBJ=kernel.o ckernel.o lib.o gdt.o cpu.o idt.o vga_text.o video.o isrs.o isr.o paging.o error.o pic.o kheap.o physical.o kpageheap.o ata_pio.o block_devices.o pci.o fat32.o vfs.o args.o elf.o syscalls.o process.o keyboard.o data_structs.o scheduler.o ata_dma.o ata_common.o atapi.o iso_9660.o kvmheap.o time.o ext2.o devfs.o stream.o ttys.o asm_scheduler.o
 CPATH=/home/valentin/Programmes/i386-elf-5.4.0/bin
 CC=$(CPATH)/i386-elf-gcc -std=gnu11
 AS=$(CPATH)/i386-elf-as
 LD=$(CPATH)/i386-elf-ld
 AFLAGS=--32
-CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -g -I.
+CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -g -I. -fomit-frame-pointer
 LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
 QEMU=qemu-system-i386 -enable-kvm # kvm
@@ -79,6 +79,7 @@ kernel: asmobjects objects
 asmobjects: 
 	$(AS) $(AFLAGS) loader.s -o kernel.o
 	$(AS) $(AFLAGS) cpu/isr.s -o isr.o
+	$(AS) $(AFLAGS) tasking/scheduler.s -o asm_scheduler.o
 
 objects:
 	# compile every .c file in every subfolder

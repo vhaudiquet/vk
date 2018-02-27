@@ -96,7 +96,7 @@ void idt_install(void)
 	init_idt_desc(31, 0x08, (u32) _isr31, 0x8E00);
 
 	//Initializing IRQs
-	init_idt_desc(32, 0x08, (u32) CLOCK_IRQ, 0x8E00); //clock
+	init_idt_desc(32, 0x08, (u32) schedule, 0x8E00); //clock
 	init_idt_desc(33, 0x08, (u32) _irq1, 0x8E00); //keyboard
 	init_idt_desc(34, 0x08, (u32) _irq2, 0x8E00); //UNHANDLED ones
 	init_idt_desc(35, 0x08, (u32) _irq3, 0x8E00);

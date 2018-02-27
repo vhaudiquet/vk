@@ -48,8 +48,7 @@ extern void _isr29();
 extern void _isr30();
 extern void _isr31();
 
-//extern void _irq0();
-extern void CLOCK_IRQ();
+extern void schedule();
 extern void _irq1();
 extern void _irq2();
 extern void _irq3();

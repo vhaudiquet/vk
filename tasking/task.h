@@ -35,6 +35,7 @@ typedef struct PROCESS
     u32 eip;
     u32 esp;
     u32 ebp;
+    u32 flags;
     //page directory of the process
     u32* page_directory;
     //process kernel stack current esp
@@ -56,7 +57,7 @@ typedef struct PROCESS
     u32 files_count;
     //pid
     u32 pid;
-} process_t;
+} __attribute__((packed)) process_t;
 
 void process_init();
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);

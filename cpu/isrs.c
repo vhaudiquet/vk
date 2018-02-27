@@ -25,7 +25,7 @@ struct regs_int
 	u32 gs, fs, es, ds;
 	u32 edi, esi, ebp, esp, ebx, edx, ecx, eax;
 	u32 int_no, err_code;
-	u32 eip, cs, eflags, useresp, ss;
+	u32 eip, cs, eflags, useresp, userss;
 };
 
 static const char* const exceptionMessages[] =
@@ -63,7 +63,7 @@ static void handle_user_fault(struct regs_int* r)
 {
 	kprintf("%lEIP = 0x%X\n", 3, r->eip);
 	kprintf("%lERROR_CODE = 0x%X\n", 3, r->err_code);
-	kprintf("%lss = 0x%X ; esp = 0x%X ; cs = 0x%X\n", 3, r->ss, r->esp, r->cs);
+	kprintf("%lesp = 0x%X ; cs = 0x%X\n", 3, r->esp, r->cs);
 	kprintf("%lgs = 0x%X ; fs = 0x%X ; es = 0x%X ; ds = 0x%X\n", 3, r->gs, r->fs, r->es, r->ds);
 	kprintf("%l%s\n", 2, exceptionMessages[r->int_no]);
 	//notify user (on exiting)
@@ -74,7 +74,7 @@ static void handle_user_fault(struct regs_int* r)
 static void handle_page_fault(struct regs_int* r)
 {
 	kprintf("%lEIP = 0x%X (cs = 0x%X)\n", 3, r->eip, r->cs);
-	kprintf("%lESP = 0x%X (ss = 0x%X)\n", 3, r->esp, r->ss);
+	kprintf("%lESP = 0x%X\n", 3, r->esp);
 	u32 f_addr; asm("movl %%cr2, %0":"=r"(f_addr):);
 	kprintf("Page fault at address : 0x%X\n", f_addr);
 	kprintf("Error code : %d\n", r->err_code);

@@ -49,156 +49,6 @@ void scheduler_start()
     vga_text_okmsg();
 }
 
-process_t* toswitch = 0;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-void schedule(u32 gs, u32 fs, u32 es, u32 ds, u32 edi, u32 esi, u32 ebp, u32 esp, u32 ebx, u32 edx, u32 ecx, u32 eax, u32 eip, u32 cs, u32 flags, u32 esp_2, u32 ss)
-{
-    /* put back on queue processes that were waiting a certain ammount of time if time elapsed */
-    u32 il = 0;
-    list_entry_t* lp = p_wait_list;
-    for(il=0;il<p_wl_size;il++)
-    {
-        asleep_data_t* ad = lp->element;
-        if((ad->sleep_reason == SLEEP_TIME) | (ad->sleep_reason == SLEEP_WAIT_IRQ))
-        {if(ad->sleep_data_2 > 55) ad->sleep_data_2 = (u16)(ad->sleep_data_2-55); else if(ad->sleep_data_2 != 0) scheduler_wake_process(ad->process);}
-        lp = lp->next;
-    }
-
-    /* if there is no process to schedule, we return */
-    toswitch = queue_take(p_ready_queue);
-    if(!toswitch) return;
-
-    /* if we are currently running idle process, lets throw it away */
-    if(current_process == idle_process)
-    {
-        list_entry_t* list_pointer = p_wait_list;
-        list_entry_t* list_before = 0;
-        u32 i = 0;
-        for(i = 0; i < p_wl_size; i++)
-        {
-            list_before = list_pointer;
-            list_pointer = list_pointer->next;
-        }
-        if(!p_wl_size) p_wait_list = list_pointer =
-        #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list list entry");
-        #else
-        kmalloc(sizeof(list_entry_t));
-        #endif
-        else list_pointer =
-        #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(list_entry_t), "scheduler: p_wait_list list entry");
-        #else
-        kmalloc(sizeof(list_entry_t));
-        #endif
-        if(list_before) list_before->next = list_pointer;
-        asleep_data_t* pdata = 
-        #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(asleep_data_t), "scheduler: asleep_process_data");
-        #else
-        kmalloc(sizeof(asleep_data_t));
-        #endif
-        pdata->process = idle_process;
-        pdata->sleep_reason = SLEEP_PAUSED;
-        pdata->sleep_data = 0;
-        list_pointer->element = pdata;
-        p_wl_size++;
-    }
-    /* else save the context of current process and put it back in queue */
-    else if(current_process)
-    {
-        /* save context of current process */
-        
-        current_process->eip = eip; //saving eip
-        current_process->ebp = ebp; //saving ebp
-
-        //saving segment registers
-        current_process->sregs.cs  = cs;
-        current_process->sregs.gs = gs;
-        current_process->sregs.fs = fs;
-        current_process->sregs.es = es;
-        current_process->sregs.ds = ds;
-
-        //saving general registers (a,b,c,d,si,di)
-        current_process->gregs.eax = eax;
-        current_process->gregs.ebx = ebx;
-        current_process->gregs.ecx = ecx;
-        current_process->gregs.edx = edx;
-        current_process->gregs.esi = esi;
-        current_process->gregs.edi = edi;
-
-        //if system call, theses are not pushed on the stack
-        if (current_process->sregs.cs != 0x08) 
-        {
-            current_process->esp = esp_2;
-            current_process->sregs.ss = ss;
-        }
-        else
-        {
-            current_process->esp = esp+0xC;
-            //kesp saving : why ? why not ? both seems to work, i'm so confused (maybe saving it and adding 0xC create stack corruption)
-            //current_process->kesp = esp+0xC;
-        }
-
-        //current_process->flags = flags;
-
-        //queue it
-        queue_add(p_ready_queue, current_process);
-    }
-
-    //set current_process = toswitch process
-    current_process = toswitch;
-
-    /*restore context of toswitch process and return*/
-    //set TSS value
-    TSS.esp0 = current_process->kesp;
-
-    //page directory switch
-    pd_switch(current_process->page_directory);
-
-    //cleaning PIC interrupt
-    outb(0x20, 0x20);
-
-    //DEBUG
-    //kprintf("%lgoing to eip 0x%X cs 0x%X esp 0x%X %s\n", 3, current_process->eip, current_process->sregs.cs, current_process->esp, current_process == idle_process ? "(idle)" : "");
-    //kprintf("%leax 0x%X ebx 0x%X ecx 0x%X edx 0x%X edi 0x%X esi 0x%X ebp 0x%X\n", 3, current_process->gregs.eax, current_process->gregs.ebx, current_process->gregs.ecx, current_process->gregs.edx, current_process->gregs.edi, current_process->gregs.esi, current_process->ebp);
-
-    //restore segments register
-    __asm__ __volatile__("mov %0, %%ds \n \
-    mov %1, %%es \n \
-	mov %2, %%fs \n \
-    mov %3, %%gs \n"::"r"(current_process->sregs.ds), "r"(current_process->sregs.es), "r"(current_process->sregs.fs), "r"(current_process->sregs.gs));
-
-    //if we return to a system call, we directly restore the stack
-    if(current_process->sregs.cs == 0x08) 
-    {
-        __asm__ __volatile__ ("mov %0, %%esp"::"g"(current_process->esp):"%esp");
-    }
-    else
-    //if we return to normal execution, we let iret do the stack switch
-    {
-        __asm__ __volatile__("pushl %0\n \
-             pushl %1\n"::"g"(current_process->sregs.ss), "g"(current_process->esp));
-    }
-
-    //pushing flags, cs and eip (to be popped out by iret)
-    //note: we are not restoring flags for now, and resetting Hardware Interrupt flag on each schedule()...
-    __asm__ __volatile__("pushfl\n \
-         popl %%eax        \n \
-         orl $0x200, %%eax \n \
-         push %%eax        \n \
-         pushl %0 \n \
-         pushl %1 \n"::"g"(current_process->sregs.cs), "g"(current_process->eip):"%eax");
-
-    //restore general registers (esi, edi, ebp, eax, ebx, ecx, edx)
-    __asm__ __volatile__ ("mov %0, %%esi ; mov %1, %%edi ; mov %2, %%ebp"::"g"(current_process->gregs.esi), "g"(current_process->gregs.edi), "g"(current_process->ebp));
-    __asm__ __volatile__ ("iret"::"a"(current_process->gregs.eax), "b"(current_process->gregs.ebx), "c"(current_process->gregs.ecx), "d"(current_process->gregs.edx));
-    //black magic : the end of function is dead code
-    //that cause a corruption of 0xC bytes on the stack, that is handled in current_process saving
-}
-#pragma GCC diagnostic pop
-
 void scheduler_add_process(process_t* process)
 {
     //if(!current_process)
@@ -227,11 +77,11 @@ void scheduler_remove_process(process_t* process)
         current_process = 0;
         if(p_ready_queue->rear < p_ready_queue->front)
         {
-            //scheduler_add_process(idle_process);
-            scheduler_wake_process(idle_process);
+            scheduler_add_process(idle_process);
+            //scheduler_wake_process(idle_process);
         }
-        //asm("int $32"); //call clock int to schedule
-        schedule(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0, 0, 0);
+        asm("int $32"); //call clock int to schedule
+        //schedule(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0, 0, 0);
         rmv: return;
     }
     else queue_remove(p_ready_queue, process);

@@ -111,6 +111,8 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->gregs.esi = 0;
     tr->gregs.edi = 0;
     tr->ebp = 0;
+    
+    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
 
     //set default segment registers
     tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
@@ -272,6 +274,7 @@ process_t* init_idle_process()
     #else
     kmalloc(sizeof(process_t));
     #endif
+    idle_process->flags = 0; asm("pushf; pop %%eax":"=a"(idle_process->flags):);
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
     idle_process->sregs.ds = idle_process->sregs.es = idle_process->sregs.fs = idle_process->sregs.gs = idle_process->sregs.ss = 0x10;
