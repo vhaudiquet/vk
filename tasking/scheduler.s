@@ -22,11 +22,15 @@
 .extern queue_take
 .extern idle_process
 .extern current_page_directory
+.extern scheduler_sleep_update
 
 .global schedule
 schedule:
     /* save interrupt context */
     pushal
+
+    /* call sleep update to update time of sleeping processes */
+    call scheduler_sleep_update
 
     /* call queue_take to get the next processus (in eax) */
     pushl p_ready_queue

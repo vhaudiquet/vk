@@ -26,6 +26,10 @@
 error_t elf_check(fd_t* file);
 void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
 
+#define PROCESS_STATUS_INIT 0
+#define PROCESS_STATUS_RUNNING 1
+#define PROCESS_STATUS_ASLEEP 2
+
 //Process
 typedef struct PROCESS
 {
@@ -57,6 +61,7 @@ typedef struct PROCESS
     u32 files_count;
     //pid
     u32 pid;
+    u32 status;
 } __attribute__((packed)) process_t;
 
 void process_init();
@@ -91,7 +96,7 @@ void scheduler_remove_process(process_t* process);
 #define SLEEP_WAIT_MUTEX 4
 
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 sleep_data_2);
-void scheduler_wake_process(process_t* process);
+void scheduler_sleep_update();
 void scheduler_irq_wakeup(u32 irq);
 
 #endif

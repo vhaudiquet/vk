@@ -45,6 +45,7 @@ static void handle_page_fault(struct regs_int* r);
 
 void fault_handler(struct regs_int * r)
 {
+	kprintf("%lEIP = 0x%X\n", 3, r->eip);
     switch(r->int_no)
 	{
 		case 0: handle_user_fault(r); break;
@@ -61,7 +62,6 @@ void fault_handler(struct regs_int * r)
 
 static void handle_user_fault(struct regs_int* r)
 {
-	kprintf("%lEIP = 0x%X\n", 3, r->eip);
 	kprintf("%lERROR_CODE = 0x%X\n", 3, r->err_code);
 	kprintf("%lesp = 0x%X ; cs = 0x%X\n", 3, r->esp, r->cs);
 	kprintf("%lgs = 0x%X ; fs = 0x%X ; es = 0x%X ; ds = 0x%X\n", 3, r->gs, r->fs, r->es, r->ds);

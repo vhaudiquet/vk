@@ -160,6 +160,8 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 
     tr->base_kstack = (u32) kstack;
 
+    tr->status = PROCESS_STATUS_INIT;
+
     //register process in process list
     u32 j = 0;
     for(;j<processes_size;j++)
@@ -274,6 +276,7 @@ process_t* init_idle_process()
     #else
     kmalloc(sizeof(process_t));
     #endif
+    idle_process->status = PROCESS_STATUS_INIT;
     idle_process->flags = 0; asm("pushf; pop %%eax":"=a"(idle_process->flags):);
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
@@ -300,6 +303,7 @@ process_t* init_kernel_process()
     kmalloc(sizeof(process_t));
     #endif
     kernel_process->page_directory = kernel_page_directory;
+    kernel_process->status = PROCESS_STATUS_RUNNING;
 
     current_process = kernel_process;
 

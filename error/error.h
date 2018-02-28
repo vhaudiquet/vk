@@ -47,3 +47,6 @@ typedef u32 error_t;
 #define ERROR_IS_64_BITS 22 //the elf file needs a 64 bits architecture
 #define ERROR_IS_NOT_EXECUTABLE 23 //the elf file is not an executable (library, ...)
 #define ERROR_WRONG_INSTRUCTION_SET 24 //the elf file is not using good instruction set
+//sync errors
+#define ERROR_MUTEX_ALREADY_LOCKED 31 //trying to lock a mutex already locked
+#define ERROR_MUTEX_OWNED_BY_OTHER 32 //trying to unlock a mutex that you don't own
