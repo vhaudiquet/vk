@@ -25,6 +25,7 @@
 .extern scheduler_sleep_update
 
 .global schedule
+.global schedule_switch
 schedule:
     /* save interrupt context */
     pushal

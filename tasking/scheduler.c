@@ -76,15 +76,20 @@ void scheduler_remove_process(process_t* process)
         current_process->sregs.cs = 0x08;
         current_process->eip = (u32) &&rmv;
 
+        //add idle if there are no processes on queu so that the kernel switch to it (except of crashing)
         if(p_ready_queue->rear < p_ready_queue->front)
         {
             scheduler_add_process(idle_process);
         }
         
         __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->esp)::); //save esp at last moment
-        current_process = 0; //remove current process so that it doesnt get re-saved and put back on queue
-        
-        asm("int $32"); //call clock int to schedule
+
+        /* we directly jump to the part of schedule function that switch processes */
+        __asm__ __volatile__("pushl p_ready_queue \n \
+        call  queue_take \n \
+        add $0x4, %esp \n \
+        jmp schedule_switch");
+
         rmv: return;
     }
     else queue_remove(p_ready_queue, process);
