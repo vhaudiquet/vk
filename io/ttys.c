@@ -29,40 +29,38 @@ tty_t* tty3 = 0;
 
 tty_t* current_tty = 0;
 
-void tty_init()
+void ttys_init()
 {
     kprintf("Initializing ttys...");
 
-    tty1 = kmalloc(sizeof(tty_t)); tty1->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    tty1->count = 0; tty1->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
-    tty1->keyboard_stream = iostream_alloc();
-    tty_write((u8*) "VK 0.0-indev (tty1)\n", 20, tty1);
-    devfs_register_device(devfs->root_dir, "tty1", tty1, DEVFS_TYPE_TTY, 0);
-    fd_t* tty1f = open_file("/dev/tty1", OPEN_MODE_RP);
-    if(!tty1f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 1 (file can't be opened)", "TTY_INIT");}
-    tty1->pointer = tty1f;
+    tty1 = tty_init("tty1");
+    if(!tty1) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 1", "TTYS_INIT");}
 
-    tty2 = kmalloc(sizeof(tty_t)); tty2->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    tty2->count = 0; tty2->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
-    tty2->keyboard_stream = iostream_alloc();
-    tty_write((u8*) "VK 0.0-indev (tty2)\n", 20, tty2);
-    devfs_register_device(devfs->root_dir, "tty2", tty2, DEVFS_TYPE_TTY, 0);
-    fd_t* tty2f = open_file("/dev/tty2", OPEN_MODE_RP);
-    if(!tty2f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 2 (file can't be opened)", "TTY_INIT");}
-    tty2->pointer = tty2f;
+    tty2 = tty_init("tty2");
+    if(!tty2) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 2", "TTYS_INIT");}
 
-    tty3 = kmalloc(sizeof(tty_t)); tty3->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
-    tty3->count = 0; tty3->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
-    tty3->keyboard_stream = iostream_alloc();
-    tty_write((u8*) "VK 0.0-indev (tty3)\n", 20, tty3);
-    devfs_register_device(devfs->root_dir, "tty3", tty3, DEVFS_TYPE_TTY, 0);
-    fd_t* tty3f = open_file("/dev/tty3", OPEN_MODE_RP);
-    if(!tty3f) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 3 (file can't be opened)", "TTY_INIT");}
-    tty3->pointer = tty3f;
+    tty3 = tty_init("tty3");
+    if(!tty3) {vga_text_failmsg(); fatal_kernel_error("Failed to initialize TTY 3", "TTYS_INIT");}
 
     current_tty = tty1;
 
     vga_text_okmsg();
+}
+
+tty_t* tty_init(char* name)
+{
+    tty_t* tr = kmalloc(sizeof(tty_t));
+    tr->buffer = kmalloc(TTY_DEFAULT_BUFFER_SIZE);
+    tr->count = 0; 
+    tr->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
+    tr->keyboard_stream = iostream_alloc();
+    tty_write((u8*) "VK 0.0-indev (", 14, tr);
+    tty_write((u8*) name, strlen(name), tr);
+    tty_write((u8*) ")\n", 2, tr);
+    fsnode_t* trf = devfs_register_device(devfs->root_dir, name, tr, DEVFS_TYPE_TTY, 0);
+    if(!trf) {kfree(tr->buffer); iostream_free(tr->keyboard_stream); kfree(tr); return 0;}
+    tr->pointer = trf;
+    return tr;
 }
 
 /*

@@ -130,9 +130,10 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->files = kmalloc(tr->files_size*sizeof(fd_t));
 
     //init stdin, stdout, stderr
-    tr->files[0] = tty->pointer; //stdin
-    tr->files[1] = tty->pointer; //stdout
-    tr->files[2] = tty->pointer; //stderr
+    fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
+    tr->files[0] = std; //stdin
+    tr->files[1] = std; //stdout
+    tr->files[2] = std; //stderr
     tr->files_count = 3;
 
     //set process heap

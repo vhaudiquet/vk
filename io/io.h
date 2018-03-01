@@ -25,13 +25,14 @@ typedef struct TTY
     u32 count;
     u32 buffer_size;
     io_stream_t* keyboard_stream;
-    fd_t* pointer;
+    fsnode_t* pointer;
 } tty_t;
 
 extern tty_t* current_tty;
 extern tty_t* tty1; extern tty_t* tty2; extern tty_t* tty3;
 
-void tty_init();
+void ttys_init();
+tty_t* tty_init(char* name);
 u8 tty_write(u8* buffer, u32 count, tty_t* tty);
 u8 tty_getch(tty_t* tty);
 void tty_switch(tty_t* tty);

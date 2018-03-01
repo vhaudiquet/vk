@@ -155,7 +155,7 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     devfs_init();
 
     //initializing ttys
-    tty_init();
+    ttys_init();
 
     //reading /sys/init
     fd_t* init_file = open_file("/sys/init", OPEN_MODE_R);
