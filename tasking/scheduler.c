@@ -24,7 +24,7 @@ bool scheduler_started = false;
 process_t* current_process = 0;
 queue_t* p_ready_queue = 0;
 list_entry_t* irq_list[21] = {0};
-list_entry_t* wait_list = 0;
+dlist_entry_t* wait_list = 0;
 //mutex_t wait_mutex = 0;
 
 /*
@@ -103,10 +103,11 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
     //if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "SCHEDULER_WAIT_PROCESS");
 
     /* if we need to sleep a certain ammount of time */
+    dlist_entry_t* wait_entry = 0;
     if(wait_time && ((sleep_reason == SLEEP_WAIT_IRQ) | (sleep_reason == SLEEP_TIME)))
     {
-        list_entry_t* ptr = wait_list;
-        list_entry_t* last = 0;
+        dlist_entry_t* ptr = wait_list;
+        dlist_entry_t* last = 0;
         u32 cumulated_time = wait_time;
 
         /* we have to calculate the right place of this process in the list by calculating cumulated time */
@@ -124,16 +125,17 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         }
 
         //found a place in the list, allocate entry and put it
-        list_entry_t* entry = kmalloc(sizeof(list_entry_t));
-        if(!last) {wait_list = entry; ptr = 0;}
-        else {last->next = entry;}
-        entry->next = ptr;
+        wait_entry = kmalloc(sizeof(dlist_entry_t));
+        if(!last) {wait_list = wait_entry; ptr = 0;}
+        else {last->next = wait_entry;}
+        wait_entry->next = ptr;
+        wait_entry->prev = last;
 
         //allocate space for time/process and put it into the entry
         uintptr_t* element = kmalloc(sizeof(uintptr_t)*2);
         element[0] = (uintptr_t) process;
         element[1] = wait_time;
-        entry->element = element;
+        wait_entry->element = element;
     }
 
     /* if we need to wait for an irq */
@@ -146,7 +148,10 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         //we allocate space and set entry data (our process)
         (*ptr) = kmalloc(sizeof(list_entry_t));
         (*ptr)->next = 0;
-        (*ptr)->element = process;
+        u32* element = kmalloc(sizeof(u32)*2);
+        element[0] = (uintptr_t) process;
+        element[1] = (uintptr_t) wait_entry;
+        (*ptr)->element = element;
     }
 
     //mutex_unlock(wait_mutex);
@@ -162,7 +167,7 @@ void scheduler_sleep_update()
     if(!wait_list) return;
     //if(mutex_lock(wait_mutex) != ERROR_NONE) return;
 
-    list_entry_t* ptr = wait_list;
+    dlist_entry_t* ptr = wait_list;
     u32* element = ptr->element;
     //remove 55 ms to the top element (schedule is executed ~ every 55 ms)
     if(element[1] > 55) element[1] -= 55;
@@ -174,7 +179,7 @@ void scheduler_sleep_update()
         {
             scheduler_add_process((process_t*) element[0]);
 
-            list_entry_t* to_free = ptr;
+            dlist_entry_t* to_free = ptr;
             ptr = ptr->next;
             wait_list = ptr;
             kfree(to_free);
@@ -191,20 +196,41 @@ void scheduler_sleep_update()
 
 /*
 * Wake up every process that needed to be on irq x (called by every irq)
+* TODO : better algo (use double ptrs)
 */
 void scheduler_irq_wakeup(u32 irq)
 {
     if(!irq_list[irq]) return;
 
     /* we need to remove/free every element of the list and add every process to the scheduler */
-    scheduler_add_process((process_t*) irq_list[irq]->element);
+    u32* element = irq_list[irq]->element;
+
+    if(element[1])
+    {
+        dlist_entry_t* wlist_entry = (dlist_entry_t*) element[1];
+        if(wlist_entry == wait_list) wait_list = wlist_entry->next;
+        if(wlist_entry->prev) wlist_entry->prev->next = wlist_entry->next;
+        if(wlist_entry->next) wlist_entry->next->prev = wlist_entry->prev;
+        kfree(wlist_entry->element); kfree(wlist_entry);
+    }
+    scheduler_add_process((process_t*) element[0]);
     list_entry_t* ptr = irq_list[irq]->next;
-    kfree(irq_list[irq]); irq_list[irq] = 0;
+    kfree(irq_list[irq]->element); kfree(irq_list[irq]); irq_list[irq] = 0;
     while(ptr)
     {
-        scheduler_add_process((process_t*) ptr->element);
+        element = ptr->element;
+        if(element[1])
+        {
+            dlist_entry_t* wlist_entry = (dlist_entry_t*) element[1];
+            if(wlist_entry == wait_list) wait_list = wlist_entry->next;
+            else if(wlist_entry->prev) wlist_entry->prev->next = wlist_entry->next;
+            if(wlist_entry->next) wlist_entry->next->prev = wlist_entry->prev;
+            kfree(wlist_entry->element); kfree(wlist_entry);
+        }
+        scheduler_add_process((process_t*) element[0]);
         list_entry_t* to_free = ptr;
         ptr = ptr->next;
+        kfree(to_free->element);
         kfree(to_free);
     }
 }

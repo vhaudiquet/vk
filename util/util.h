@@ -74,6 +74,13 @@ typedef struct list_entry
 void list_free(list_entry_t* list, u32 list_size);
 void list_free_eonly(list_entry_t* list, u32 list_size);
 
+typedef struct dlist_entry
+{
+    void* element;
+    struct dlist_entry* next;
+    struct dlist_entry* prev;
+} dlist_entry_t;
+
 //QUEUES
 typedef struct QUEUE
 {
