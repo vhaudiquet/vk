@@ -33,7 +33,6 @@ dlist_entry_t* wait_list = 0;
 void scheduler_init()
 {
     p_ready_queue = queue_init(10);
-    //kmalloc(4);
     //wait_mutex = mutex_alloc(); *wait_mutex = 0;
 }
 
@@ -70,10 +69,21 @@ void scheduler_remove_process(process_t* process)
         //once he returns active, the context must be the end of this void
         //so we can just save the current context with eip = end of scheduler_remove_process
         //and we are good
+
+        //following convention, functions can trash eax/ebx/ecx/edx, so we dont care about theses
         current_process->gregs.eax = current_process->gregs.ebx = current_process->gregs.ecx = current_process->gregs.edx = 0;
-        current_process->gregs.edi = current_process->gregs.esi = current_process->ebp = 0;
-        current_process->sregs.ds = current_process->sregs.es = current_process->sregs.fs = current_process->sregs.gs = current_process->sregs.ss = 0x10;
+        //we need to save esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
+        __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->gregs.edi));
+        __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->gregs.esi));
+        __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->ebp));
+        //save segment registers
+        __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->sregs.ds), "=m"(current_process->sregs.es), "=m"(current_process->sregs.fs), "=m"(current_process->sregs.gs));
+        
+        //cs/ss values are obvious cause we are in kernel context
+        current_process->sregs.ss = 0x10;
         current_process->sregs.cs = 0x08;
+
+        //set eip to the end of this void
         current_process->eip = (u32) &&rmv;
 
         //add idle if there are no processes on queu so that the kernel switch to it (except of crashing)
