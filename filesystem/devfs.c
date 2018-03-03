@@ -116,8 +116,9 @@ error_t devfs_read_file(fd_t* fd, void* buffer, u64 count)
     else if(spe->device_type == DEVFS_TYPE_TTY)
     {
         tty_t* tty = spe->device_struct;
-        *((u8*) buffer) = tty_getch(tty);
-        return ERROR_NONE;
+        //*((u8*) buffer) = tty_getch(tty);
+        return tty_read(buffer, (u32) count, tty);
+        //return ERROR_NONE;
     }
 
     return ERROR_FILE_FS_INTERNAL;
