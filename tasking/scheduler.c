@@ -38,7 +38,7 @@ queue_t* p_ready_queue = 0;
 
 void scheduler_init()
 {
-    p_ready_queue = queue_init(10);
+    p_ready_queue = queue_init();
 }
 
 void scheduler_start()
