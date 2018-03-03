@@ -136,13 +136,15 @@ void stack_remove(stack_t* stack, void* element)
 //LISTS
 void list_free(list_entry_t* list, u32 list_size)
 {
+    if(!list_size) if(list) kfree(list);
     u32 i = 0;
     for(i = 0;i < list_size;i++)
     {
-        kfree(list->element);
+        if(list->element) kfree(list->element);
         void* buf = list;
         list = list->next;
         kfree(buf);
+        if(!list) break;
     }
 }
 

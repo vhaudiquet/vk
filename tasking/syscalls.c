@@ -219,5 +219,42 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov $0, %eax");
             break;
         }
+        //34:Syscall READDIR
+        case 34:
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            u8* buffer = (u8*) edx;
+
+            list_entry_t* list = kmalloc(sizeof(list_entry_t));
+            u32 size = 0;
+            error_t tr = read_directory(current_process->files[ebx], list, &size);
+            if((tr != ERROR_NONE) | (ecx >= size))
+            {
+                if(tr == ERROR_NONE) tr = ERROR_FILE_OUT;
+                list_free(list, size);
+                asm("mov %0, %%eax"::"g"(tr));
+                return;
+            }
+
+            list_entry_t* ptr = list;
+            u32 i = 0;
+            for(i = 0; i < ecx; i++)
+            {
+                ptr = ptr->next;
+            }
+            dirent_t* dirent = ptr->element;
+
+            /* assuming POSIX dirent with char name[256] */
+            *((u32*) buffer) = dirent->inode;
+            u32 minsize = dirent->name_len < 255 ? dirent->name_len : 255;
+            memcpy(buffer+sizeof(u32), dirent->name, minsize);
+            *(buffer+sizeof(u32)+minsize) = 0;
+
+            list_free(list, size);
+
+            asm("mov $0, %eax");
+            break;
+        }
     }
 }

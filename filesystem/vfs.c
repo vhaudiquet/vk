@@ -262,20 +262,28 @@ error_t list_directory(char* path, list_entry_t* dest, u32* size)
 {
     fd_t* dir = open_file(path, OPEN_MODE_R);
     if(!dir) return ERROR_FILE_NOT_FOUND;
-    if(!(dir->file->attributes & FILE_ATTR_DIR)) {close_file(dir); return ERROR_FILE_IS_NOT_DIRECTORY;}
-
-    (*size) = 0;
-
-    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
-    switch(dir->file->file_system->fs_type)
-    {
-        case FS_TYPE_FAT32: tr = fat32_list_dir(dest, dir->file, size); break;
-        case FS_TYPE_EXT2: tr = ext2_list_dir(dest, dir->file, size); break;
-        case FS_TYPE_ISO9660: tr = iso9660_list_dir(dest, dir->file, size); break;
-        case FS_TYPE_DEVFS: tr = devfs_list_dir(dest, dir->file, size); break;
-    }
+    
+    error_t tr = read_directory(dir, dest, size);
     
     close_file(dir);
+    return tr;
+}
+
+error_t read_directory(fd_t* directory, list_entry_t* dest, u32* size)
+{
+    (*size) = 0;
+    
+    if(!(directory->file->attributes & FILE_ATTR_DIR)) return ERROR_FILE_IS_NOT_DIRECTORY;
+
+    error_t tr = ERROR_FILE_UNSUPPORTED_FILE_SYSTEM;
+    switch(directory->file->file_system->fs_type)
+    {
+        case FS_TYPE_FAT32: tr = fat32_list_dir(dest, directory->file, size); break;
+        case FS_TYPE_EXT2: tr = ext2_list_dir(dest, directory->file, size); break;
+        case FS_TYPE_ISO9660: tr = iso9660_list_dir(dest, directory->file, size); break;
+        case FS_TYPE_DEVFS: tr = devfs_list_dir(dest, directory->file, size); break;
+    }
+
     return tr;
 }
 
