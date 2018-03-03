@@ -25,7 +25,7 @@ process_t* current_process = 0;
 queue_t* p_ready_queue = 0;
 list_entry_t* irq_list[21] = {0};
 dlist_entry_t* wait_list = 0;
-//mutex_t wait_mutex = 0;
+mutex_t wait_mutex = 0;
 
 /*
 * Initializes the data structures needed by the scheduler
@@ -33,7 +33,7 @@ dlist_entry_t* wait_list = 0;
 void scheduler_init()
 {
     p_ready_queue = queue_init(10);
-    //wait_mutex = mutex_alloc(); *wait_mutex = 0;
+    wait_mutex = mutex_alloc(); *wait_mutex = 0;
 }
 
 /*
@@ -110,7 +110,7 @@ void scheduler_remove_process(process_t* process)
 */
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 wait_time)
 {
-    //if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "SCHEDULER_WAIT_PROCESS");
+    if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "SCHEDULER_WAIT_PROCESS");
 
     /* if we need to sleep a certain ammount of time */
     dlist_entry_t* wait_entry = 0;
@@ -164,7 +164,7 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         (*ptr)->element = element;
     }
 
-    //mutex_unlock(wait_mutex);
+    mutex_unlock(wait_mutex);
     scheduler_remove_process(process);
 }
 
@@ -175,7 +175,7 @@ void scheduler_sleep_update()
 {
     //check if there are processes on the list
     if(!wait_list) return;
-    //if(mutex_lock(wait_mutex) != ERROR_NONE) return;
+    if(mutex_lock(wait_mutex) != ERROR_NONE) return;
 
     dlist_entry_t* ptr = wait_list;
     u32* element = ptr->element;
@@ -201,7 +201,7 @@ void scheduler_sleep_update()
         while(!element[1]); //while the elements have a value of 0, we add them on queue
     }
 
-    //mutex_unlock(wait_mutex);
+    mutex_unlock(wait_mutex);
 }
 
 /*

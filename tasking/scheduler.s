@@ -125,7 +125,7 @@ schedule:
     restore_end:
     /* restore interrupt stack (for iret) */
     orl $0x200, 0x3C(%eax) # set interrupt flag if it wasnt
-    andl $0xffffbfff, 0x3C(%eax) # clear nested task flag if it was set
+    andl $0xffffbeff, 0x3C(%eax) # clear nested task and trap flags if they were set
     push 0x3C(%eax) # push flags
     push 0x2C(%eax) # push cs
     push 0x30(%eax) # push eip

@@ -49,6 +49,20 @@ void fault_handler(struct regs_int * r)
     switch(r->int_no)
 	{
 		case 0: handle_user_fault(r); break;
+		case 1:
+		{
+			u32 dr0 = 0; asm("movl %%dr0, %%eax":"=a"(dr0));
+			u32 dr1 = 0; asm("movl %%dr1, %%eax":"=a"(dr1));
+			u32 dr2 = 0; asm("movl %%dr2, %%eax":"=a"(dr2));
+			u32 dr3 = 0; asm("movl %%dr3, %%eax":"=a"(dr3));
+			kprintf("breakpoints : 0x%X 0x%X 0x%X 0x%X\n", dr0, dr1, dr2, dr3);
+			u32 dr6 = 0; asm("movl %%dr6, %%eax":"=a"(dr6));
+			u32 dr7 = 0; asm("movl %%dr7, %%eax":"=a"(dr7));
+			kprintf("dr6 = 0x%X ; dr7 = 0x%X\n", dr6, dr7);
+			kprintf("tss trap = 0x%X\n", TSS.trap);
+			_fatal_kernel_error("Debug", "Unkown", "Unknown", 0);
+			break;
+		}
 		case 5: handle_user_fault(r); break;
 		case 6: handle_user_fault(r); break;
 		case 11: handle_user_fault(r); break;
