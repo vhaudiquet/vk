@@ -213,7 +213,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
             fsnode_t* file = current_process->files[ebx]->file;
 
-            if((file == tty1->pointer->file) | (file == tty2->pointer->file) | (file == tty3->pointer->file)) 
+            if((file == tty1->pointer) | (file == tty2->pointer) | (file == tty3->pointer)) 
             {asm("mov $1, %eax"); return;}
             
             asm("mov $0, %eax");

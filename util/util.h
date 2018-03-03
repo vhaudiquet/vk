@@ -89,9 +89,23 @@ typedef struct QUEUE
     u32 size;
 } queue_t;
 
-queue_t* queue_init(u32 size);
+queue_t* queue_init();
 void queue_add(queue_t* queue, void* element);
 void* queue_take(queue_t* queue);
 void queue_remove(queue_t* queue, void* element);
+
+//STACKS
+typedef struct STACK
+{
+    void** buffer;
+    u32 count;
+    u32 buffer_size;
+} stack_t;
+
+stack_t* stack_init();
+void stack_add(stack_t* stack, void* element);
+void* stack_take(stack_t* stack);
+void* stack_look(stack_t* stack, u32 position);
+void stack_remove(stack_t* stack, void* element);
 
 #endif

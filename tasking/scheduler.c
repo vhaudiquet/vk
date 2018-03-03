@@ -32,7 +32,7 @@ mutex_t wait_mutex = 0;
 */
 void scheduler_init()
 {
-    p_ready_queue = queue_init(10);
+    p_ready_queue = queue_init();
     wait_mutex = mutex_alloc(); *wait_mutex = 0;
 }
 
