@@ -44,9 +44,17 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(current_process->files_count == current_process->files_size)
             {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));}
 
-            current_process->files[current_process->files_count] = file;
+            u32 i = 0;
+            for(i = 3;i<current_process->files_size;i++)
+            {
+                if(!current_process->files[i])
+                {
+                    current_process->files[i] = file;
+                    break;
+                }
+            }
             current_process->files_count++;
-            asm("mov %0, %%eax"::"g"(current_process->files_count-1));
+            asm("mov %0, %%eax"::"g"(i));
             break;
         }
         //2:Syscall CLOSE
@@ -55,8 +63,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(current_process->files_count >= ebx && current_process->files[ebx])
             {
                 close_file(current_process->files[ebx]);
+                current_process->files[ebx] = 0;
                 current_process->files_count--;
-                memcpy((void*) ((uintptr_t)current_process->files)+ebx*sizeof(uintptr_t), (void*) ((uintptr_t)current_process->files)+(ebx+1)*sizeof(uintptr_t), current_process->files_count-ebx);
             }
             break;
         }
