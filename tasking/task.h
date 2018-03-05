@@ -62,6 +62,7 @@ typedef struct PROCESS
     //pid
     u32 pid;
     u32 status;
+    list_entry_t* children;
 } __attribute__((packed)) process_t;
 
 void process_init();

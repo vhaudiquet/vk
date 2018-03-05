@@ -177,11 +177,23 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
         processes[j+1] = tr; tr->pid = (j+1);
     }
 
+    if(current_process && current_process != kernel_process)
+    {
+        list_entry_t** child = &current_process->children;
+        while(*(child)) if((*child)->next) child = &(*child)->next;
+        (*child) = kmalloc(sizeof(list_entry_t));
+        (*child)->element = current_process;
+        (*child)->next = 0;
+    }
+
     return tr;
 }
 
 void exit_process(process_t* process)
 {
+    //remove process from schedulers
+    scheduler_remove_process(process);
+
     //mark physical memory reserved for process stack as free
     u32 stack_phys = get_physical(process->base_stack, process->page_directory);
     free_block(stack_phys);
@@ -204,8 +216,8 @@ void exit_process(process_t* process)
     //free process's page directory
     pt_free(process->page_directory);
 
-    //remove process from schedulers
-    scheduler_remove_process(process);
+    //free process children list
+    list_free_eonly(process->children, U32_MAX);
 
     //remove process from array
     processes[process->pid] = 0;
@@ -258,6 +270,15 @@ process_t* fork(process_t* process)
         processes_size*=2;
         processes = krealloc(processes, processes_size);
         processes[j+1] = tr; tr->pid = (j+1);
+    }
+
+    if(current_process && current_process != kernel_process)
+    {
+        list_entry_t** child = &current_process->children;
+        while(*(child)) if((*child)->next) child = &(*child)->next;
+        (*child) = kmalloc(sizeof(list_entry_t));
+        (*child)->element = current_process;
+        (*child)->next = 0;
     }
 
     return tr;

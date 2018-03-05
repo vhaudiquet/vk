@@ -156,5 +156,6 @@ void list_free_eonly(list_entry_t* list, u32 list_size)
         void* buf = list;
         list = list->next;
         kfree(buf);
+        if(!list) break;
     }
 }
