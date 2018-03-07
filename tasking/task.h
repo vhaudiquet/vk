@@ -60,7 +60,7 @@ typedef struct PROCESS
     u32 files_size;
     u32 files_count;
     //pid
-    u32 pid;
+    int pid;
     u32 status;
     list_entry_t* children;
 } __attribute__((packed)) process_t;

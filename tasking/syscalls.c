@@ -185,7 +185,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             new->eip = (u32) &&fork_ret;
             scheduler_add_process(new);
 
-            fork_ret:break;
+            break;
+            fork_ret: {asm("mov $0, %%eax"::); break;}
         }
         //17:Syscall SBRK
         case 17:
@@ -200,18 +201,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"g"(current_process->pid));
             break;
         }
-        //19:Syscall KILL
+        //19:Syscall SIG
         case 19:
-        {
-            break;
-        }
-        //21:Syscall MOUNT
-        case 21:
-        {
-            break;
-        }
-        //22:Syscall UMOUNT
-        case 22:
         {
             break;
         }

@@ -164,8 +164,8 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->status = PROCESS_STATUS_INIT;
 
     //register process in process list
-    u32 j = 0;
-    for(;j<processes_size;j++)
+    int j = 0;
+    for(;j<(int) processes_size;j++)
     {
         if(!processes[j]) {processes[j] = tr; tr->pid = j;}
     }
@@ -177,6 +177,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
         processes[j+1] = tr; tr->pid = (j+1);
     }
 
+    //register as children of current process
     if(current_process && current_process != kernel_process)
     {
         list_entry_t** child = &current_process->children;
@@ -259,8 +260,8 @@ process_t* fork(process_t* process)
     }
 
     //get own pid / register in the process list
-    u32 j = 0;
-    for(;j<processes_size;j++)
+    int j = 0;
+    for(;j<(int) processes_size;j++)
     {
         if(!processes[j]) {processes[j] = tr; tr->pid = j;}
     }
@@ -272,6 +273,7 @@ process_t* fork(process_t* process)
         processes[j+1] = tr; tr->pid = (j+1);
     }
 
+    //register as children of current process
     if(current_process && current_process != kernel_process)
     {
         list_entry_t** child = &current_process->children;
@@ -299,6 +301,7 @@ process_t* init_idle_process()
     kmalloc(sizeof(process_t));
     #endif
     idle_process->status = PROCESS_STATUS_INIT;
+    idle_process->pid = -2;
     idle_process->flags = 0; asm("pushf; pop %%eax":"=a"(idle_process->flags):);
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
@@ -324,6 +327,7 @@ process_t* init_kernel_process()
     #else
     kmalloc(sizeof(process_t));
     #endif
+    kernel_process->pid = -1;
     kernel_process->page_directory = kernel_page_directory;
     kernel_process->status = PROCESS_STATUS_RUNNING;
 
