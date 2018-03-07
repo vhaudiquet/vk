@@ -70,9 +70,10 @@ void scheduler_remove_process(process_t* process)
         //so we can just save the current context with eip = end of scheduler_remove_process
         //and we are good
 
-        //following convention, functions can trash eax/ebx/ecx/edx, so we dont care about theses
-        current_process->gregs.eax = current_process->gregs.ebx = current_process->gregs.ecx = current_process->gregs.edx = 0;
-        //we need to save esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
+        //following convention, functions can trash eax/ecx/edx, so we dont care about theses
+        current_process->gregs.eax = current_process->gregs.ecx = current_process->gregs.edx = 0;
+        //we need to save ebx/esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
+        __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->gregs.ebx));
         __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->gregs.edi));
         __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->gregs.esi));
         __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->ebp));
@@ -213,6 +214,7 @@ void scheduler_irq_wakeup(u32 irq)
     if(!irq_list[irq]) return;
 
     /* we need to remove/free every element of the list and add every process to the scheduler */
+    mutex_lock(wait_mutex);
     u32* element = irq_list[irq]->element;
 
     if(element[1])
@@ -243,4 +245,6 @@ void scheduler_irq_wakeup(u32 irq)
         kfree(to_free->element);
         kfree(to_free);
     }
+
+    mutex_unlock(wait_mutex);
 }
