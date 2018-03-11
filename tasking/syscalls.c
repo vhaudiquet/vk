@@ -71,8 +71,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //3:Syscall READ
         case 3:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             
             error_t tr = read_file(current_process->files[ebx], (void*) ecx, edx);
             asm("mov %0, %%eax"::"g"(tr));
@@ -81,8 +81,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //4:Syscall WRITE
         case 4:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
             asm("mov %0, %%eax"::"g"(tr));
             break;
@@ -90,8 +90,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //5:Syscall RENAME
         case 5:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             char* oldpath = (char*) ebx;
             char* newname = (char*) ecx;
 
@@ -102,8 +102,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //6:Syscall LINK
         case 6:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
-            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             char* oldpath = (char*) ebx;
             char* newpath = (char*) ecx;
 
@@ -114,7 +114,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //7:Syscall UNLINK
         case 7:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $1, %eax"); return;}
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             char* path = (char*) ebx;
 
             error_t tr = unlink(path);
@@ -205,14 +205,14 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         case 19:
         {
             int pid = (int) ebx;
-            if((pid <= 0) | (pid > (int) processes_size)) {asm("mov $1, %eax"); break;}
-            if(!processes[pid]) {asm("mov $1, %eax"); break;}
+            if((pid <= 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_PID)); break;}
+            if(!processes[pid]) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_PID)); break;}
 
             int sig = (int) ecx;
-            if((sig <= 0) | (sig >= SIG_COUNT)) {asm("mov $1, %eax"); break;}
+            if((sig <= 0) | (sig >= SIG_COUNT)) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_SIGNAL)); break;}
 
             send_signal(pid, sig);
-            asm("mov $0, %eax");
+            asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
         //23:Syscall ISATTY
@@ -261,7 +261,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
 
             list_free(list, size);
 
-            asm("mov $0, %eax");
+            asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
     }
