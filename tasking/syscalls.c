@@ -204,6 +204,15 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //19:Syscall SIG
         case 19:
         {
+            int pid = (int) ebx;
+            if((pid <= 0) | (pid > (int) processes_size)) {asm("mov $1, %eax"); break;}
+            if(!processes[pid]) {asm("mov $1, %eax"); break;}
+
+            int sig = (int) ecx;
+            if((sig <= 0) | (sig >= SIG_COUNT)) {asm("mov $1, %eax"); break;}
+
+            send_signal(pid, sig);
+            asm("mov $0, %eax");
             break;
         }
         //23:Syscall ISATTY

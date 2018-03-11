@@ -62,7 +62,6 @@ void scheduler_add_process(process_t* process)
 */
 void scheduler_remove_process(process_t* process)
 {
-    process->status = PROCESS_STATUS_ASLEEP;
     if(current_process == process)
     {
         //this method was called by this process to pause himself
@@ -108,6 +107,7 @@ void scheduler_remove_process(process_t* process)
 
 /*
 * Put a process to sleep, either for an ammount of time or to wait an IRQ
+* valid 'sleep_reason' are : SLEEP_WAIT_IRQ, SLEEP_TIME
 */
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 wait_time)
 {
@@ -147,6 +147,9 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         element[0] = (uintptr_t) process;
         element[1] = wait_time;
         wait_entry->element = element;
+
+        //set process status
+        process->status = PROCESS_STATUS_ASLEEP_TIME;
     }
 
     /* if we need to wait for an irq */
@@ -163,6 +166,9 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         element[0] = (uintptr_t) process;
         element[1] = (uintptr_t) wait_entry;
         (*ptr)->element = element;
+
+        //set process status
+        process->status = PROCESS_STATUS_ASLEEP_IRQ;
     }
 
     mutex_unlock(wait_mutex);
@@ -214,7 +220,8 @@ void scheduler_irq_wakeup(u32 irq)
     if(!irq_list[irq]) return;
 
     /* we need to remove/free every element of the list and add every process to the scheduler */
-    mutex_lock(wait_mutex);
+    //TODO: wait for mutex
+    if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "IRQ_WAKEUP");
     u32* element = irq_list[irq]->element;
 
     if(element[1])

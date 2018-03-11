@@ -36,6 +36,7 @@ void process_init()
 {
     processes_size = PROCESSES_ARRAY_SIZE;
     processes = kmalloc(processes_size);
+    init_signals();
 }
 
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
@@ -186,6 +187,9 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
         (*child)->element = current_process;
         (*child)->next = 0;
     }
+
+    //register default signals handler
+    memset(tr->signal_handlers, 0, SIG_COUNT*sizeof(void*));
 
     return tr;
 }

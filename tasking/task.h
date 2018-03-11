@@ -21,6 +21,7 @@
 #include "system.h"
 #include "filesystem/fs.h"
 #include "io/io.h"
+#include "signal.h"
 
 //ELF loading
 error_t elf_check(fd_t* file);
@@ -28,7 +29,9 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 
 #define PROCESS_STATUS_INIT 0
 #define PROCESS_STATUS_RUNNING 1
-#define PROCESS_STATUS_ASLEEP 2
+#define PROCESS_STATUS_ASLEEP_TIME 2
+#define PROCESS_STATUS_ASLEEP_IRQ 3
+#define PROCESS_STATUS_ASLEEP_SIGNAL 4
 
 //Process
 typedef struct PROCESS
@@ -63,6 +66,8 @@ typedef struct PROCESS
     int pid;
     u32 status;
     list_entry_t* children;
+    //signals
+    void* signal_handlers[SIG_COUNT];
 } __attribute__((packed)) process_t;
 
 void process_init();
@@ -78,6 +83,10 @@ extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
 process_t* init_kernel_process();
+
+//SIGNALS
+void init_signals();
+void send_signal(int pid, int sig);
 
 //SCHEDULER
 extern bool scheduler_started;
