@@ -18,7 +18,7 @@
 #ifndef SIGNAL_DEF_HEAD
 #define SIGNAL_DEF_HEAD
 
-#define SIG_COUNT 29
+#define NSIG 29
 
 #define SIGABRT 1
 #define SIGALRM 2

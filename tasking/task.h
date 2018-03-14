@@ -33,13 +33,6 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 #define PROCESS_STATUS_ASLEEP_IRQ 3
 #define PROCESS_STATUS_ASLEEP_SIGNAL 4
 
-#define PROCESS_SEGMENT_ELF_CODE 1
-#define PROCESS_SEGMENT_ELF_DATA 2
-#define PROCESS_SEGMENT_ELF_UNKNOWN 3
-#define PROCESS_SEGMENT_HEAP 4
-#define PROCESS_SEGMENT_STACK 5
-#define PROCESS_SEGMENT_SIGNAL 6
-
 typedef struct SIGHANDLER
 {
     u32 eip;
@@ -85,8 +78,9 @@ typedef struct PROCESS
     int pid;
     u32 status;
     list_entry_t* children;
+    struct PROCESS* parent;
     //signals
-    void* signal_handlers[SIG_COUNT];
+    void* signal_handlers[NSIG];
     //sighandler : custom signal handling function
     sighandler_t sighandler;
 } __attribute__((packed)) process_t;

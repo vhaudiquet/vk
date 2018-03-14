@@ -195,10 +195,19 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"g"(tr));
             break;
         }
-        //18:Syscall GETPID
+        //18:Syscall GETPINFO
         case 18:
         {
-            asm("mov %0, %%eax"::"g"(current_process->pid));
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
+            
+            switch(ebx)
+            {
+                case 1: {*((int*)ecx) = current_process->pid; break;}
+                case 2: {if(current_process->parent) *((int*)ecx) = current_process->parent->pid; else *((int*)ecx) = -1; break;}
+                default: asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;
+            }
+
+            asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
         //19:Syscall SIG
@@ -209,7 +218,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!processes[pid]) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_PID)); break;}
 
             int sig = (int) ecx;
-            if((sig <= 0) | (sig >= SIG_COUNT)) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_SIGNAL)); break;}
+            if((sig <= 0) | (sig >= NSIG)) {asm("mov %0, %%eax"::"N"(ERROR_INVALID_SIGNAL)); break;}
 
             send_signal(pid, sig);
             asm("mov %0, %%eax"::"N"(ERROR_NONE));
@@ -219,7 +228,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         case 20:
         {
             int sig = (int) ebx;
-            if((sig >= SIG_COUNT) | (sig <= 0)) break;
+            if((sig >= NSIG) | (sig <= 0)) break;
+            if((sig == SIGKILL) | (sig == SIGSTOP)) break;
             u32 old_handler = (uintptr_t) current_process->signal_handlers[sig];
             current_process->signal_handlers[sig] = (void*) ecx;
             asm("mov %0, %%eax"::"g"(old_handler));

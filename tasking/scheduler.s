@@ -23,6 +23,7 @@
 .extern idle_process
 .extern current_page_directory
 .extern scheduler_sleep_update
+.extern handle_signals
 
 .global schedule
 .global schedule_switch
@@ -32,6 +33,9 @@ schedule:
 
     /* call sleep update to update time of sleeping processes */
     call scheduler_sleep_update
+
+    /* call handle_signals to handle every incoming process signal */
+    call handle_signals
 
     /* call queue_take to get the next processus (in eax) */
     pushl p_ready_queue

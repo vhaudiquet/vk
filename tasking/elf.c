@@ -137,7 +137,6 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
         data_loc->element = kmalloc(sizeof(u32)*3);
         ((u32*)data_loc->element)[0] = prg_h[i].p_vaddr;
         ((u32*)data_loc->element)[1] = prg_h[i].p_memsz;
-        ((u32*)data_loc->element)[2] = PROCESS_SEGMENT_ELF_UNKNOWN;
         data_loc->next = kmalloc(sizeof(list_entry_t));
         data_loc = data_loc->next;
         (*data_size)++;

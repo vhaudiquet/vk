@@ -187,9 +187,10 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
         (*child)->element = current_process;
         (*child)->next = 0;
     }
+    tr->parent = current_process;
 
     //register default signals handler
-    memset(tr->signal_handlers, 0, SIG_COUNT*sizeof(void*));
+    memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
     //set sighandler to 0
     memset(&tr->sighandler, 0, sizeof(sighandler_t));
     tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
@@ -226,7 +227,16 @@ void exit_process(process_t* process)
     pt_free(process->page_directory);
 
     //free process children list
-    list_free_eonly(process->children, U32_MAX);
+    list_entry_t* cptr = process->children;
+    while(cptr)
+    {
+        process_t* cp = cptr->element;   
+        cp->parent = 0;
+
+        list_entry_t* tf = cptr;
+        cptr = cptr->next;
+        kfree(tf);
+    }
 
     //remove process from array
     processes[process->pid] = 0;

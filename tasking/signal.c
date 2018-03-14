@@ -122,7 +122,7 @@ void send_signal(int pid, int sig)
 {
     process_t* process = processes[pid];
 
-    if((sig <= 0) | (sig >= SIG_COUNT)) return;
+    if((sig <= 0) | (sig >= NSIG)) return;
 
     /* adding the signal to the list */
     //TODO : wait for mutex
