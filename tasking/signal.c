@@ -56,6 +56,15 @@ void handle_signals()
     mutex_unlock(signal_mutex);
 }
 
+asm(".global sighandler_end \n \
+sighandler_end: \n \
+mov $21, %eax \n \
+int $0x80 \n \
+sighandler_end_end: \n \
+.global sighandler_end_end");
+extern void sighandler_end();
+extern void sighandler_end_end();
+
 /*
 * Handle a signal
 */
@@ -89,7 +98,19 @@ static void handle_signal(process_t* process, int sig)
     /* custom signal handling function */
     else
     {
-        fatal_kernel_error("Custom signal actions are not supported for now", "HANDLE_SIGNAL");
+        process->sighandler.eip = (uintptr_t) process->signal_handlers[sig];
+        process->sighandler.base_kstack = (uintptr_t) kmalloc(4096);
+        process->sighandler.kesp = process->sighandler.base_kstack+4096;
+        process->sighandler.esp = process->esp - 0x10;
+        
+        pd_switch(process->page_directory);
+        u32 size = (u32) ((uintptr_t)sighandler_end-(uintptr_t)sighandler_end_end);
+        memcpy((u32*) process->sighandler.esp-size, sighandler_end, size);
+        *((u32*) process->sighandler.esp - size - 0x4) = process->sighandler.esp - size;
+        *((int32_t*) process->sighandler.esp - size - 0x8) = sig;
+        pd_switch(current_process->page_directory);
+
+        process->sighandler.esp -= (size + 0x8);
     }
 }
 

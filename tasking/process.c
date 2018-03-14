@@ -56,11 +56,11 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     void* stack_offset = (void*) 0xC0000000;
     
     map_memory(8192, (u32) stack_offset-8192, page_directory);
-    pd_switch(page_directory);
-    memset((void*)(stack_offset-8192), 0, 8192);
     u32 base_stack = (u32) stack_offset-8192;
 
     /* ARGUMENTS PASSING */
+    pd_switch(page_directory);
+    
     int i;
     char** uparam = (char**) kmalloc(sizeof(char*) * ((u32) argc));
     
@@ -88,9 +88,9 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     *((int*) stack_offset) = argc; 
 
     stack_offset -= sizeof(char*);
-    /* ARGUMENTS PASSED */
 
     pd_switch(current_process->page_directory);
+    /* ARGUMENTS PASSED */
 
     process_t* tr = 
     #ifdef MEMLEAK_DBG
@@ -158,7 +158,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     #else
     kmalloc(8192);
     #endif
-    tr->kesp = ((u32) kstack) + 8191;
+    tr->kesp = ((u32) kstack) + 8192;
 
     tr->base_kstack = (u32) kstack;
 
@@ -190,6 +190,10 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 
     //register default signals handler
     memset(tr->signal_handlers, 0, SIG_COUNT*sizeof(void*));
+    //set sighandler to 0
+    memset(&tr->sighandler, 0, sizeof(sighandler_t));
+    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
+    tr->sighandler.sregs.cs = 0x1B;
 
     return tr;
 }

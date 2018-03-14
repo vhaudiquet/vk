@@ -215,6 +215,24 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
+        //20:Syscall SIGACTION
+        case 20:
+        {
+            int sig = (int) ebx;
+            if((sig >= SIG_COUNT) | (sig <= 0)) break;
+            u32 old_handler = (uintptr_t) current_process->signal_handlers[sig];
+            current_process->signal_handlers[sig] = (void*) ecx;
+            asm("mov %0, %%eax"::"g"(old_handler));
+            break;
+        }
+        //21:Syscall SIGRETURN
+        case 21:
+        {
+            if(!current_process->sighandler.eip) break;
+            current_process->sighandler.eip = 0;
+            kfree((void*) current_process->sighandler.base_kstack);
+            break;
+        }
         //23:Syscall ISATTY
         case 23:
         {
