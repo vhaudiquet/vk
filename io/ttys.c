@@ -29,8 +29,6 @@ tty_t* tty3 = 0;
 
 tty_t* current_tty = 0;
 
-static u8 tty_getch(tty_t* tty);
-
 void ttys_init()
 {
     kprintf("Initializing ttys...");
@@ -56,6 +54,9 @@ tty_t* tty_init(char* name)
     tr->count = 0; 
     tr->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
     tr->keyboard_stream = iostream_alloc();
+    tr->canon_buffer = kmalloc(256);
+    tr->canon_buffer_count = 0;
+    tr->canon_buffer_size = 256;
     
     tty_write((u8*) "VK 0.0-indev (", 14, tr);
     tty_write((u8*) name, strlen(name), tr);
@@ -122,12 +123,25 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
         u32 off = 0;
         while(count)
         {
-            u8 ch = tty_getch(tty);
-            *(buffer+off) = ch;
-            if(ch == '\n') return ERROR_NONE;
+            u8 ch = iostream_getch(tty->keyboard_stream);
+            
+            if(tty->canon_buffer_count >= tty->canon_buffer_size) 
+            {
+                tty->canon_buffer_size*=2;
+                tty->canon_buffer = krealloc(tty->canon_buffer, tty->canon_buffer_size);
+            }
+
+            *(tty->canon_buffer+off) = ch;
+            tty->canon_buffer_count++;
+            
             off++;
             count--;
+
+            if(ch == '\n') break;
         }
+        memcpy(buffer, tty->canon_buffer, off);
+        tty->canon_buffer_count = 0;
+        *tty->canon_buffer = 0;
     }
     else
     {
@@ -147,7 +161,7 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
             u32 off = 0;
             while(countmin)
             {
-                *(buffer+off) = tty_getch(tty);
+                *(buffer+off) = iostream_getch(tty->keyboard_stream);
                 off++;
                 countmin--;
             }
@@ -175,42 +189,37 @@ void tty_switch(tty_t* tty)
 }
 
 /*
-* This function reads from the keyboard stream associed to a virtual terminal
-* CARE : this function can block (wait keyboard IRQ)
+* This function inputs text to a tty (ex: from keyboard to tty, called on kbd irq for 'current_tty')
 */
-static u8 tty_getch(tty_t* tty)
+void tty_input(tty_t* tty, u8 c)
 {
-    if(!tty->keyboard_stream->count)
-    {
-        scheduler_wait_process(current_process, SLEEP_WAIT_IRQ, 1, 0);
-        return tty_getch(tty);
-    }
-
-    u8 c = iostream_getch(tty->keyboard_stream);
-
     if(tty->termio.c_iflag & ISTRIP) c &= 127; //remove 8th bit
 
     if(tty->termio.c_iflag & INLCR) if(c == '\n') c = '\r';
-    if(tty->termio.c_iflag & IGNCR) if(c == '\r') return tty_getch(tty);
+    if(tty->termio.c_iflag & IGNCR) if(c == '\r') return;
     if(tty->termio.c_iflag & ICRNL) if(c == '\r') c = '\n';
 
     if(c == tty->termio.c_cc[VERASE])
     {
-        if((tty->termio.c_lflag & ICANON) && (tty->termio.c_lflag & ECHOE) && (tty->count))
+        if((tty->termio.c_lflag & ICANON) && (tty->termio.c_lflag & ECHOE) && (tty->canon_buffer_count))
         {
-            u8 terase = *(tty->buffer+tty->count-1);
+            u8 terase = *(tty->canon_buffer+tty->canon_buffer_count-1);
             if((terase != tty->termio.c_cc[VEOF]) && (terase != tty->termio.c_cc[VEOL]) && (terase != '\n'))
             {
+                tty->canon_buffer_count--;
+                *(tty->canon_buffer+tty->canon_buffer_count) = 0;
+                
                 tty->count--;
                 *(tty->buffer+tty->count) = 0;
-                vga_text_putc('\b', 0);
+
+                if(tty->termio.c_lflag & ECHO) vga_text_putc('\b', 0);
             }
         }
-        return tty_getch(tty);
+        return;
     }
 
     if(tty->termio.c_lflag & ECHO) tty_write(&c, 1, tty);
     else if(c == '\n' && (tty->termio.c_lflag & ICANON & ECHONL)) tty_write(&c, 1, tty);
 
-    return c;
+    iostream_write(&c, 1, tty->keyboard_stream);
 }

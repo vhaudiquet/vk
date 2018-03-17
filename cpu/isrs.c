@@ -136,5 +136,5 @@ void keyboard_interrupt()
 	if(kbd_ctrl && kbd_alt && (keycode == 0x3D)) {tty_switch(tty3); return;}
 
 	u8 ch = getchar(keycode);
-	if(ch) iostream_write(&ch, 1, current_tty->keyboard_stream);
+	if(ch) tty_input(current_tty, ch);
 }

@@ -25,6 +25,9 @@ typedef struct TTY
     u8* buffer;
     u32 count;
     u32 buffer_size;
+    u8* canon_buffer;
+    u32 canon_buffer_count;
+    u32 canon_buffer_size;
     io_stream_t* keyboard_stream;
     fsnode_t* pointer;
     struct termios termio;
@@ -37,6 +40,7 @@ void ttys_init();
 tty_t* tty_init(char* name);
 error_t tty_write(u8* buffer, u32 count, tty_t* tty);
 error_t tty_read(u8* buffer, u32 count, tty_t* tty);
+void tty_input(tty_t* tty, u8 c);
 void tty_switch(tty_t* tty);
 
 #endif
