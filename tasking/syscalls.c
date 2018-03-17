@@ -74,8 +74,10 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             
+            u32 counttr = (u32) current_process->files[ebx]->offset;
             error_t tr = read_file(current_process->files[ebx], (void*) ecx, edx);
-            asm("mov %0, %%eax"::"g"(tr));
+            counttr = (u32) (current_process->files[ebx]->offset - counttr);
+            asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(tr), "g"(counttr));
             break;
         }
         //4:Syscall WRITE
@@ -83,8 +85,11 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         {
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            
+            u32 counttr = (u32) current_process->files[ebx]->offset;
             error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
-            asm("mov %0, %%eax"::"g"(tr));
+            counttr = (u32) (current_process->files[ebx]->offset - counttr);
+            asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(tr), "g"(counttr));
             break;
         }
         //5:Syscall RENAME
@@ -199,7 +204,6 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         case 18:
         {
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
-            
             switch(ebx)
             {
                 case 1: {*((int*)ecx) = current_process->pid; break;}

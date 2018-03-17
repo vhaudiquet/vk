@@ -199,7 +199,7 @@ static u8 tty_getch(tty_t* tty)
         if((tty->termio.c_lflag & ICANON) && (tty->termio.c_lflag & ECHOE) && (tty->count))
         {
             u8 terase = *(tty->buffer+tty->count-1);
-            if((terase != tty->termio.c_cc[VEOF]) && (terase != '\n'))
+            if((terase != tty->termio.c_cc[VEOF]) && (terase != tty->termio.c_cc[VEOL]) && (terase != '\n'))
             {
                 tty->count--;
                 *(tty->buffer+tty->count) = 0;

@@ -53,7 +53,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); kfree(data_loc); return 0;}
 
     //TODO: check if this area isnt already mapped by elf code/data
-    void* stack_offset = (void*) 0xC0000000;
+    void* stack_offset = (void*) 0xC0000000-0x4;
     
     map_memory(8192, (u32) stack_offset-8192, page_directory);
     u32 base_stack = (u32) stack_offset-8192;
