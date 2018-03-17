@@ -120,7 +120,6 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
 {
     if(tty->termio.c_lflag & ICANON)
     {
-        u32 off = 0;
         while(count)
         {
             u8 ch = iostream_getch(tty->keyboard_stream);
@@ -131,15 +130,14 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
                 tty->canon_buffer = krealloc(tty->canon_buffer, tty->canon_buffer_size);
             }
 
-            *(tty->canon_buffer+off) = ch;
+            *(tty->canon_buffer+tty->canon_buffer_count) = ch;
             tty->canon_buffer_count++;
             
-            off++;
             count--;
 
             if(ch == '\n') break;
         }
-        memcpy(buffer, tty->canon_buffer, off);
+        memcpy(buffer, tty->canon_buffer, tty->canon_buffer_count);
         tty->canon_buffer_count = 0;
         *tty->canon_buffer = 0;
     }
@@ -201,9 +199,11 @@ void tty_input(tty_t* tty, u8 c)
 
     if(c == tty->termio.c_cc[VERASE])
     {
+        //kprintf("kc:%u", tty->canon_buffer_count);
         if((tty->termio.c_lflag & ICANON) && (tty->termio.c_lflag & ECHOE) && (tty->canon_buffer_count))
         {
             u8 terase = *(tty->canon_buffer+tty->canon_buffer_count-1);
+            //kprintf("terase = %u ", terase);
             if((terase != tty->termio.c_cc[VEOF]) && (terase != tty->termio.c_cc[VEOL]) && (terase != '\n'))
             {
                 tty->canon_buffer_count--;
