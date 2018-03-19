@@ -137,7 +137,10 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
 
             if(ch == '\n') break;
         }
+        
         memcpy(buffer, tty->canon_buffer, tty->canon_buffer_count);
+        memset(buffer+tty->canon_buffer_count, 0, count-tty->canon_buffer_count);
+
         tty->canon_buffer_count = 0;
         *tty->canon_buffer = 0;
     }

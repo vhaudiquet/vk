@@ -60,7 +60,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //2:Syscall CLOSE
         case 2:
         {
-            if(current_process->files_count >= ebx && current_process->files[ebx])
+            if((ebx >= 3) && (current_process->files_count >= ebx) && (current_process->files[ebx]))
             {
                 close_file(current_process->files[ebx]);
                 current_process->files[ebx] = 0;
@@ -85,7 +85,6 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         {
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
-            
             u32 counttr = (u32) current_process->files[ebx]->offset;
             error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
             counttr = (u32) (current_process->files[ebx]->offset - counttr);
