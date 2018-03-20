@@ -88,21 +88,23 @@ u32* copy_adress_space(u32* page_directory)
         }
         else
         {
-            u32* pt = (u32*) pt_addr;
+            u32* pt = (u32*) (pt_addr + KERNEL_VIRTUAL_BASE);
             u32 j;
             for(j = 0;j < 1024;j++)
             {
                 if(!pt[j]) continue;
                 
-                map_memory(4096, (i << 22)+(j << 22), tr);
+                map_memory(4096, (i << 22)+(j<<12), tr);
                 
                 void* kbuffer = kmalloc(4096);
 
                 pd_switch(page_directory);
-                memcpy(kbuffer, (void*) ((i << 22)+(j << 22)), 4096);
+                memcpy(kbuffer, (void*) ((i << 22)+(j<<12)), 4096);
                 pd_switch(tr);
-                memcpy((void*) ((i << 22)+(j << 22)), kbuffer, 4096);
+                memcpy((void*) ((i << 22)+(j<<12)), kbuffer, 4096);
                 pd_switch(cpd);
+
+                kfree(kbuffer);
             }
         }
     }

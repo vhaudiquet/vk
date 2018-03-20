@@ -183,13 +183,14 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         case 13:
         {
             process_t* new = fork(current_process);
-            asm("mov %0, %%eax"::"g"(new->pid));
 
-            new->gregs.eax = 0;
             new->eip = (u32) &&fork_ret;
             scheduler_add_process(new);
 
+            asm("mov %%esp, %0":"=g"(new->esp)::"%esp");
+            asm("mov %0, %%eax"::"g"(new->pid):"%esp", "%eax");
             break;
+
             fork_ret: {asm("mov $0, %%eax"::); break;}
         }
         //17:Syscall SBRK

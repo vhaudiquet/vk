@@ -262,9 +262,23 @@ process_t* fork(process_t* process)
     process_t* tr = kmalloc(sizeof(process_t));
     memcpy(tr, process, sizeof(process_t));
 
+    //set status to init
+    tr->status = PROCESS_STATUS_INIT;
+
     //get own adress space
     u32* page_directory = copy_adress_space(process->page_directory);
     tr->page_directory = page_directory;
+
+    //get own kernel stack
+    void* kstack = kmalloc(8192);
+    tr->kesp = (u32) kstack+8192;
+    tr->base_kstack = (u32) kstack;
+    memcpy(kstack, (void*) process->base_kstack, 8192);
+
+    //set registers to match current status (kernel space)
+    tr->sregs.cs = 0x08;
+    tr->sregs.ss = 0x10;
+    //note: we will restore ESP later, because we cant know it there
 
     //get own copies of file_descriptors
     tr->files = kmalloc(process->files_size*sizeof(fd_t));
@@ -272,6 +286,8 @@ process_t* fork(process_t* process)
     for(;i<process->files_size;i++)
     {
         fd_t* tocopy = process->files[i];
+        if(!tocopy) continue;
+        
         fd_t* toadd = kmalloc(sizeof(fd_t));
         memcpy(toadd, tocopy, sizeof(fd_t));
         tr->files[i] = toadd;
@@ -300,6 +316,10 @@ process_t* fork(process_t* process)
         (*child)->element = current_process;
         (*child)->next = 0;
     }
+    tr->parent = current_process;
+
+    //clear pending signals
+    memset(&tr->sighandler, 0, sizeof(sighandler_t));
 
     return tr;
 }
