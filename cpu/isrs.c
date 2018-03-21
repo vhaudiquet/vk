@@ -45,6 +45,7 @@ static void handle_page_fault(struct regs_int* r);
 
 void fault_handler(struct regs_int * r)
 {
+	kprintf("%lFAULT in process 0x%X / %d\n", 3, current_process, current_process->pid);
 	kprintf("%lEIP = 0x%X\n", 3, r->eip);
     switch(r->int_no)
 	{

@@ -24,6 +24,7 @@
 .extern current_page_directory
 .extern scheduler_sleep_update
 .extern handle_signals
+.extern TSS
 
 .global schedule
 .global schedule_switch
@@ -119,6 +120,12 @@ schedule:
     je restore_kernelmode
 
     restore_usermode:
+    
+    /* restore TSS.esp0 (to match process kstack, usefull on a syscall / interrupt) */
+    mov 0x44(%eax), %esi
+    mov $TSS, %edi
+    mov %esi, 0x4(%edi)
+
     push 0x28(%eax) # ss
     push 0x34(%eax) # esp
     jmp restore_end

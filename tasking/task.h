@@ -85,6 +85,10 @@ typedef struct PROCESS
     sighandler_t sighandler;
 } __attribute__((packed)) process_t;
 
+#define PROCESS_INVALID_PID -1
+#define PROCESS_KERNEL_PID -2
+#define PROCESS_IDLE_PID -3
+
 void process_init();
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
 void exit_process(process_t* process);

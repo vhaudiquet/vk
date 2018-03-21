@@ -36,6 +36,7 @@ void process_init()
 {
     processes_size = PROCESSES_ARRAY_SIZE;
     processes = kmalloc(processes_size);
+    memset(processes, 0, processes_size);
     init_signals();
 }
 
@@ -165,13 +166,14 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     tr->status = PROCESS_STATUS_INIT;
 
     //register process in process list
+    tr->pid = PROCESS_INVALID_PID;
     int j = 0;
     for(;j<(int) processes_size;j++)
     {
-        if(!processes[j]) {processes[j] = tr; tr->pid = j;}
+        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
     }
 
-    if(!tr->pid)
+    if(tr->pid == PROCESS_INVALID_PID)
     {
         processes_size*=2;
         processes = krealloc(processes, processes_size);
@@ -271,7 +273,7 @@ process_t* fork(process_t* process)
 
     //get own kernel stack
     void* kstack = kmalloc(8192);
-    tr->kesp = (u32) kstack+8192;
+    tr->kesp = ((u32) kstack) + 8192;
     tr->base_kstack = (u32) kstack;
     memcpy(kstack, (void*) process->base_kstack, 8192);
 
@@ -294,13 +296,14 @@ process_t* fork(process_t* process)
     }
 
     //get own pid / register in the process list
+    tr->pid = PROCESS_INVALID_PID;
     int j = 0;
     for(;j<(int) processes_size;j++)
     {
-        if(!processes[j]) {processes[j] = tr; tr->pid = j;}
+        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
     }
 
-    if(!tr->pid)
+    if(tr->pid == PROCESS_INVALID_PID)
     {
         processes_size*=2;
         processes = krealloc(processes, processes_size);
@@ -339,7 +342,7 @@ process_t* init_idle_process()
     kmalloc(sizeof(process_t));
     #endif
     idle_process->status = PROCESS_STATUS_INIT;
-    idle_process->pid = -2;
+    idle_process->pid = PROCESS_IDLE_PID;
     idle_process->flags = 0; asm("pushf; pop %%eax":"=a"(idle_process->flags):);
     idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
     idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
@@ -365,7 +368,7 @@ process_t* init_kernel_process()
     #else
     kmalloc(sizeof(process_t));
     #endif
-    kernel_process->pid = -1;
+    kernel_process->pid = PROCESS_KERNEL_PID;
     kernel_process->page_directory = kernel_page_directory;
     kernel_process->status = PROCESS_STATUS_RUNNING;
 

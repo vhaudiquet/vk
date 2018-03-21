@@ -27,6 +27,8 @@ bool ptr_validate(u32 ptr, u32* page_directory)
     return true;
 }
 
+int syscall_fork();
+
 void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
 {
     // kprintf("%lSyscall %u : %X, %X, %X\n", 3, syscall_number, ebx, ecx, edx);
@@ -182,16 +184,9 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //13:Syscall FORK
         case 13:
         {
-            process_t* new = fork(current_process);
-
-            new->eip = (u32) &&fork_ret;
-            scheduler_add_process(new);
-
-            asm("mov %%esp, %0":"=g"(new->esp)::"%esp");
-            asm("mov %0, %%eax"::"g"(new->pid):"%esp", "%eax");
-            break;
-
-            fork_ret: {asm("mov $0, %%eax"::); break;}
+            int tr = syscall_fork();
+            asm("mov %0, %%eax"::"g"(tr):"%esp", "%eax");
+            return;
         }
         //17:Syscall SBRK
         case 17:
@@ -297,4 +292,29 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             break;
         }
     }
+}
+
+__asm__(".extern fork_ret \n \
+.global syscall_fork \n \
+syscall_fork: \n \
+push %esp /* push esp to be restored later on the forked process */ \n \
+push current_process /* push current process as fork() argument */ \n \
+call fork /* call fork() */ \n \
+add $0x4, %esp /* clean esp after fork() call */ \n \
+movl $fork_ret, 0x30(%eax) /* moving fork_ret addr to EIP of forked process (in eax) */ \n \
+pop %ecx /* poping esp to restore in ecx */ \n \
+mov current_process, %edx /* move current_process to edx */ \n \
+subl 0x4C(%edx), %ecx /* substract base_kstack of current_process to esp */ \n \
+addl 0x4C(%eax), %ecx /* add base_kstack of new process to esp */ \n \
+mov %ecx, 0x34(%eax) /* restore new process esp */ \n \
+push 0x70(%eax) /* push new process pid */ \n \
+push %eax /* push new process as argument of scheduler_add_process() */ \n \
+call scheduler_add_process /* call scheduler_add_process() */ \n \
+add $0x4, %esp /* clean esp after scheduler_add_process() call */ \n \
+pop %eax /* pop new process pid into eax (as return value) */ \n \
+ret");
+
+int fork_ret()
+{ 
+    return 0;
 }
