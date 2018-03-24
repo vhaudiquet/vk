@@ -3,6 +3,7 @@
 
 #include "system.h"
 #include "filesystem/fs.h"
+#include "filesystem/devfs.h"
 #include "memory/mem.h"
 #include "termios.h"
 
@@ -12,12 +13,21 @@ typedef struct IOSTREAM
     u8* buffer;
     volatile u32 count;
     u32 buffer_size;
+    u32 attributes;
+    fsnode_t* file;
+    list_entry_t* waiting_processes;
 } io_stream_t;
+
+#define IOSTREAM_ATTR_BLOCKING_READ 1
+#define IOSTREAM_ATTR_BLOCKING_WRITE 2
+#define IOSTREAM_ATTR_AUTOEXPAND 4
+#define IOSTREAM_ATTR_ONE_BYTE 8
 
 io_stream_t* iostream_alloc();
 void iostream_free(io_stream_t* iostream);
 u8 iostream_getch(io_stream_t* iostream);
-u8 iostream_write(u8* buffer, u32 count, io_stream_t* iostream);
+error_t iostream_write(u8* buffer, u32 count, io_stream_t* iostream);
+error_t iostream_read(u8* buffer, u32 count, io_stream_t* iostream);
 
 // TTYs
 typedef struct TTY

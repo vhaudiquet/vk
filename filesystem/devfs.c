@@ -120,6 +120,11 @@ error_t devfs_read_file(fd_t* fd, void* buffer, u64 count)
         return tty_read(buffer, (u32) count, tty);
         //return ERROR_NONE;
     }
+    else if(spe->device_type == DEVFS_TYPE_IOSTREAM)
+    {
+        io_stream_t* iostream = spe->device_struct;
+        return iostream_read(buffer, (u32) count, iostream);
+    }
 
     return ERROR_FILE_FS_INTERNAL;
 }
@@ -142,6 +147,11 @@ error_t devfs_write_file(fd_t* fd, void* buffer, u64 count)
     {
         tty_t* tty = spe->device_struct;
         return tty_write(buffer, (u32) count, tty);
+    }
+    else if(spe->device_type == DEVFS_TYPE_IOSTREAM)
+    {
+        io_stream_t* iostream = spe->device_struct;
+        return iostream_write(buffer, (u32) count, iostream);
     }
 
     return ERROR_FILE_FS_INTERNAL;

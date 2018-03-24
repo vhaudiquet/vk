@@ -19,7 +19,6 @@
 #include "video/video.h"
 #include "tasking/task.h"
 #include "error/error.h"
-#include "filesystem/devfs.h"
 
 #define TTY_DEFAULT_BUFFER_SIZE 1024
 
@@ -54,6 +53,7 @@ tty_t* tty_init(char* name)
     tr->count = 0; 
     tr->buffer_size = TTY_DEFAULT_BUFFER_SIZE;
     tr->keyboard_stream = iostream_alloc();
+    tr->keyboard_stream->attributes |= IOSTREAM_ATTR_ONE_BYTE;
     tr->canon_buffer = kmalloc(256);
     tr->canon_buffer_count = 0;
     tr->canon_buffer_size = 256;

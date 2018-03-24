@@ -38,6 +38,7 @@ typedef struct devfs_node_specific
 #define DEVFS_TYPE_BLOCKDEV 2
 #define DEVFS_TYPE_BLOCKDEV_PART 3
 #define DEVFS_TYPE_TTY 4
+#define DEVFS_TYPE_IOSTREAM 5
 
 #define DEVFS_DIR_SIZE_DEFAULT (sizeof(devfs_dirent_t)*10)
 

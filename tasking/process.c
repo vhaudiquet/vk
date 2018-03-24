@@ -167,7 +167,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 
     //register process in process list
     tr->pid = PROCESS_INVALID_PID;
-    int j = 0;
+    int j = 1; // pid 0 is reserved
     for(;j<(int) processes_size;j++)
     {
         if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
@@ -297,7 +297,8 @@ process_t* fork(process_t* process)
 
     //get own pid / register in the process list
     tr->pid = PROCESS_INVALID_PID;
-    int j = 0;
+
+    int j = 1; // pid 0 is reserved
     for(;j<(int) processes_size;j++)
     {
         if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
