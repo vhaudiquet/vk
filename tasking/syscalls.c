@@ -291,6 +291,30 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
+        //35:Syscall OPENIO
+        case 35:
+        {
+            io_stream_t* iostream = iostream_alloc();
+            fd_t* file = kmalloc(sizeof(fd_t));
+            file->file = iostream->file; file->offset = 0;
+
+            if(current_process->files_count == current_process->files_size)
+            {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));}
+
+            u32 i = 0;
+            for(i = 3;i<current_process->files_size;i++)
+            {
+                if(!current_process->files[i])
+                {
+                    current_process->files[i] = file;
+                    break;
+                }
+            }
+            current_process->files_count++;
+
+            asm("mov %0, %%eax"::"g"(i));
+            break;
+        }
     }
 }
 

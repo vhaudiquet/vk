@@ -69,7 +69,6 @@ u8 iostream_getch(io_stream_t* iostream)
 {
     if(iostream->count)
     {
-        kprintf(""); //i dont know why yet, we need a little delay here if we come from the end loop, so this will do it //TODO check
         u8 tr = *iostream->buffer;
         iostream->count--;
         memcpy(iostream->buffer, iostream->buffer+1, iostream->count);
@@ -124,9 +123,7 @@ error_t iostream_read(u8* buffer, u32 count, io_stream_t* iostream)
     if((iostream->attributes | IOSTREAM_ATTR_ONE_BYTE) && (count > 1)) return ERROR_FILE_FS_INTERNAL;
 
     if(iostream->count)
-    {
-        kprintf(""); //i dont know why yet, we need a little delay here if we come from the end loop, so this will do it //TODO check
-        
+    {   
         u32 countmin = count > iostream->count ? iostream->count : count;
         
         memcpy(buffer, iostream->buffer, countmin);
