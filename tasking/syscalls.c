@@ -40,6 +40,17 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
             
             char* path = (char*) ebx;
+            if(*path != '/')
+            {
+                char* opath = path;
+                u32 len = strlen(opath);
+                u32 dirlen = strlen(current_process->current_dir);
+                path = kmalloc(len+dirlen+1);
+                strncpy(path, current_process->current_dir, dirlen);
+                strncat(path, opath, len);
+                *(path+len+dirlen) = 0;    
+            }
+
             fd_t* file = open_file(path, (u8) ecx);
             if(!file) {asm("mov $0, %eax"); return;}
             

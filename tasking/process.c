@@ -153,7 +153,7 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     {kfree(data_loc); return UNKNOWN_ERROR;}
 
     //TODO: check if this area isnt already mapped by elf code/data
-    void* stack_offset = (void*) 0xC0000000-0x4;
+    void* stack_offset = (void*) 0xC0000000;
     
     map_memory(8192, (u32) stack_offset-8192, process->page_directory);
     u32 base_stack = (u32) stack_offset-8192;
@@ -174,10 +174,11 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     }
 
     //copy adresses
-    for (i=argc-1; i>=0; i--)
+    for (i=argc; i>=0; i--)
     {
         stack_offset -= sizeof(char*);
-        *((char**) stack_offset) = uparam[i]; 
+        if(i != argc) *((char**) stack_offset) = uparam[i]; 
+        else *((char**) stack_offset) = 0;
     }
 
     //copy argv
