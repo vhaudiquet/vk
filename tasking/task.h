@@ -84,6 +84,8 @@ typedef struct PROCESS
     void* signal_handlers[NSIG];
     //sighandler : custom signal handling function
     sighandler_t sighandler;
+    //current directory
+    char current_dir[100];
 } __attribute__((packed)) process_t;
 
 #define PROCESS_INVALID_PID -1

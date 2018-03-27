@@ -147,8 +147,8 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //9:Syscall STAT
         case 9:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
-            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             fsnode_t* file = current_process->files[ebx]->file;
             
             u32* ptr = (u32*) edx;
@@ -166,7 +166,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             ptr[11] = 512; //todo: cluster size or ext2 blocksize
             ptr[12] = (u32) (file->length/512); //todo: clusters or blocks
             
-            asm("mov $1, %eax");
+            asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
         //11:Syscall EXEC
@@ -175,8 +175,11 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
 
+            //TODO : UNMAP OLD PROCESS MEMORY !! (but no, what if we fail loading...)
             error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
             
+            //TODO : Close file descriptors with 'close_on_exec' flag
+
             asm("mov %0, %%eax"::"g"(load));
             break;
         }
@@ -193,6 +196,20 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"g"(tr):"%esp", "%eax");
             return;
         }
+        //16:Syscall SETWDIR
+        case 16:
+        {
+            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
+            char* newdir = (char*) ebx;
+            u32 len = strlen(newdir); if(len >= 99) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
+            fd_t* t = open_file(newdir, 0);
+            if(!t) {asm("mov %0, %%eax"::"N"(ERROR_FILE_NOT_FOUND)); break;}
+            close_file(t);
+            strncpy(current_process->current_dir, newdir, len);
+            *(current_process->current_dir+len) = 0;
+            asm("mov %0, %%eax"::"N"(ERROR_NONE));
+            break;
+        }
         //17:Syscall SBRK
         case 17:
         {
@@ -208,6 +225,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             {
                 case 1: {*((int*)ecx) = current_process->pid; break;}
                 case 2: {if(current_process->parent) *((int*)ecx) = current_process->parent->pid; else *((int*)ecx) = -1; break;}
+                case 3: {strcpy((char*) ecx, current_process->current_dir); break;}
                 default: asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;
             }
 

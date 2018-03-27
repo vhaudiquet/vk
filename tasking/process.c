@@ -129,6 +129,10 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     //register default signals handler
     memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
 
+    //set current dir
+    strcpy(tr->current_dir, "/home");
+    *(tr->current_dir+5) = 0;
+
     return tr;
 }
 
@@ -280,6 +284,8 @@ process_t* fork(process_t* old_process)
 
     //copy signal handlers
     memcpy(tr->signal_handlers, old_process->signal_handlers, NSIG*sizeof(void*));
+    //copy current dir
+    memcpy(tr->current_dir, old_process->current_dir, 100);
 
     //get own adress space
     u32* page_directory = copy_adress_space(old_process->page_directory);
