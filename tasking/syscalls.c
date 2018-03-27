@@ -44,7 +44,11 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!file) {asm("mov $0, %eax"); return;}
             
             if(current_process->files_count == current_process->files_size)
-            {current_process->files_size*=2; current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));}
+            {
+                current_process->files_size*=2; 
+                current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));
+                memset(current_process->files+current_process->files_size/2, 0, current_process->files_size/2);
+            }
 
             u32 i = 0;
             for(i = 3;i<current_process->files_size;i++)
@@ -313,6 +317,54 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             current_process->files_count++;
 
             asm("mov %0, %%eax"::"g"(i));
+            break;
+        }
+        //36:Syscall DUP
+        case 36:
+        {
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax"::); return;}
+
+            fd_t* oldf = current_process->files[ebx];
+            int new = 0;
+            if(ecx)
+            {
+                if(ecx < 3) {asm("mov $0, %%eax"::); return;}
+
+                while(current_process->files_count < ecx)
+                {
+                    current_process->files_size*=2; 
+                    current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t)); 
+                    memset(current_process->files+current_process->files_size/2, 0, current_process->files_size/2);
+                }
+
+                if(current_process->files[ecx]) close_file(current_process->files[ecx]);
+
+                current_process->files[ecx] = oldf;
+                new = (int) ecx;
+            }
+            else
+            {
+                if(current_process->files_count == current_process->files_size)
+                {
+                    current_process->files_size*=2; 
+                    current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));
+                    memset(current_process->files+current_process->files_size/2, 0, current_process->files_size/2);
+                }
+
+                u32 i = 0;
+                for(i = 3;i<current_process->files_size;i++)
+                {
+                    if(!current_process->files[i])
+                    {
+                        current_process->files[i] = oldf;
+                        break;
+                    }
+                }
+                current_process->files_count++;
+                new = (int) i;
+            }
+
+            asm("mov %0, %%eax"::"g"(new));
             break;
         }
     }

@@ -16,6 +16,7 @@
 */
 
 #include "devfs.h"
+#include "tasking/task.h"
 
 file_system_t* devfs = 0;
 
@@ -56,6 +57,12 @@ fsnode_t* devfs_open(fsnode_t* dir, char* name)
 {
     devfs_node_specific_t* spe = dir->specific;
     u8* dirptr = spe->device_struct;
+
+    //special devices
+    if(dir == devfs->root_dir)
+    {
+        if(!strcmp(name, "tty")) return current_process->tty->pointer;
+    }
 
     while(((uintptr_t)dirptr) < ((uintptr_t)(spe->device_struct+dir->length)))
     {
