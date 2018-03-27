@@ -172,11 +172,12 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //11:Syscall EXEC
         case 11:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
-            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov $0, %eax"); return;}
+            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
 
-            process_t* process = create_process(current_process->files[ebx], (int) ecx, (char**) edx, current_process->tty);
-            scheduler_add_process(process);
+            error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
+            
+            asm("mov %0, %%eax"::"g"(load));
             break;
         }
         //12:Syscall EXIT

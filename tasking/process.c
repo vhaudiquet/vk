@@ -32,6 +32,8 @@ u32 processes_size = 0;
 process_t* kernel_process = 0;
 process_t* idle_process = 0;
 
+static process_t* init_process();
+
 void process_init()
 {
     processes_size = PROCESSES_ARRAY_SIZE;
@@ -40,27 +42,121 @@ void process_init()
     init_signals();
 }
 
+static process_t* init_process()
+{
+    process_t* tr = kmalloc(sizeof(process_t));
+    tr->status = PROCESS_STATUS_INIT;
+
+    //process kernel stack
+    void* kstack = kmalloc(8192);
+    tr->kesp = ((u32) kstack) + 8192;
+    tr->base_kstack = (u32) kstack;
+
+    //register process in process list
+    tr->pid = PROCESS_INVALID_PID;
+    int j = 1; // pid 0 is reserved
+    for(;j<(int) processes_size;j++)
+    {
+        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
+    }
+
+    if(tr->pid == PROCESS_INVALID_PID)
+    {
+        processes_size*=2;
+        processes = krealloc(processes, processes_size);
+        processes[j+1] = tr; tr->pid = (j+1);
+    }
+
+    //register as children of current process
+    if(current_process && current_process != kernel_process)
+    {
+        list_entry_t** child = &current_process->children;
+        while(*(child)) if((*child)->next) child = &(*child)->next;
+        (*child) = kmalloc(sizeof(list_entry_t));
+        (*child)->element = current_process;
+        (*child)->next = 0;
+    }
+    tr->parent = current_process;
+
+    //set sighandler to 0
+    memset(&tr->sighandler, 0, sizeof(sighandler_t));
+    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
+    tr->sighandler.sregs.cs = 0x1B;
+
+    return tr;
+}
+
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 {
-    //check if the file is really an ELF executable
-    if(elf_check(executable) != ERROR_NONE) return 0;
+    process_t* tr = init_process();
 
     u32* page_directory = get_kernel_pd_clone();
+    //set process page directory (the one we just allocated)
+    tr->page_directory = page_directory;
+
+    //load ELF executable
+    if(load_executable(tr, executable, argc, argv) != ERROR_NONE) return 0;
+
+    //set default registers to 0
+    tr->gregs.eax = 0;
+    tr->gregs.ebx = 0;
+    tr->gregs.ecx = 0;
+    tr->gregs.edx = 0;
+    tr->gregs.esi = 0;
+    tr->gregs.edi = 0;
+    tr->ebp = 0;
+    
+    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
+
+    //set default segment registers
+    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
+    tr->sregs.cs = 0x1B;
+
+    //set process tty, depending on argument
+    tr->tty = tty;
+
+    //init process file array
+    tr->files_size = 5;
+    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
+
+    //init stdin, stdout, stderr
+    fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
+    tr->files[0] = std; //stdin
+    tr->files[1] = std; //stdout
+    tr->files[2] = std; //stderr
+    tr->files_count = 3;
+
+    //register default signals handler
+    memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
+
+    return tr;
+}
+
+error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv)
+{
+    //check if the file is really an ELF executable
+    error_t elfc = elf_check(executable);
+    if(elfc != ERROR_NONE) return elfc;
 
     list_entry_t* data_loc = kmalloc(sizeof(list_entry_t));
     u32 data_size = 0;
-    void* code_offset = (void*) elf_load(executable, page_directory, data_loc, &data_size);
+    void* code_offset = (void*) elf_load(executable, process->page_directory, data_loc, &data_size);
 
-    if((!code_offset) | (((u32)code_offset) > 0xC0000000)) {pt_free(page_directory); kfree(data_loc); return 0;}
+    process->data_loc = data_loc;
+    process->data_size = data_size;
+
+    if((!code_offset) | (((u32)code_offset) > 0xC0000000)) 
+    {kfree(data_loc); return UNKNOWN_ERROR;}
 
     //TODO: check if this area isnt already mapped by elf code/data
     void* stack_offset = (void*) 0xC0000000-0x4;
     
-    map_memory(8192, (u32) stack_offset-8192, page_directory);
+    map_memory(8192, (u32) stack_offset-8192, process->page_directory);
     u32 base_stack = (u32) stack_offset-8192;
+    process->base_stack = base_stack;
 
     /* ARGUMENTS PASSING */
-    pd_switch(page_directory);
+    pd_switch(process->page_directory);
     
     int i;
     char** uparam = (char**) kmalloc(sizeof(char*) * ((u32) argc));
@@ -93,53 +189,6 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     pd_switch(current_process->page_directory);
     /* ARGUMENTS PASSED */
 
-    process_t* tr = 
-    #ifdef MEMLEAK_DBG
-    kmalloc(sizeof(process_t), "process struct");
-    #else
-    kmalloc(sizeof(process_t));
-    #endif
-
-    tr->data_loc = data_loc;
-    tr->data_size = data_size;
-
-    tr->base_stack = base_stack;
-
-    //set default registers to 0
-    tr->gregs.eax = 0;
-    tr->gregs.ebx = 0;
-    tr->gregs.ecx = 0;
-    tr->gregs.edx = 0;
-    tr->gregs.esi = 0;
-    tr->gregs.edi = 0;
-    tr->ebp = 0;
-    
-    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
-
-    //set default segment registers
-    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
-    tr->sregs.cs = 0x1B;
-
-    tr->eip = (u32) code_offset;
-    tr->esp = (u32) stack_offset;
-
-    //set process page directory (the one we just allocated)
-    tr->page_directory = page_directory;
-
-    //set process tty, depending on argument
-    tr->tty = tty;
-
-    //init process file array
-    tr->files_size = 5;
-    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
-
-    //init stdin, stdout, stderr
-    fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
-    tr->files[0] = std; //stdin
-    tr->files[1] = std; //stdout
-    tr->files[2] = std; //stderr
-    tr->files_count = 3;
-
     //set process heap
     //for now we decide that the last mem segment will be the start of the heap (cause it's easier and i'm lazy)
     list_entry_t* ptr = data_loc;
@@ -149,56 +198,13 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
         ptr = ptr->next;
         dsize--;
     }
-    tr->heap_addr = ((u32*)ptr->element)[0]+((u32*)ptr->element)[1];
-    tr->heap_size = 0;
+    process->heap_addr = ((u32*)ptr->element)[0]+((u32*)ptr->element)[1];
+    process->heap_size = 0;
 
-    //process kernel stack
-    void* kstack = 
-    #ifdef MEMLEAK_DBG
-    kmalloc(8192, "process kernel stack");
-    #else
-    kmalloc(8192);
-    #endif
-    tr->kesp = ((u32) kstack) + 8192;
+    process->esp = (u32) stack_offset;
+    process->eip = (u32) code_offset;
 
-    tr->base_kstack = (u32) kstack;
-
-    tr->status = PROCESS_STATUS_INIT;
-
-    //register process in process list
-    tr->pid = PROCESS_INVALID_PID;
-    int j = 1; // pid 0 is reserved
-    for(;j<(int) processes_size;j++)
-    {
-        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
-    }
-
-    if(tr->pid == PROCESS_INVALID_PID)
-    {
-        processes_size*=2;
-        processes = krealloc(processes, processes_size);
-        processes[j+1] = tr; tr->pid = (j+1);
-    }
-
-    //register as children of current process
-    if(current_process && current_process != kernel_process)
-    {
-        list_entry_t** child = &current_process->children;
-        while(*(child)) if((*child)->next) child = &(*child)->next;
-        (*child) = kmalloc(sizeof(list_entry_t));
-        (*child)->element = current_process;
-        (*child)->next = 0;
-    }
-    tr->parent = current_process;
-
-    //register default signals handler
-    memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
-    //set sighandler to 0
-    memset(&tr->sighandler, 0, sizeof(sighandler_t));
-    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
-    tr->sighandler.sregs.cs = 0x1B;
-
-    return tr;
+    return ERROR_NONE;
 }
 
 void exit_process(process_t* process)
@@ -258,24 +264,29 @@ u32 sbrk(process_t* process, u32 incr)
     return process->heap_addr+process->heap_size;
 }
 
-process_t* fork(process_t* process)
+process_t* fork(process_t* old_process)
 {
-    //copy from original process
-    process_t* tr = kmalloc(sizeof(process_t));
-    memcpy(tr, process, sizeof(process_t));
+    process_t* tr = init_process();
 
-    //set status to init
-    tr->status = PROCESS_STATUS_INIT;
+    //copy registers from old process
+    memcpy(tr, old_process, sizeof(g_regs_t) + sizeof(s_regs_t) + sizeof(u32)*4);
+
+    //TODO : get own copy of data_loc
+    tr->data_loc = old_process->data_loc;
+    tr->data_size = old_process->data_size;
+    tr->heap_addr = old_process->heap_addr;
+    tr->heap_size = old_process->heap_size;
+    tr->tty = old_process->tty;
+
+    //copy signal handlers
+    memcpy(tr->signal_handlers, old_process->signal_handlers, NSIG*sizeof(void*));
 
     //get own adress space
-    u32* page_directory = copy_adress_space(process->page_directory);
+    u32* page_directory = copy_adress_space(old_process->page_directory);
     tr->page_directory = page_directory;
 
-    //get own kernel stack
-    void* kstack = kmalloc(8192);
-    tr->kesp = ((u32) kstack) + 8192;
-    tr->base_kstack = (u32) kstack;
-    memcpy(kstack, (void*) process->base_kstack, 8192);
+    //copy kernel stack
+    memcpy((void*) tr->base_kstack, (void*) old_process->base_kstack, 8192);
 
     //set registers to match current status (kernel space)
     tr->sregs.cs = 0x08;
@@ -283,47 +294,17 @@ process_t* fork(process_t* process)
     //note: we will restore ESP later, because we cant know it there
 
     //get own copies of file_descriptors
-    tr->files = kmalloc(process->files_size*sizeof(fd_t));
+    tr->files = kmalloc(old_process->files_size*sizeof(fd_t));
     u32 i = 0;
-    for(;i<process->files_size;i++)
+    for(;i<old_process->files_size;i++)
     {
-        fd_t* tocopy = process->files[i];
+        fd_t* tocopy = old_process->files[i];
         if(!tocopy) continue;
         
         fd_t* toadd = kmalloc(sizeof(fd_t));
         memcpy(toadd, tocopy, sizeof(fd_t));
         tr->files[i] = toadd;
     }
-
-    //get own pid / register in the process list
-    tr->pid = PROCESS_INVALID_PID;
-
-    int j = 1; // pid 0 is reserved
-    for(;j<(int) processes_size;j++)
-    {
-        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
-    }
-
-    if(tr->pid == PROCESS_INVALID_PID)
-    {
-        processes_size*=2;
-        processes = krealloc(processes, processes_size);
-        processes[j+1] = tr; tr->pid = (j+1);
-    }
-
-    //register as children of current process
-    if(current_process && current_process != kernel_process)
-    {
-        list_entry_t** child = &current_process->children;
-        while(*(child)) if((*child)->next) child = &(*child)->next;
-        (*child) = kmalloc(sizeof(list_entry_t));
-        (*child)->element = current_process;
-        (*child)->next = 0;
-    }
-    tr->parent = current_process;
-
-    //clear pending signals
-    memset(&tr->sighandler, 0, sizeof(sighandler_t));
 
     return tr;
 }

@@ -92,6 +92,7 @@ typedef struct PROCESS
 
 void process_init();
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
+error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv);
 void exit_process(process_t* process);
 u32 sbrk(process_t* process, u32 incr);
 process_t* fork(process_t* process);
