@@ -16,7 +16,7 @@ If you want to compile the kernel or to contribute, you're welcome.
 All i need now is to fix all the bugs so if you want to provide patches or bug reports, feel free.
 For now there is no binary distribution, but the kernel is easy to compile.
 You can look at my makefile (which is ugly and basic) to see all the tools that you need.
-Basically, you just need to have gcc 5.4 with some flags or i386-elf-gcc 5.4. (i'm trying to switch to gcc 7.2)
+Basically, you just need to have gcc 7.2 with some flags or i386-elf-gcc 7.2. (i'm trying to switch from gcc 5.4)
 You can try to compile it with another gcc version but you might get compile warning or bugs.
 
 Source code organization:
@@ -28,12 +28,12 @@ Source code organization:
 /io		Contains I/O structures/tty implementations
 /memory		Contains paging, heap/page heap, physical and virtual memory manager
 /storage	Contains block devices drivers (ATA/ATAPI)
-/sync   Contains synchronization primitives (mutex)
+/sync	Contains synchronization primitives (mutex)
 /tasking	Contains scheduler, processes, elf parser and system calls
 /time		Contains time (clock) layer (CMOS only for now)
 /util		Contains data structures, string/standard functions and type definition
 /video		Contains video drivers (vga_text only for now)
 ckernel.c	Kernel C entry point (kmain())
 loader.s	Kernel ASM entry point (loads the kernel in higher half and call kmain())
-multiboot.h Multiboot standard structures
-system.h    Define/include system functions, informations about kernel, inb/outb...
+multiboot.h	Multiboot standard structures
+system.h	Define/include system functions, informations about kernel, inb/outb...
