@@ -77,6 +77,7 @@ typedef struct PROCESS
     u32 files_count;
     //pid
     int pid;
+    int gid;
     u32 status;
     list_entry_t* children;
     struct PROCESS* parent;

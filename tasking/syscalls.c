@@ -77,7 +77,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //2:Syscall CLOSE
         case 2:
         {
-            if((ebx >= 3) && (current_process->files_count >= ebx) && (current_process->files[ebx]))
+            if((ebx >= 3) && (current_process->files_size >= ebx) && (current_process->files[ebx]))
             {
                 close_file(current_process->files[ebx]);
                 current_process->files[ebx] = 0;
@@ -88,7 +88,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //3:Syscall READ
         case 3:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             
             u32 counttr = (u32) current_process->files[ebx]->offset;
@@ -100,7 +100,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //4:Syscall WRITE
         case 4:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             u32 counttr = (u32) current_process->files[ebx]->offset;
             error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
@@ -145,7 +145,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //8:Syscall SEEK
         case 8:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $1, %eax"); return;}
             u32 offset = ecx;
             u32 whence = edx;
             if(whence == 0) current_process->files[ebx]->offset = offset; //SEEK_SET
@@ -158,7 +158,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //9:Syscall STAT
         case 9:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             fsnode_t* file = current_process->files[ebx]->file;
             
@@ -183,7 +183,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //11:Syscall EXEC
         case 11:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
 
             //TODO : UNMAP OLD PROCESS MEMORY !! (but no, what if we fail loading...)
@@ -207,17 +207,26 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             asm("mov %0, %%eax"::"g"(tr):"%esp", "%eax");
             return;
         }
-        //16:Syscall SETWDIR
+        //16:Syscall SETPINFO
         case 16:
         {
-            if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
-            char* newdir = (char*) ebx;
-            u32 len = strlen(newdir); if(len >= 99) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
-            fd_t* t = open_file(newdir, 0);
-            if(!t) {asm("mov %0, %%eax"::"N"(ERROR_FILE_NOT_FOUND)); break;}
-            close_file(t);
-            strncpy(current_process->current_dir, newdir, len);
-            *(current_process->current_dir+len) = 0;
+            if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
+            switch(ebx)
+            {
+                //WORKING DIRECTORY
+                case 3:
+                {
+                    char* newdir = (char*) ecx;
+                    u32 len = strlen(newdir); if(len >= 99) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+                    fd_t* t = open_file(newdir, 0);
+                    if(!t) {asm("mov %0, %%eax"::"N"(ERROR_FILE_NOT_FOUND)); return;}
+                    close_file(t);
+                    strncpy(current_process->current_dir, newdir, len);
+                    *(current_process->current_dir+len) = 0;
+                    break;
+                }
+                default: {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
+            }
             asm("mov %0, %%eax"::"N"(ERROR_NONE));
             break;
         }
@@ -234,10 +243,15 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); break;}
             switch(ebx)
             {
+                //PID
                 case 1: {*((int*)ecx) = current_process->pid; break;}
+                //PPID
                 case 2: {if(current_process->parent) *((int*)ecx) = current_process->parent->pid; else *((int*)ecx) = -1; break;}
+                //WORKING DIRECTORY
                 case 3: {strcpy((char*) ecx, current_process->current_dir); break;}
-                default: asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;
+                //GID
+                case 4: {*((int*)ecx) = current_process->gid; break;}
+                default: {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             }
 
             asm("mov %0, %%eax"::"N"(ERROR_NONE));
@@ -279,7 +293,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //23:Syscall ISATTY
         case 23:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %eax"); return;}
             fsnode_t* file = current_process->files[ebx]->file;
 
             if((file == tty1->pointer) | (file == tty2->pointer) | (file == tty3->pointer)) 
@@ -352,7 +366,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //36:Syscall DUP
         case 36:
         {
-            if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax"::); return;}
+            if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax"::); return;}
 
             fd_t* oldf = current_process->files[ebx];
             int new = 0;
@@ -360,7 +374,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
             {
                 if(ecx < 3) {asm("mov $0, %%eax"::); return;}
 
-                while(current_process->files_count < ecx)
+                while(current_process->files_size < ecx)
                 {
                     current_process->files_size*=2; 
                     current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t)); 

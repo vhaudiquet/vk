@@ -34,58 +34,17 @@ process_t* idle_process = 0;
 
 static process_t* init_process();
 
+/* init the process layer (called by kmain()) */
 void process_init()
 {
     processes_size = PROCESSES_ARRAY_SIZE;
-    processes = kmalloc(processes_size);
-    memset(processes, 0, processes_size);
+    processes = kmalloc(processes_size*sizeof(process_t*));
+    memset(processes, 0, processes_size*sizeof(process_t*));
+
     init_signals();
 }
 
-static process_t* init_process()
-{
-    process_t* tr = kmalloc(sizeof(process_t));
-    tr->status = PROCESS_STATUS_INIT;
-
-    //process kernel stack
-    void* kstack = kmalloc(8192);
-    tr->kesp = ((u32) kstack) + 8192;
-    tr->base_kstack = (u32) kstack;
-
-    //register process in process list
-    tr->pid = PROCESS_INVALID_PID;
-    int j = 1; // pid 0 is reserved
-    for(;j<(int) processes_size;j++)
-    {
-        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
-    }
-
-    if(tr->pid == PROCESS_INVALID_PID)
-    {
-        processes_size*=2;
-        processes = krealloc(processes, processes_size);
-        processes[j+1] = tr; tr->pid = (j+1);
-    }
-
-    //register as children of current process
-    if(current_process && current_process != kernel_process)
-    {
-        list_entry_t** child = &current_process->children;
-        while(*(child)) if((*child)->next) child = &(*child)->next;
-        (*child) = kmalloc(sizeof(list_entry_t));
-        (*child)->element = current_process;
-        (*child)->next = 0;
-    }
-    tr->parent = current_process;
-
-    //set sighandler to 0
-    memset(&tr->sighandler, 0, sizeof(sighandler_t));
-    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
-    tr->sighandler.sregs.cs = 0x1B;
-
-    return tr;
-}
-
+/* create a new process (used to spawn init) */
 process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
 {
     process_t* tr = init_process();
@@ -136,6 +95,7 @@ process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
     return tr;
 }
 
+/* load an elf executable to 'process' memory */
 error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv)
 {
     //check if the file is really an ELF executable
@@ -212,6 +172,7 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     return ERROR_NONE;
 }
 
+/* exit a process and remove it from list */
 void exit_process(process_t* process)
 {
     //remove process from schedulers
@@ -233,11 +194,20 @@ void exit_process(process_t* process)
     }
     list_free(dloc, process->data_size);
 
-    //free process's kernel stack
+    //free process file descriptors
+    for(i=0;i<process->files_size;i++)
+    {
+        if(process->files[i]) close_file(process->files[i]);
+    }
+
+    //free process kernel stack
     kfree((void*) process->base_kstack);
 
-    //free process's page directory
+    //free process page directory
     pt_free(process->page_directory);
+
+    //send SIGCHLD to parent
+    send_signal(process->parent->pid, SIGCHLD);
 
     //free process children list
     list_entry_t* cptr = process->children;
@@ -258,6 +228,7 @@ void exit_process(process_t* process)
     kfree(process);
 }
 
+/* expands process allocated memory (heap) */
 u32 sbrk(process_t* process, u32 incr)
 {
     u32 new_last_addr = process->heap_addr+process->heap_size+incr;
@@ -315,6 +286,57 @@ process_t* fork(process_t* old_process)
 
     return tr;
 }
+
+/* init a basic process_t, registering it in process list, and setting base signals */
+static process_t* init_process()
+{
+    process_t* tr = kmalloc(sizeof(process_t));
+    tr->status = PROCESS_STATUS_INIT;
+
+    //process kernel stack
+    void* kstack = kmalloc(8192);
+    tr->kesp = ((u32) kstack) + 8192;
+    tr->base_kstack = (u32) kstack;
+
+    //register process in process list
+    tr->pid = PROCESS_INVALID_PID;
+    int j = 1; // pid 0 is reserved
+    for(;j<(int) processes_size;j++)
+    {
+        if(!processes[j]) {processes[j] = tr; tr->pid = j; break;}
+    }
+
+    if(tr->pid == PROCESS_INVALID_PID)
+    {
+        processes_size*=2;
+        processes = krealloc(processes, processes_size*sizeof(process_t*));
+        processes[j+1] = tr; tr->pid = (j+1);
+    }
+
+    //register process in a group
+    if(current_process && current_process != kernel_process) tr->gid = current_process->gid;
+    else tr->gid = 1;
+
+    //register as children of current process
+    if(current_process && current_process != kernel_process)
+    {
+        list_entry_t** child = &current_process->children;
+        while(*(child)) if((*child)->next) child = &(*child)->next;
+        (*child) = kmalloc(sizeof(list_entry_t));
+        (*child)->element = current_process;
+        (*child)->next = 0;
+    }
+    tr->parent = current_process;
+
+    //set sighandler to 0
+    memset(&tr->sighandler, 0, sizeof(sighandler_t));
+    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
+    tr->sighandler.sregs.cs = 0x1B;
+
+    return tr;
+}
+
+/* KERNEL and IDLE processes */
 
 extern void idle_loop();
 asm(".global idle_loop\n \
