@@ -107,7 +107,7 @@ file_system_t* fat32fs_init(block_device_t* drive, u8 partition)
 
 	fat32_dir_entry_t root_dirent;
 	root_dirent.first_cluster_low = bpb->root_directory_cluster & 0xFFFF;
-	root_dirent.first_cluster_high = (u16) bpb->root_directory_cluster >> 16;
+	root_dirent.first_cluster_high = (u16) (bpb->root_directory_cluster >> 16);
 	tr->root_dir = fat32_dirent_normalize_cache(&root_dirent, 0, tr);
 
 	//returing the fat32 fs struct, setup done

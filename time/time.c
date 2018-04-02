@@ -105,17 +105,17 @@ time_t convert_to_std_time(u8 seconds, u8 minutes, u8 hours, u8 day, u8 month, u
 
     switch(month) 
     {
-		case 11: tr += 30*86400;
-		case 10: tr += 31*86400;
-		case 9: tr += 30*86400;
-		case 8: tr += 31*86400;
-		case 7: tr += 31*86400;
-		case 6: tr += 30*86400;
-		case 5: tr += 31*86400;
-		case 4: tr += 30*86400;
-		case 3: tr += 31*86400;
-		case 2: tr += 28*86400; if ((year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0))) tr += 86400;
-		case 1: tr += 31*86400;
+		case 11: tr += 30*86400; __attribute__ ((fallthrough));
+		case 10: tr += 31*86400; __attribute__ ((fallthrough));
+		case 9: tr += 30*86400; __attribute__ ((fallthrough));
+		case 8: tr += 31*86400; __attribute__ ((fallthrough));
+		case 7: tr += 31*86400; __attribute__ ((fallthrough));
+		case 6: tr += 30*86400; __attribute__ ((fallthrough));
+		case 5: tr += 31*86400; __attribute__ ((fallthrough));
+		case 4: tr += 30*86400; __attribute__ ((fallthrough));
+		case 3: tr += 31*86400; __attribute__ ((fallthrough));
+		case 2: tr += 28*86400; if ((year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0))) tr += 86400; __attribute__ ((fallthrough));
+		case 1: tr += 31*86400; __attribute__ ((fallthrough));
 		default: break;
 	}
 

@@ -9,7 +9,15 @@ I want to get ACPI support, at least for ACPI shutdown but also to use things li
 
 I already ported Newlib and made my custom (i386-vk-*) toolchain ; i have successfully compiled and executed simple programs like hello world, and tested scanf()/getc().. and everything worked.
 I'm now trying to port real software but for that i'll have to update the process layer to support all posix things (signals, ...).
-After that i'll add missing newlib syscalls/functions and i'll be able to port dash/bash (i'm currently missing ~50 functions).
+I currently have a port of dash that i use to debug the kernel (because i can't really do anything with it for now).
+Once i get dash to run well, i'll fix cpu exception handling and release the kernel as 0.1-alpha.
+
+If you want to compile the kernel or to contribute, you're welcome.
+All i need now is to fix all the bugs so if you want to provide patches or bug reports, feel free.
+For now there is no binary distribution, but the kernel is easy to compile.
+You can look at my makefile (which is ugly and basic) to see all the tools that you need.
+Basically, you just need to have gcc 5.4 with some flags or i386-elf-gcc 5.4. (i'm trying to switch to gcc 7.2)
+You can try to compile it with another gcc version but you might get compile warning or bugs.
 
 Source code organization:
 /cpu		Contains code to detect cpu features, set up GDT/IDT, and handle interrupts
@@ -20,9 +28,12 @@ Source code organization:
 /io		Contains I/O structures/tty implementations
 /memory		Contains paging, heap/page heap, physical and virtual memory manager
 /storage	Contains block devices drivers (ATA/ATAPI)
+/sync   Contains synchronization primitives (mutex)
 /tasking	Contains scheduler, processes, elf parser and system calls
 /time		Contains time (clock) layer (CMOS only for now)
 /util		Contains data structures, string/standard functions and type definition
 /video		Contains video drivers (vga_text only for now)
 ckernel.c	Kernel C entry point (kmain())
 loader.s	Kernel ASM entry point (loads the kernel in higher half and call kmain())
+multiboot.h Multiboot standard structures
+system.h    Define/include system functions, informations about kernel, inb/outb...
