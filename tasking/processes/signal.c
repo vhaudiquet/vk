@@ -15,7 +15,7 @@
     along with VK.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "task.h"
+#include "tasking/task.h"
 #include "sync/sync.h"
 
 static void handle_signal(process_t* process, int sig);
@@ -104,7 +104,7 @@ static void handle_signal(process_t* process, int sig)
         process->sighandler.esp = process->esp - 0x10;
         
         pd_switch(process->page_directory);
-        u32 size = (u32) ((uintptr_t)sighandler_end-(uintptr_t)sighandler_end_end);
+        u32 size = (u32) ((uintptr_t)sighandler_end_end-(uintptr_t)sighandler_end);
         memcpy((u32*) process->sighandler.esp-size, sighandler_end, size);
         *((u32*) process->sighandler.esp - size - 0x4) = process->sighandler.esp - size;
         *((int32_t*) process->sighandler.esp - size - 0x8) = sig;

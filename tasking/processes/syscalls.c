@@ -16,7 +16,7 @@
 */
 
 #include "system.h"
-#include "task.h"
+#include "tasking/task.h"
 #include "video/video.h"
 #include "memory/mem.h"
 

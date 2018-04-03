@@ -158,35 +158,17 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     ttys_init();
 
     //reading /sys/init
+    kprintf("Opening /sys/init...");
     fd_t* init_file = open_file("/sys/init", OPEN_MODE_R);
-    if(!init_file) fatal_kernel_error("Could not open init file.", "INIT_RUN");
-    char* init_buffer =
-    #ifdef MEMLEAK_DBG
-    kmalloc((u32) flength(init_file)+1, "init file buffer");
-    #else
-    kmalloc((u32) flength(init_file)+1);
-    #endif
-    memset(init_buffer, 0, (size_t) flength(init_file)+1);
-    error_t readop0 = read_file(init_file, init_buffer, flength(init_file));
-    if(readop0 != ERROR_NONE) readop0 = read_file(init_file, init_buffer, flength(init_file));
-    if(readop0 != ERROR_NONE) readop0 = read_file(init_file, init_buffer, flength(init_file));
-    if(readop0 != ERROR_NONE) fatal_kernel_error("Could not read init file.", "INIT_RUN");
-    init_buffer[flength(init_file)-1] = 0;
+    if(!init_file) fatal_kernel_error("Could not open init.", "INIT_RUN");
 
-    kprintf("INIT: Opening %s...", init_buffer);
-    fd_t* elf_task = open_file(init_buffer, OPEN_MODE_R);
-    if(!elf_task) {vga_text_failmsg(); fatal_kernel_error("Could not open init process file", "INIT_RUN");}
-
-    //create init process in tty1
-    process_t* init_process = create_process(elf_task, 0, 0, tty1);
-    if(!init_process) init_process = create_process(elf_task, 0, 0, tty1);
-    if(!init_process) init_process = create_process(elf_task, 0, 0, tty1);
+    //create init process
+    process_t* init_process = create_process(init_file, 0, 0, 0);
+    if(!init_process) init_process = create_process(init_file, 0, 0, 0);
+    if(!init_process) init_process = create_process(init_file, 0, 0, 0);
     if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
     else vga_text_okmsg();
 
-    close_file(elf_task);
-
-    kfree(init_buffer);
     close_file(init_file);
 
     //switching video output to tty1

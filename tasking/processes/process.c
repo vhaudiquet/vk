@@ -16,7 +16,7 @@
 */
 
 #include "system.h"
-#include "task.h"
+#include "tasking/task.h"
 #include "filesystem/fs.h"
 #include "memory/mem.h"
 #include "cpu/cpu.h"

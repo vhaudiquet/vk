@@ -21,7 +21,7 @@
 #include "system.h"
 #include "filesystem/fs.h"
 #include "io/io.h"
-#include "signal.h"
+#include "processes/signal.h"
 
 //ELF loading
 error_t elf_check(fd_t* file);

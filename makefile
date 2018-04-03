@@ -79,7 +79,7 @@ kernel: asmobjects objects
 asmobjects: 
 	$(AS) $(AFLAGS) loader.s -o kernel.o
 	$(AS) $(AFLAGS) cpu/isr.s -o isr.o
-	$(AS) $(AFLAGS) tasking/scheduler.s -o asm_scheduler.o
+	$(AS) $(AFLAGS) tasking/scheduler/scheduler.s -o asm_scheduler.o
 	$(AS) $(AFLAGS) sync/mutex.s -o mutex.o
 
 objects:
