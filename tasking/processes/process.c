@@ -21,10 +21,6 @@
 #include "memory/mem.h"
 #include "cpu/cpu.h"
 
-/*
-* Implementation of PROCESS, used by the scheduler
-*/
-
 #define PROCESSES_ARRAY_SIZE 20
 process_t** processes = 0;
 u32 processes_size = 0;
@@ -37,62 +33,19 @@ static process_t* init_process();
 /* init the process layer (called by kmain()) */
 void process_init()
 {
+    kprintf("Initializing process layer...");
+    
     processes_size = PROCESSES_ARRAY_SIZE;
     processes = kmalloc(processes_size*sizeof(process_t*));
     memset(processes, 0, processes_size*sizeof(process_t*));
 
     init_signals();
-}
 
-/* create a new process (used to spawn init) */
-process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty)
-{
-    process_t* tr = init_process();
+    scheduler_init(); //Init scheduler
+    init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
+    init_idle_process(); //Add idle_process to the queue, so that if there is no process the kernel don't crash
 
-    u32* page_directory = get_kernel_pd_clone();
-    //set process page directory (the one we just allocated)
-    tr->page_directory = page_directory;
-
-    //load ELF executable
-    if(load_executable(tr, executable, argc, argv) != ERROR_NONE) return 0;
-
-    //set default registers to 0
-    tr->gregs.eax = 0;
-    tr->gregs.ebx = 0;
-    tr->gregs.ecx = 0;
-    tr->gregs.edx = 0;
-    tr->gregs.esi = 0;
-    tr->gregs.edi = 0;
-    tr->ebp = 0;
-    
-    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
-
-    //set default segment registers
-    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
-    tr->sregs.cs = 0x1B;
-
-    //set process tty, depending on argument
-    tr->tty = tty;
-
-    //init process file array
-    tr->files_size = 5;
-    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
-
-    //init stdin, stdout, stderr
-    fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
-    tr->files[0] = std; //stdin
-    tr->files[1] = std; //stdout
-    tr->files[2] = std; //stderr
-    tr->files_count = 3;
-
-    //register default signals handler
-    memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
-
-    //set current dir
-    strcpy(tr->current_dir, "/home");
-    *(tr->current_dir+5) = 0;
-
-    return tr;
+    vga_text_okmsg();
 }
 
 /* load an elf executable to 'process' memory */
@@ -172,8 +125,8 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     return ERROR_NONE;
 }
 
-/* exit a process and remove it from list */
-void exit_process(process_t* process)
+/* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
+void exit_process(process_t* process, u32 exitcode)
 {
     //remove process from schedulers
     scheduler_remove_process(process);
@@ -214,18 +167,22 @@ void exit_process(process_t* process)
     while(cptr)
     {
         process_t* cp = cptr->element;   
-        cp->parent = 0;
+        cp->parent = processes[1]; //all children processes get attached to INIT
 
         list_entry_t* tf = cptr;
         cptr = cptr->next;
         kfree(tf);
     }
 
-    //remove process from array
+    /* if parent did not call wait, set SIGCHLD to SIG_IGN, and has SA_NOCLDWAIT */
+    //remove process from arrayEXIT_CONDITION_SIGNAL
     processes[process->pid] = 0;
 
     //free process struct
     kfree(process);
+
+    /* else we put retcode in EAX and the process is zombie */
+    process->gregs.eax = exitcode;
 }
 
 /* expands process allocated memory (heap) */
@@ -336,7 +293,67 @@ static process_t* init_process()
     return tr;
 }
 
-/* KERNEL and IDLE processes */
+/* INIT, KERNEL and IDLE processes */
+
+error_t spawn_init_process()
+{
+    //open init file
+    fd_t* init_file = open_file("/sys/init", OPEN_MODE_R);
+    if(!init_file) return ERROR_FILE_NOT_FOUND;
+
+    process_t* tr = init_process();
+
+    //allocate page directory
+    u32* page_directory = get_kernel_pd_clone();
+    tr->page_directory = page_directory;
+
+    //load ELF executable
+    error_t elf = load_executable(tr, init_file, 0, 0);
+
+    //close init file
+    close_file(init_file);
+
+    if(elf != ERROR_NONE) return elf;
+
+    //set default registers to 0
+    tr->gregs.eax = 0;
+    tr->gregs.ebx = 0;
+    tr->gregs.ecx = 0;
+    tr->gregs.edx = 0;
+    tr->gregs.esi = 0;
+    tr->gregs.edi = 0;
+    tr->ebp = 0;
+    
+    //set flags (just copy from current flags)
+    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
+
+    //set default segment registers
+    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
+    tr->sregs.cs = 0x1B;
+
+    //init process file array
+    tr->files_size = 5;
+    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
+
+    //init stdin, stdout, stderr
+    //fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
+    //tr->files[0] = std; //stdin
+    //tr->files[1] = std; //stdout
+    //tr->files[2] = std; //stderr
+    //tr->files_count = 3;
+
+    //register default signals handler
+    memset(tr->signal_handlers, 0, NSIG*sizeof(void*));
+
+    //set current dir
+    strcpy(tr->current_dir, "/home");
+    *(tr->current_dir+5) = 0;
+
+    //add process to scheduler
+    scheduler_add_process(tr);
+
+    return ERROR_NONE;
+}
 
 extern void idle_loop();
 asm(".global idle_loop\n \

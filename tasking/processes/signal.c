@@ -77,7 +77,7 @@ static void handle_signal(process_t* process, int sig)
     {
         if(default_action[sig] == 1)
         {
-            exit_process(process);
+            exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
         }
         else if(default_action[sig] == 2) return;
         else if(default_action[sig] == 3)

@@ -61,9 +61,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     install_block_devices(); //Setup block devices (ATA, ATAPI,...)
 
     process_init(); //Init process array
-    scheduler_init(); //Init scheduler
-    init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
-    init_idle_process(); //Add idle_process to the queue, so that if there is no process the kernel don't crash
     scheduler_start();
 
     //DEBUG : printing kernel stack bottom / top ; code start/end
@@ -157,24 +154,16 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //initializing ttys
     ttys_init();
 
-    //reading /sys/init
-    kprintf("Opening /sys/init...");
-    fd_t* init_file = open_file("/sys/init", OPEN_MODE_R);
-    if(!init_file) fatal_kernel_error("Could not open init.", "INIT_RUN");
-
     //create init process
-    process_t* init_process = create_process(init_file, 0, 0, 0);
-    if(!init_process) init_process = create_process(init_file, 0, 0, 0);
-    if(!init_process) init_process = create_process(init_file, 0, 0, 0);
-    if(!init_process) fatal_kernel_error("Could not create init process", "INIT_RUN");
-    else vga_text_okmsg();
-
-    close_file(init_file);
+    error_t init = spawn_init_process();
+    if(init != ERROR_NONE)
+    {
+        kprintf("%lCould not run init process : %d\n", 2, init);
+        fatal_kernel_error("Could not run init", "INIT_RUN");
+    }
 
     //switching video output to tty1
     vga_text_tty_switch(current_tty);
-
-    scheduler_add_process(init_process);
 
     scheduler_remove_process(kernel_process);
 

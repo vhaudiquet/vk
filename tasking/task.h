@@ -93,10 +93,13 @@ typedef struct PROCESS
 #define PROCESS_KERNEL_PID -2
 #define PROCESS_IDLE_PID -3
 
+#define EXIT_CONDITION_USER ((u32)(1 << 8))
+#define EXIT_CONDITION_SIGNAL ((u32)(2 << 8))
+
 void process_init();
-process_t* create_process(fd_t* executable, int argc, char** argv, tty_t* tty);
+error_t spawn_init_process();
 error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv);
-void exit_process(process_t* process);
+void exit_process(process_t* process, u32 exitcode);
 u32 sbrk(process_t* process, u32 incr);
 process_t* fork(process_t* process);
 

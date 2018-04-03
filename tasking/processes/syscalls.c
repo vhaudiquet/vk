@@ -197,7 +197,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
         //12:Syscall EXIT
         case 12:
         {
-            exit_process(current_process);
+            exit_process(current_process, EXIT_CONDITION_USER | ((u8) ebx));
             break;
         }
         //13:Syscall FORK
