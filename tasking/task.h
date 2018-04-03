@@ -36,18 +36,19 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 #define PROCESS_STATUS_ZOMBIE 10
 
 //Process groups and sessions
-typedef struct pgroup
-{
-    int gid;
-    list_entry_t* processes;
-} pgroup_t;
-
 typedef struct psession
 {
     int sid;
     list_entry_t* groups;
     tty_t controlling_tty;
 } psession_t;
+
+typedef struct pgroup
+{
+    int gid;
+    list_entry_t* processes;
+    psession_t* session;
+} pgroup_t;
 
 //Signals
 typedef struct SIGHANDLER
@@ -97,6 +98,7 @@ typedef struct PROCESS
     //pid
     int pid;
     pgroup_t* group;
+    psession_t* session;
     u32 status;
     list_entry_t* children;
     struct PROCESS* parent;

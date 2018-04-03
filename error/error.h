@@ -49,6 +49,8 @@ typedef u32 error_t;
 #define ERROR_WRONG_INSTRUCTION_SET 24 //the elf file is not using good instruction set
 #define ERROR_INVALID_PID 25 //the pid was invalid (not assigned to a process)
 #define ERROR_INVALID_SIGNAL 26 //the signal number was invalid (not assigned to any signal)
+#define ERROR_IS_SESSION_LEADER 27 //the process is a session leader
+#define ERROR_IS_ANOTHER_SESSION 28 //the group is in another session
 //sync errors
 #define ERROR_MUTEX_ALREADY_LOCKED 31 //trying to lock a mutex already locked
 #define ERROR_MUTEX_OWNED_BY_OTHER 32 //trying to unlock a mutex that you don't own

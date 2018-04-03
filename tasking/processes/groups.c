@@ -22,8 +22,6 @@ pgroup_t* groups = 0;
 u32 groups_number = 0;
 u32 groups_size = 0;
 
-static pgroup_t* process_addgroup(int gid, process_t* process);
-
 /*
 * Binary search on groups sorted array
 */
@@ -44,20 +42,15 @@ pgroup_t* get_group(int gid)
 }
 
 /*
-* Remove 'process' from his group and set it to the new group
+* Add 'process' to group 'gid', creating it if it doesnt exist, 
+* and remove it from his old group.
 */
 error_t process_setgroup(int gid, process_t* process)
 {
-    //TODO : check if process can join, remove from his origin group, ..
-    process_addgroup(gid, process);
-    return ERROR_NONE;
-}
+    //if process is session leader
+    if(((pgroup_t*)process->session->groups->element)->processes->element == process)
+    return ERROR_IS_SESSION_LEADER;
 
-/*
-* Add 'process' to group 'gid', creating it if it doesnt exist
-*/
-static pgroup_t* process_addgroup(int gid, process_t* process)
-{
     u32 start = 0, end = groups_number;
     u32 off = 0;
 
@@ -66,6 +59,8 @@ static pgroup_t* process_addgroup(int gid, process_t* process)
         off = ((start+end)/2);
         if(groups[off].gid == gid) 
         {
+            if(process->session != groups[off].session) return ERROR_IS_ANOTHER_SESSION;
+
             //adding process to the list
             list_entry_t** ptr = &groups[off].processes;
             while(*ptr) ptr = &((*ptr)->next);
@@ -73,7 +68,7 @@ static pgroup_t* process_addgroup(int gid, process_t* process)
             (*ptr)->next = 0;
             (*ptr)->element = process;
 
-            return &groups[off];
+            goto remove_from_group;
         }
         else if(groups[off].gid < gid) start = off+1;
         else if(groups[off].gid > gid) end = off-1;
@@ -87,6 +82,30 @@ static pgroup_t* process_addgroup(int gid, process_t* process)
     groups[off].processes = kmalloc(sizeof(list_entry_t));
     groups[off].processes->element = process;
     groups[off].processes->next = 0;
+    groups[off].session = process->session;
 
-    return &groups[off];
+    remove_from_group:
+    {
+        //remove process from old group process list
+        list_entry_t* ptr = process->group->processes;
+        list_entry_t* before = 0;
+        while(ptr)
+        {
+            if(ptr->element == process)
+            {
+                if(before) before->next = ptr->next;
+                else process->group->processes = 0;
+                kfree(ptr);
+                break;
+            }
+
+            before = ptr;
+            ptr = ptr->next;
+        }
+
+        //update process group ptr
+        process->group = &groups[off];
+
+        return ERROR_NONE;
+    }
 }

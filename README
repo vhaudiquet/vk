@@ -28,7 +28,7 @@ Source code organization:
 /io		Contains I/O structures/tty implementations
 /memory		Contains paging, heap/page heap, physical and virtual memory manager
 /storage	Contains block devices drivers (ATA/ATAPI)
-/sync	Contains synchronization primitives (mutex)
+/sync		Contains synchronization primitives (mutex)
 /tasking	Contains scheduler, processes, elf parser and system calls
 /time		Contains time (clock) layer (CMOS only for now)
 /util		Contains data structures, string/standard functions and type definition
