@@ -250,7 +250,7 @@ void syscall_global(u32 syscall_number, u32 ebx, u32 ecx, u32 edx)
                 //WORKING DIRECTORY
                 case 3: {strcpy((char*) ecx, current_process->current_dir); break;}
                 //GID
-                case 4: {*((int*)ecx) = current_process->gid; break;}
+                case 4: {*((int*)ecx) = current_process->group->gid; break;}
                 default: {asm("mov %0, %%eax"::"N"(UNKNOWN_ERROR)); return;}
             }
 

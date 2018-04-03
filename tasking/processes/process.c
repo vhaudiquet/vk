@@ -128,9 +128,6 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 /* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
 void exit_process(process_t* process, u32 exitcode)
 {
-    //remove process from schedulers
-    scheduler_remove_process(process);
-
     //mark physical memory reserved for process stack as free
     u32 stack_phys = get_physical(process->base_stack, process->page_directory);
     free_block(stack_phys);
@@ -153,8 +150,8 @@ void exit_process(process_t* process, u32 exitcode)
         if(process->files[i]) close_file(process->files[i]);
     }
 
-    //free process kernel stack
-    kfree((void*) process->base_kstack);
+    //swap process pd to kernel pd (in case of scheduling)
+    process->page_directory = kernel_page_directory;
 
     //free process page directory
     pt_free(process->page_directory);
@@ -174,15 +171,15 @@ void exit_process(process_t* process, u32 exitcode)
         kfree(tf);
     }
 
-    /* if parent did not call wait, set SIGCHLD to SIG_IGN, and has SA_NOCLDWAIT */
-    //remove process from arrayEXIT_CONDITION_SIGNAL
-    processes[process->pid] = 0;
-
-    //free process struct
-    kfree(process);
-
-    /* else we put retcode in EAX and the process is zombie */
+    /* we put retcode in EAX and the process is zombie */
+    process->status = PROCESS_STATUS_ZOMBIE;
     process->gregs.eax = exitcode;
+    
+    //free process kernel stack
+    kfree((void*) process->base_kstack);
+
+    //remove process from schedulers
+    scheduler_remove_process(process);
 }
 
 /* expands process allocated memory (heap) */
@@ -197,6 +194,7 @@ u32 sbrk(process_t* process, u32 incr)
     return process->heap_addr+process->heap_size;
 }
 
+/* create a new process by copying the current one */
 process_t* fork(process_t* old_process)
 {
     process_t* tr = init_process();
@@ -271,8 +269,8 @@ static process_t* init_process()
     }
 
     //register process in a group
-    if(current_process && current_process != kernel_process) tr->gid = current_process->gid;
-    else tr->gid = 1;
+    if(current_process && current_process != kernel_process) tr->group = current_process->group;
+    else tr->group = 0; //TODO : for now, init has no group
 
     //register as children of current process
     if(current_process && current_process != kernel_process)

@@ -33,7 +33,23 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 #define PROCESS_STATUS_ASLEEP_IRQ 3
 #define PROCESS_STATUS_ASLEEP_SIGNAL 4
 #define PROCESS_STATUS_ASLEEP_IO 5
+#define PROCESS_STATUS_ZOMBIE 10
 
+//Process groups and sessions
+typedef struct pgroup
+{
+    int gid;
+    list_entry_t* processes;
+} pgroup_t;
+
+typedef struct psession
+{
+    int sid;
+    list_entry_t* groups;
+    tty_t controlling_tty;
+} psession_t;
+
+//Signals
 typedef struct SIGHANDLER
 {
     u32 eip;
@@ -46,7 +62,10 @@ typedef struct SIGHANDLER
     u32 base_kstack;
 } sighandler_t;
 
-//Process
+void init_signals();
+void send_signal(int pid, int sig);
+
+//Processes
 typedef struct PROCESS
 {
     //registers (backed up every schedule)
@@ -77,7 +96,7 @@ typedef struct PROCESS
     u32 files_count;
     //pid
     int pid;
-    int gid;
+    pgroup_t* group;
     u32 status;
     list_entry_t* children;
     struct PROCESS* parent;
@@ -103,6 +122,9 @@ void exit_process(process_t* process, u32 exitcode);
 u32 sbrk(process_t* process, u32 incr);
 process_t* fork(process_t* process);
 
+pgroup_t* get_group(int gid);
+error_t process_setgroup(int gid, process_t* process);
+
 extern process_t** processes;
 extern u32 processes_size;
 
@@ -110,10 +132,6 @@ extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
 process_t* init_kernel_process();
-
-//SIGNALS
-void init_signals();
-void send_signal(int pid, int sig);
 
 //SCHEDULER
 extern bool scheduler_started;
@@ -133,7 +151,6 @@ void scheduler_remove_process(process_t* process);
 #define SLEEP_WAIT_MUTEX 4
 
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 sleep_data_2);
-void scheduler_sleep_update();
 void scheduler_irq_wakeup(u32 irq);
 
 #endif
