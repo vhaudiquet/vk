@@ -140,6 +140,7 @@ void exit_process(process_t* process, u32 exitcode)
     for(i=0;i<process->data_size;i++)
     {
         u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
+        aligndown(phys, 4096);
         free_block(phys);
         ptr = ptr->next;
     }
@@ -158,7 +159,7 @@ void exit_process(process_t* process, u32 exitcode)
     pt_free(process->page_directory);
 
     //send SIGCHLD to parent
-    send_signal(process->parent->pid, SIGCHLD);
+    if(process->parent) send_signal(process->parent->pid, SIGCHLD);
 
     //free process children list
     list_entry_t* cptr = process->children;
@@ -290,8 +291,11 @@ static process_t* init_process()
         (*child) = kmalloc(sizeof(list_entry_t));
         (*child)->element = current_process;
         (*child)->next = 0;
+        tr->parent = current_process;
     }
-    tr->parent = current_process;
+    else tr->parent = 0;
+
+    tr->children = 0;
 
     //set sighandler to 0
     memset(&tr->sighandler, 0, sizeof(sighandler_t));
@@ -337,6 +341,8 @@ error_t spawn_init_process()
     memcpy(groups, group, sizeof(pgroup_t));
     groups_number++;
     session->groups->element = group;
+    tr->group = group;
+    tr->session = session;
 
     //set default registers to 0
     tr->gregs.eax = 0;
@@ -357,13 +363,17 @@ error_t spawn_init_process()
     //init process file array
     tr->files_size = 5;
     tr->files = kmalloc(tr->files_size*sizeof(fd_t));
+    memset(tr->files, 0, sizeof(fd_t)*tr->files_size);
+
+    //set tty
+    tr->tty = tty1;
 
     //init stdin, stdout, stderr
-    //fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty->pointer;
-    //tr->files[0] = std; //stdin
-    //tr->files[1] = std; //stdout
-    //tr->files[2] = std; //stderr
-    //tr->files_count = 3;
+    fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty1->pointer;
+    tr->files[0] = std; //stdin
+    tr->files[1] = std; //stdout
+    tr->files[2] = std; //stderr
+    tr->files_count = 3;
 
     //register default signals handler
     memset(tr->signal_handlers, 0, NSIG*sizeof(void*));

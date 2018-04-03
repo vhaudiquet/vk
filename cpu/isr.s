@@ -143,8 +143,8 @@ isr_common:
     iret
 
 .global SYSCALL_H
+.extern system_calls
 SYSCALL_H:
-    # pusha
     push %ds
     push %es
     push %fs
@@ -152,9 +152,16 @@ SYSCALL_H:
     pushl %edx
     pushl %ecx
     pushl %ebx
-    pushl %eax
-    call syscall_global
-    add $0x10, %esp
+
+    push %ebx
+    movl $system_calls, %ebx
+    leal (%ebx, %eax, 4), %eax
+    mov (%eax), %eax
+    pop %ebx
+
+    call *%eax
+    add $0xC, %esp
+
     pop %gs
     pop %fs
     pop %es

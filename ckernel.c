@@ -154,6 +154,9 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     //initializing ttys
     ttys_init();
 
+    //switching video output to tty1
+    vga_text_tty_switch(current_tty);
+
     //create init process
     error_t init = spawn_init_process();
     if(init != ERROR_NONE)
@@ -161,9 +164,6 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         kprintf("%lCould not run init process : %d\n", 2, init);
         fatal_kernel_error("Could not run init", "INIT_RUN");
     }
-
-    //switching video output to tty1
-    vga_text_tty_switch(current_tty);
 
     scheduler_remove_process(kernel_process);
 
