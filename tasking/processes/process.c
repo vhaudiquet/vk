@@ -39,7 +39,8 @@ void process_init()
     processes = kmalloc(processes_size*sizeof(process_t*));
     memset(processes, 0, processes_size*sizeof(process_t*));
 
-    init_signals();
+    signals_init();
+    groups_init();
 
     scheduler_init(); //Init scheduler
     init_kernel_process(); //Add kernel process as current_process (kernel init is not done yet)
@@ -268,9 +269,18 @@ static process_t* init_process()
         processes[j+1] = tr; tr->pid = (j+1);
     }
 
-    //register process in a group
-    if(current_process && current_process != kernel_process) tr->group = current_process->group;
-    else tr->group = 0; //TODO : for now, init has no group
+    //register process in a group and session
+    if(current_process && current_process != kernel_process) 
+    {
+        tr->group = current_process->group; 
+         //add to the group list
+        list_entry_t** ptr = &tr->group->processes;
+        while(*ptr) ptr = &((*ptr)->next);
+        (*ptr) = kmalloc(sizeof(list_entry_t));
+        (*ptr)->next = 0;
+        (*ptr)->element = tr;
+        tr->session = current_process->session;
+    }
 
     //register as children of current process
     if(current_process && current_process != kernel_process)
@@ -312,6 +322,21 @@ error_t spawn_init_process()
     close_file(init_file);
 
     if(elf != ERROR_NONE) return elf;
+
+    //create default session and group
+    psession_t* session = kmalloc(sizeof(psession_t));
+    session->controlling_tty = 0;
+    session->groups = kmalloc(sizeof(list_entry_t));
+    session->groups->next = 0;
+    pgroup_t* group = kmalloc(sizeof(pgroup_t));
+    group->gid = 1;
+    group->processes = kmalloc(sizeof(list_entry_t));
+    group->processes->next = 0;
+    group->processes->element = tr;
+    group->session = session;
+    memcpy(groups, group, sizeof(pgroup_t));
+    groups_number++;
+    session->groups->element = group;
 
     //set default registers to 0
     tr->gregs.eax = 0;

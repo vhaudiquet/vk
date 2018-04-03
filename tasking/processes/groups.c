@@ -21,6 +21,13 @@
 pgroup_t* groups = 0;
 u32 groups_number = 0;
 u32 groups_size = 0;
+#define DEFAULT_GROUP_SIZE 10
+
+void groups_init()
+{
+    groups_size = DEFAULT_GROUP_SIZE;
+    groups = kmalloc(sizeof(pgroup_t)*groups_size);
+}
 
 /*
 * Binary search on groups sorted array

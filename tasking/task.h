@@ -38,9 +38,8 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 //Process groups and sessions
 typedef struct psession
 {
-    int sid;
     list_entry_t* groups;
-    tty_t controlling_tty;
+    tty_t* controlling_tty;
 } psession_t;
 
 typedef struct pgroup
@@ -63,7 +62,7 @@ typedef struct SIGHANDLER
     u32 base_kstack;
 } sighandler_t;
 
-void init_signals();
+void signals_init();
 void send_signal(int pid, int sig);
 
 //Processes
@@ -124,11 +123,14 @@ void exit_process(process_t* process, u32 exitcode);
 u32 sbrk(process_t* process, u32 incr);
 process_t* fork(process_t* process);
 
-pgroup_t* get_group(int gid);
-error_t process_setgroup(int gid, process_t* process);
-
 extern process_t** processes;
 extern u32 processes_size;
+
+void groups_init();
+pgroup_t* get_group(int gid);
+error_t process_setgroup(int gid, process_t* process);
+extern pgroup_t* groups;
+extern u32 groups_number;
 
 extern process_t* kernel_process;
 extern process_t* idle_process;

@@ -26,7 +26,7 @@ static int default_action[] = {1, 1, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4
 list_entry_t* signal_list = 0;
 mutex_t signal_mutex = 0;
 
-void init_signals()
+void signals_init()
 {
     signal_mutex = mutex_alloc(); *signal_mutex = 0;
 }
