@@ -54,3 +54,5 @@ typedef u32 error_t;
 //sync errors
 #define ERROR_MUTEX_ALREADY_LOCKED 31 //trying to lock a mutex already locked
 #define ERROR_MUTEX_OWNED_BY_OTHER 32 //trying to unlock a mutex that you don't own
+//memory errors
+#define ERROR_INVALID_PTR 36

@@ -29,6 +29,16 @@
 #define SYSCALL_SIGRET 39
 #define SYSCALL_SBRK 40
 
+//SYSCALL_FINFO values
+#define VK_FINFO_DEVICE_TYPE 1
+#define VK_NOT_A_DEVICE 1
+
+//SYSCALL_GETPINFO / SYSCALL_SETPINFO values
+#define VK_PINFO_PID 1
+#define VK_PINFO_PPID 2
+#define VK_PINFO_GID 4
+#define VK_PINFO_WORKING_DIRECTORY 3
+
 void syscall_open(u32 ebx, u32 ecx, u32 edx);
 void syscall_close(u32 ebx, u32 ecx, u32 edx);
 void syscall_read(u32 ebx, u32 ecx, u32 edx);
