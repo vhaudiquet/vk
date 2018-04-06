@@ -330,12 +330,14 @@ void syscall_exit(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 {
+    kprintf("SYS_EXEC.\n");
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
-    if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
-
+    
+    kprintf("SYS_EXEC : loading executable...\n");
     //TODO : UNMAP OLD PROCESS MEMORY !! (but no, what if we fail loading...)
     error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
-            
+    kprintf("SYS_EXEC : executable loaded.\n");
+
     //TODO : Close file descriptors with 'close_on_exec' flag
 
     asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(load));

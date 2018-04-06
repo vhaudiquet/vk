@@ -73,6 +73,7 @@ typedef struct list_entry
 } list_entry_t;
 void list_free(list_entry_t* list, u32 list_size);
 void list_free_eonly(list_entry_t* list, u32 list_size);
+void list_copy(list_entry_t* dest_list, list_entry_t* src_list, u32 size, u32 element_size);
 
 typedef struct dlist_entry
 {

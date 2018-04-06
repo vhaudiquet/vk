@@ -145,7 +145,7 @@ void exit_process(process_t* process, u32 exitcode)
         ptr = ptr->next;
     }
     list_free(dloc, process->data_size);
-    
+
     //free process file descriptors
     for(i=0;i<process->files_size;i++)
     {
@@ -204,8 +204,9 @@ process_t* fork(process_t* old_process)
     //copy registers from old process
     memcpy(tr, old_process, sizeof(g_regs_t) + sizeof(s_regs_t) + sizeof(u32)*4);
 
-    //TODO : get own copy of data_loc
-    tr->data_loc = old_process->data_loc;
+    //get own copy of data_loc
+    tr->data_loc = kmalloc(sizeof(list_entry_t));
+    list_copy(tr->data_loc, old_process->data_loc, old_process->data_size, sizeof(u32)*3);
     tr->data_size = old_process->data_size;
     tr->heap_addr = old_process->heap_addr;
     tr->heap_size = old_process->heap_size;

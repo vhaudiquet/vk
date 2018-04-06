@@ -159,3 +159,20 @@ void list_free_eonly(list_entry_t* list, u32 list_size)
         if(!list) break;
     }
 }
+
+void list_copy(list_entry_t* dest_list, list_entry_t* src_list, u32 size, u32 element_size)
+{
+    list_entry_t* before = 0;
+    while((src_list) && (size))
+    {
+        dest_list->element = kmalloc(element_size);
+        memcpy(dest_list->element, src_list->element, element_size);
+        dest_list->next = kmalloc(sizeof(list_entry_t));
+        before = dest_list;
+        dest_list = dest_list->next;
+        src_list = src_list->next;
+        size--;
+    }
+    before->next = 0;
+    kfree(dest_list);
+}
