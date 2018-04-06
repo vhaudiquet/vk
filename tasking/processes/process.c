@@ -21,6 +21,8 @@
 #include "memory/mem.h"
 #include "cpu/cpu.h"
 
+#define PROCESS_STACK_SIZE_DEFAULT 8192
+
 #define PROCESSES_ARRAY_SIZE 20
 process_t** processes = 0;
 u32 processes_size = 0;
@@ -69,8 +71,8 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     //TODO: check if this area isnt already mapped by elf code/data
     void* stack_offset = (void*) 0xC0000000;
     
-    map_memory(8192, (u32) stack_offset-8192, process->page_directory);
-    u32 base_stack = (u32) stack_offset-8192;
+    map_memory(PROCESS_STACK_SIZE_DEFAULT, (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT, process->page_directory);
+    u32 base_stack = (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT;
     process->base_stack = base_stack;
 
     /* ARGUMENTS PASSING */
@@ -120,6 +122,13 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     process->heap_addr = ((u32*)ptr->element)[0]+((u32*)ptr->element)[1];
     process->heap_size = 0;
 
+    //force general register reset
+    process->gregs.eax = process->gregs.ebx = process->gregs.ecx = process->gregs.edx = 0;
+    process->gregs.edi = process->gregs.esi = process->ebp = 0;
+    process->sregs.ds = process->sregs.es = process->sregs.fs = process->sregs.gs = process->sregs.ss = 0x23;
+    process->sregs.cs = 0x1B;
+
+    //executable stack and code
     process->esp = (u32) stack_offset;
     process->eip = (u32) code_offset;
 
@@ -129,24 +138,10 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 /* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
 void exit_process(process_t* process, u32 exitcode)
 {
-    //mark physical memory reserved for process stack as free
-    u32 stack_phys = get_physical(process->base_stack, process->page_directory);
-    free_block(stack_phys);
-
-    //mark all data/code blocks reserved for the process as free
-    u32 i = 0;
-    list_entry_t* dloc = process->data_loc;
-    list_entry_t* ptr = dloc;
-    for(i=0;i<process->data_size;i++)
-    {
-        u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
-        aligndown(phys, 4096);
-        free_block(phys);
-        ptr = ptr->next;
-    }
-    list_free(dloc, process->data_size);
+    free_process_memory(process);
 
     //free process file descriptors
+    u32 i = 0;
     for(i=0;i<process->files_size;i++)
     {
         if(process->files[i]) close_file(process->files[i]);
@@ -182,6 +177,29 @@ void exit_process(process_t* process, u32 exitcode)
 
     //remove process from schedulers
     scheduler_remove_process(process);
+}
+
+/* free all memory used by a process (for exec() or exit()) */
+void free_process_memory(process_t* process)
+{
+    //mark physical memory reserved for process stack as free
+    u32 stack_phys = get_physical(process->base_stack, process->page_directory);
+    unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->base_stack, process->page_directory);
+    free_block(stack_phys);
+
+    //mark all data/code blocks reserved for the process as free
+    u32 i = 0;
+    list_entry_t* dloc = process->data_loc;
+    list_entry_t* ptr = dloc;
+    for(i=0;i<process->data_size;i++)
+    {
+        u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
+        unmap_flexible(((u32*)ptr->element)[1], ((u32*)ptr->element)[0], process->page_directory);
+        aligndown(phys, 4096);
+        free_block(phys);
+        ptr = ptr->next;
+    }
+    list_free(dloc, process->data_size);
 }
 
 /* expands process allocated memory (heap) */

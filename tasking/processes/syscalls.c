@@ -330,17 +330,27 @@ void syscall_exit(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 {
-    kprintf("SYS_EXEC.\n");
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
     
-    kprintf("SYS_EXEC : loading executable...\n");
-    //TODO : UNMAP OLD PROCESS MEMORY !! (but no, what if we fail loading...)
+    error_t is_elf = elf_check(current_process->files[ebx]);
+    if(is_elf != ERROR_NONE) {asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(is_elf)); return;}
+
+    free_process_memory(current_process);
+
+    //kprintf("SYS_EXEC : loading executable...\n");
     error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
-    kprintf("SYS_EXEC : executable loaded.\n");
+    if(load != ERROR_NONE) fatal_kernel_error("LOAD", "SYSCALL_EXEC"); //TEMP : just kill process
+    //kprintf("SYS_EXEC : executable loaded.\n");
 
-    //TODO : Close file descriptors with 'close_on_exec' flag
+    //QEMU instantly crash if i dont do that (whatever that is, i tried lots of memory access to current_process and it works)
+    //TODO : check wtf, is this QEMU bug or does it happen on real hardware and why ?
+    current_process->sregs.cs = 0x1B;
 
-    asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(load));
+    //schedule to force reload eip/esp + registers that are in memory
+    __asm__ __volatile__("pushl %0 \n \
+        jmp schedule_switch"::"g"(current_process));
+
+    //asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(load));
 }
 
 void syscall_wait(u32 ebx, u32 ecx, u32 edx)
