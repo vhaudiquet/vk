@@ -145,7 +145,7 @@ void exit_process(process_t* process, u32 exitcode)
         ptr = ptr->next;
     }
     list_free(dloc, process->data_size);
-
+    
     //free process file descriptors
     for(i=0;i<process->files_size;i++)
     {
@@ -210,6 +210,7 @@ process_t* fork(process_t* old_process)
     tr->heap_addr = old_process->heap_addr;
     tr->heap_size = old_process->heap_size;
     tr->tty = old_process->tty;
+    tr->base_stack = old_process->base_stack;
 
     //copy signal handlers
     memcpy(tr->signal_handlers, old_process->signal_handlers, NSIG*sizeof(void*));
@@ -229,6 +230,8 @@ process_t* fork(process_t* old_process)
     //note: we will restore ESP later, because we cant know it there
 
     //get own copies of file_descriptors
+    tr->files_size = old_process->files_size;
+    tr->files_count = old_process->files_count;
     tr->files = kmalloc(old_process->files_size*sizeof(fd_t));
     u32 i = 0;
     for(;i<old_process->files_size;i++)

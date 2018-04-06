@@ -348,14 +348,19 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)
 {
-    if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
+    if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     
-    switch(ebx)
+    process_t* process = 0;
+    if(!ebx) process = current_process;
+    else process = processes[ebx];
+    //TODO : check for process existence and permissions
+
+    switch(ecx)
     {
-        case VK_PINFO_PID: {*((int*)ecx) = current_process->pid; break;}
-        case VK_PINFO_PPID: {if(current_process->parent) *((int*)ecx) = current_process->parent->pid; else *((int*)ecx) = -1; break;}
-        case VK_PINFO_WORKING_DIRECTORY: {strcpy((char*) ecx, current_process->current_dir); break;}
-        case VK_PINFO_GID: {*((int*)ecx) = current_process->group->gid; break;}
+        case VK_PINFO_PID: {*((int*)edx) = process->pid; break;}
+        case VK_PINFO_PPID: {if(process->parent) *((int*)edx) = process->parent->pid; else *((int*)edx) = -1; break;}
+        case VK_PINFO_WORKING_DIRECTORY: {strcpy((char*) edx, process->current_dir); break;}
+        case VK_PINFO_GID: {*((int*)edx) = process->group->gid; break;}
         default: {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR)); return;}
     }
 
@@ -364,19 +369,24 @@ void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
 {
-    if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
+    if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     
-    switch(ebx)
+    process_t* process = 0;
+    if(!ebx) process = current_process;
+    else process = processes[ebx];
+    //TODO : check for process existence and permissions
+
+    switch(ecx)
     {
         case VK_PINFO_WORKING_DIRECTORY:
         {
-            char* newdir = (char*) ecx;
+            char* newdir = (char*) edx;
             u32 len = strlen(newdir); if(len >= 99) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_OUT)); return;}
             fd_t* t = open_file(newdir, 0);
             if(!t) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
             close_file(t);
-            strncpy(current_process->current_dir, newdir, len);
-            *(current_process->current_dir+len) = 0;
+            strncpy(process->current_dir, newdir, len);
+            *(process->current_dir+len) = 0;
             break;
         }
         default: {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR)); return;}
@@ -431,6 +441,9 @@ push %esp /* push esp to be restored later on the forked process */ \n \
 push current_process /* push current process as fork() argument */ \n \
 call fork /* call fork() */ \n \
 add $0x4, %esp /* clean esp after fork() call */ \n \
+mov %ebp, 0x38(%eax) /* restoring unalterable registers (ebp, esi, edi) */ \n \
+mov %edi, (%eax) \n \
+mov %esi, 0x4(%eax) \n \
 movl $fork_ret, 0x30(%eax) /* moving fork_ret addr to EIP of forked process (in eax) */ \n \
 pop %ecx /* poping esp to restore in ecx */ \n \
 mov current_process, %edx /* move current_process to edx */ \n \
