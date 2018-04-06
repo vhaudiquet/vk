@@ -40,7 +40,6 @@ mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 
 static fsnode_t* do_open_fs(char* path, mount_point_t* mp);
-static fsnode_t* create_file(char* path, u8 attributes);
 
 u8 detect_fs_type(block_device_t* drive, u8 partition)
 {
@@ -490,7 +489,7 @@ static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
     return 0;
 }
 
-static fsnode_t* create_file(char* path, u8 attributes)
+fsnode_t* create_file(char* path, u8 attributes)
 {
     //get file name
     char* name = strrchr(path, '/')+1;

@@ -96,5 +96,6 @@ error_t link(char* oldpath, char* newpath);
 error_t unlink(char* path);
 error_t read_directory(fd_t* directory, list_entry_t* dest, u32* size);
 error_t list_directory(char* path, list_entry_t* dest, u32* size);
+fsnode_t* create_file(char* path, u8 attributes);
 
 #endif

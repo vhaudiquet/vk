@@ -210,7 +210,11 @@ void syscall_umount(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_mkdir(u32 ebx, u32 ecx, u32 edx)
 {
+    if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
 
+    fsnode_t* node = create_file((char*) ebx, FILE_ATTR_DIR);
+    if(!node) asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR));
+    else asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NONE));
 }
 
 void syscall_readdir(u32 ebx, u32 ecx, u32 edx)
