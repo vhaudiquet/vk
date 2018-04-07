@@ -138,6 +138,8 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 /* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
 void exit_process(process_t* process, u32 exitcode)
 {
+    if(process->pid == 1) fatal_kernel_error("Init exited.", "EXIT_PROCESS");
+
     free_process_memory(process);
 
     //free process file descriptors

@@ -21,7 +21,8 @@
 static void handle_signal(process_t* process, int sig);
 
 /* default signal actions ; 1=EXIT, 2=IGNORE, 3=CONTINUE, 4=STOP */
-static int default_action[] = {1, 1, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1};
+//SIGCONT is set to IGNORE because CONTINUE action will always be executed
+static int default_action[] = {1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1};
 
 list_entry_t* signal_list = 0;
 mutex_t signal_mutex = 0;
@@ -72,21 +73,16 @@ static void handle_signal(process_t* process, int sig)
 {
     void* handler = process->signal_handlers[sig];
     
+    if(sig == SIGCONT) if(process->status == PROCESS_STATUS_ASLEEP_SIGNAL) scheduler_add_process(process);
+
     /* SIG_DFL */
     if(!handler)
     {
         if(default_action[sig] == 1)
         {
-            exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
+            if(process->pid != 1) exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
         }
         else if(default_action[sig] == 2) return;
-        else if(default_action[sig] == 3)
-        {
-            if(process->status == PROCESS_STATUS_ASLEEP_SIGNAL)
-            {
-                scheduler_add_process(process);
-            }
-        }
         else if(default_action[sig] == 4)
         {
             process->status = PROCESS_STATUS_ASLEEP_SIGNAL;

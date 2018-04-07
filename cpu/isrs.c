@@ -45,6 +45,8 @@ static void handle_page_fault(struct regs_int* r);
 
 void fault_handler(struct regs_int * r)
 {
+	if(r->int_no == 8) _fatal_kernel_error("DOUBLE FAULT", "DOUBLE FAULT", "Unknown", 0);
+	
 	kprintf("%lFAULT in process 0x%X / %d\n", 3, current_process, current_process->pid);
 	kprintf("%lEIP = 0x%X\n", 3, r->eip);
     switch(r->int_no)
@@ -89,7 +91,9 @@ static void handle_user_fault(struct regs_int* r)
 static void handle_page_fault(struct regs_int* r)
 {
 	kprintf("%lEIP = 0x%X (cs = 0x%X)\n", 3, r->eip, r->cs);
-	kprintf("%lESP = 0x%X\n", 3, r->esp);
+	if(r->cs == 0x08) kprintf("%lKERNEL_ESP = 0x%X\n", 3, r->esp);
+	else if(r->cs == 0x1B) kprintf("%lUSER_ESP = 0x%X\n", 3, r->useresp);
+	else kprintf("%lIncorrect CS !\n", 1);
 	u32 f_addr; asm("movl %%cr2, %0":"=r"(f_addr):);
 	kprintf("Page fault at address : 0x%X\n", f_addr);
 	kprintf("Error code : %d\n", r->err_code);

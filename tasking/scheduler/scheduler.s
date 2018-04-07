@@ -112,6 +112,11 @@ schedule:
     mov %edi, %cr3
     mov %esi, current_page_directory
 
+    /* restore TSS.esp0 (to match process kstack, usefull on a syscall / interrupt) */
+    mov 0x44(%eax), %esi
+    mov $TSS, %edi
+    mov %esi, 0x4(%edi)
+
     /*
     * if process was in usermode, we push esp and ss (and let iret do the job)
     * else we restore esp directly
@@ -120,12 +125,6 @@ schedule:
     je restore_kernelmode
 
     restore_usermode:
-    
-    /* restore TSS.esp0 (to match process kstack, usefull on a syscall / interrupt) */
-    mov 0x44(%eax), %esi
-    mov $TSS, %edi
-    mov %esi, 0x4(%edi)
-
     push 0x28(%eax) # ss
     push 0x34(%eax) # esp
     jmp restore_end

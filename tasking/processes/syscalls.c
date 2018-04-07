@@ -347,7 +347,7 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     current_process->sregs.cs = 0x1B;
 
     //schedule to force reload eip/esp + registers that are in memory
-    __asm__ __volatile__("pushl %0 \n \
+    __asm__ __volatile__("mov %0, %%eax \n \
         jmp schedule_switch"::"g"(current_process));
 
     //asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(load));
