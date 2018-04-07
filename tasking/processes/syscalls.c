@@ -362,10 +362,16 @@ void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)
 {
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     
+    int pid = (int) ebx;
+    if((pid < 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
+
     process_t* process = 0;
     if(!ebx) process = current_process;
     else process = processes[ebx];
-    //TODO : check for process existence and permissions
+
+    //check if we are trying to access current or child process. if not, no permission
+    if((!process) | ((process != current_process) && (process->parent != current_process)))
+    {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_PERMISSION)); return;}
 
     switch(ecx)
     {
@@ -382,11 +388,17 @@ void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)
 void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
 {
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
-    
+
+    int pid = (int) ebx;
+    if((pid < 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
+
     process_t* process = 0;
     if(!ebx) process = current_process;
     else process = processes[ebx];
-    //TODO : check for process existence and permissions
+
+    //check if we are trying to access current or child process. if not, no permission
+    if((!process) | ((process != current_process) && (process->parent != current_process)))
+    {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_PERMISSION)); return;}
 
     switch(ecx)
     {
@@ -400,6 +412,14 @@ void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
             strncpy(process->current_dir, newdir, len);
             *(process->current_dir+len) = 0;
             break;
+        }
+        case VK_PINFO_GID:
+        {
+            int gid = (int) edx;
+            //TODO : if child process, check for exec()
+            error_t tr = process_setgroup(gid, process);
+            asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(tr)); 
+            return;
         }
         default: {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR)); return;}
     }

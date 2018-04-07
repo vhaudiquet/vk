@@ -56,3 +56,5 @@ typedef u32 error_t;
 #define ERROR_MUTEX_OWNED_BY_OTHER 32 //trying to unlock a mutex that you don't own
 //memory errors
 #define ERROR_INVALID_PTR 36
+//other
+#define ERROR_PERMISSION 41 //no permission
