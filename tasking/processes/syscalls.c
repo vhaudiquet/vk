@@ -429,13 +429,15 @@ void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
 void syscall_sig(u32 ebx, u32 ecx, u32 edx)
 {
     int pid = (int) ebx;
-    if((pid <= 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
-    if(!processes[pid]) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
+    if((pid == 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
+    if(pid > 0) if(!processes[pid]) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID)); return;}
 
     int sig = (int) ecx;
     if((sig <= 0) | (sig >= NSIG)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_SIGNAL)); return;}
 
-    send_signal(pid, sig);
+    if(pid < 0) send_signal_to_group(-pid, sig);
+    else send_signal(pid, sig);
+    
     asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NONE));
 }
 

@@ -64,6 +64,7 @@ typedef struct SIGHANDLER
 
 void signals_init();
 void send_signal(int pid, int sig);
+void send_signal_to_group(int gid, int sig);
 
 //Processes
 typedef struct PROCESS

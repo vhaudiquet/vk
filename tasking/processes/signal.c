@@ -137,3 +137,22 @@ void send_signal(int pid, int sig)
     (*listptr)->next = 0;
     mutex_unlock(signal_mutex);
 }
+
+/*
+* Send a signal to a process group
+* This method only registers the signal in the list, it will be handled later
+*/
+void send_signal_to_group(int gid, int sig)
+{
+    pgroup_t* group = get_group(gid);
+    
+    if((sig <= 0) | (sig >= NSIG)) return;
+
+    list_entry_t* ptr = group->processes;
+    while(ptr)
+    {
+        process_t* prc = ptr->element;
+        send_signal(prc->pid, sig);
+        ptr = ptr->next;
+    }
+}
