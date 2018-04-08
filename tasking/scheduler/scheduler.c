@@ -112,7 +112,7 @@ void scheduler_remove_process(process_t* process)
 */
 void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 wait_time)
 {
-    if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "SCHEDULER_WAIT_PROCESS");
+    while(mutex_lock(wait_mutex) != ERROR_NONE) mutex_wait(wait_mutex);
 
     /* if we need to sleep a certain ammount of time */
     dlist_entry_t* wait_entry = 0;
