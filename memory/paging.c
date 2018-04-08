@@ -29,7 +29,7 @@
 
 //PAGE DIRECTORY : Must be 4 KiB aligned (0x1000)
 u32 kernel_page_directory[1024] __attribute__((aligned(4096))) = {0};
-u32 kernel_page_table[1024] __attribute__((aligned(4096)));
+u32 kernel_page_table[1024] __attribute__((aligned(4096))) = {0};
 
 u32* current_page_directory = kernel_page_directory;
 
@@ -57,7 +57,7 @@ u32* get_kernel_pd_clone()
 {
     u32* tr = pt_alloc();
     u32 i = 0;
-    for(i = 0; i < 1024; i++)
+    for(i = (KERNEL_VIRTUAL_BASE>>22); i < 1024; i++)
     {
         tr[i] = kernel_page_directory[i];
     }
@@ -70,12 +70,16 @@ u32* copy_adress_space(u32* page_directory)
 
     u32* tr = get_kernel_pd_clone();
     u32 i = 0;
-    for(i = 0; i < 768; i++)
+    for(i = 0; i < (KERNEL_VIRTUAL_BASE>>22); i++)
     {
         if(!page_directory[i]) continue;
         u32 pt_addr = page_directory[i] & PD_ADDRESS_MASK;
         if(page_directory[i] & PD_BIT_4KB_PAGE)
         {
+            #ifdef PAGING_DEBUG
+            kprintf("%lCOPY_ADDRESS_SPACE : mapping 0x%X (size 0x%X)...\n", 3, i << 22, 0x400000);
+            #endif
+
             map_memory(0x400000, i << 22, tr);
             
             void* kbuffer = kmalloc(0x400000);
@@ -94,6 +98,10 @@ u32* copy_adress_space(u32* page_directory)
             {
                 if(!pt[j]) continue;
                 
+                #ifdef PAGING_DEBUG
+                kprintf("%lCOPY_ADDRESS_SPACE : mapping 0x%X (size 0x%X)...\n", 3, (i << 22)+(j<<12), 4096);
+                #endif
+
                 map_memory(4096, (i << 22)+(j<<12), tr);
                 
                 void* kbuffer = kmalloc(4096);
@@ -142,7 +150,7 @@ static void map_page(u32 phys_addr, u32 virt_addr, u32* page_directory)
     }
 
     u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
-    //if(*page) kprintf("page=%x (virt=0x%X)\n", *page, virt_addr);
+    if(*page) kprintf("page=%x (virt=0x%X)\n", *page, virt_addr);
     if(*page) fatal_kernel_error("Trying to map physical to an already mapped virtual address", "MAP_PAGE");
 
     if(kernel) *page = (phys_addr) | 259; //present, read/write, global
@@ -248,6 +256,10 @@ void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory)
     size += (bvaddr-virt_addr);
     alignup(size, 4096);
 
+    //#ifdef PAGING_DEBUG
+    //kprintf("%lMAP_FLEXIBLE : addr = 0x%X, size = 0x%X\n", 3, virt_addr, size);
+    //#endif
+
     u32 add = 0;
 
     if((!(virt_addr % 0x400000)) && size > 0x400000)
@@ -274,6 +286,10 @@ void unmap_flexible(u32 size, u32 virt_addr, u32* page_directory)
     aligndown(virt_addr, 4096);
     size += (bvaddr-virt_addr);
     alignup(size, 4096);
+
+    //#ifdef PAGING_DEBUG
+    //kprintf("%lUNMAP_FLEXIBLE : addr = 0x%X, size = 0x%X\n", 3, virt_addr, size);
+    //#endif
 
     u32 add = 0;
 
@@ -352,6 +368,36 @@ void map_memory_if_not_mapped(u32 size, u32 virt_addr, u32* page_directory)
     while(size)
     {
         if(!is_mapped(virt_addr+add, page_directory)) map_page(phys_addr+add, virt_addr+add, page_directory);
+        size -= 4096;
+        add += 4096;
+    }
+}
+
+/*
+* EEeeeh
+*/
+void unmap_memory_if_mapped(u32 size, u32 virt_addr, u32* page_directory)
+{
+    u32 bvaddr = virt_addr;
+    aligndown(virt_addr, 4096);
+    size += (bvaddr-virt_addr);
+    alignup(size, 4096);
+
+    u32 add = 0;
+
+    if((!(virt_addr % 0x400000)) && size > 0x400000)
+    {
+        while(size > 0x400000)
+        {
+            if(is_mapped(virt_addr+add, page_directory)) unmap_page_table(virt_addr+add, page_directory);
+            size -= 0x400000;
+            add += 0x400000;
+        }
+    }
+    
+    while(size)
+    {
+        if(is_mapped(virt_addr+add, page_directory)) unmap_page(virt_addr+add, page_directory);
         size -= 4096;
         add += 4096;
     }

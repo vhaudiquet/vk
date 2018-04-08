@@ -51,6 +51,7 @@ typedef u32 error_t;
 #define ERROR_INVALID_SIGNAL 26 //the signal number was invalid (not assigned to any signal)
 #define ERROR_IS_SESSION_LEADER 27 //the process is a session leader
 #define ERROR_IS_ANOTHER_SESSION 28 //the group is in another session
+#define ERROR_HAS_NO_CHILD 29 //the process has no child
 //sync errors
 #define ERROR_MUTEX_ALREADY_LOCKED 31 //trying to lock a mutex already locked
 #define ERROR_MUTEX_OWNED_BY_OTHER 32 //trying to unlock a mutex that you don't own

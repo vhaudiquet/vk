@@ -21,6 +21,9 @@
 //uncomment to enable kmalloc comments, and debug output
 //#define MEMLEAK_DBG
 
+//uncomment to enable paging debug output
+//#define PAGING_DEBUG
+
 #include "multiboot.h"
 
 //KHEAP
@@ -87,6 +90,7 @@ u32* get_kernel_pd_clone();
 u32* copy_adress_space(u32* page_directory);
 void map_memory(u32 size, u32 virt_addr, u32* page_directory);
 void map_memory_if_not_mapped(u32 size, u32 virt_addr, u32* page_directory);
+void unmap_memory_if_mapped(u32 size, u32 virt_addr, u32* page_directory);
 void map_flexible(u32 size, u32 physical, u32 virt_addr, u32* page_directory);
 void unmap_flexible(u32 size, u32 virt_addr, u32* page_directory);
 bool is_mapped(u32 virt_addr, u32* page_directory);

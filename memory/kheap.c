@@ -211,6 +211,10 @@ static void kheap_expand()
     //we need to EXPAND heap in ALL CURRENT PAGES DIRS (all processes page dirs)
     //todo : check if we can handle that in PF ? (if page fault but kernel page mapped, map ?)
     //anyway we will need a spinlock on that too (lock kernelpagedir or something like that)
+    #ifdef PAGING_DEBUG
+    kprintf("%lKHEAP_EXPAND: mapping 0x%X (size 0x%X)...\n", 3, KHEAP_BASE_END, 0x400000);
+    #endif
+    
     map_memory(0x400000, KHEAP_BASE_END, kernel_page_directory);
     u32 i = 0;
     for(;i<processes_size;i++)

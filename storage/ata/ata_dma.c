@@ -46,6 +46,11 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     u32 virtual = kvm_reserve_block(sizeof(prd_t)+scount*bps);
     u32 prdt_phys = reserve_block(sizeof(prd_t)+4+scount*bps, PHYS_KERNELF_BLOCK_TYPE);
     u32 prdt_phys_aligned = prdt_phys; alignup(prdt_phys_aligned, sizeof(u32));
+    
+    #ifdef PAGING_DEBUG
+    kprintf("%lATA_DMA_READ: mapping 0x%X (size 0x%X)...\n", 3, virtual, sizeof(prd_t)+scount*bps);
+    #endif
+
     map_flexible(sizeof(prd_t)+scount*bps, prdt_phys_aligned, virtual, kernel_page_directory);
     prd_t* prd = (prd_t*) virtual;
     prd->data_pointer = prdt_phys_aligned+sizeof(prd_t);
@@ -101,6 +106,11 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     memcpy(data, (void*)(virtual+sizeof(prd_t)+offset), count);
     free_block(prdt_phys);
     unmap_flexible(sizeof(prd_t)+scount*bps, virtual, kernel_page_directory);
+    
+    #ifdef PAGING_DEBUG
+    kprintf("%lATA_DMA_READ: unmapping 0x%X (size 0x%X)...\n", 3, virtual, sizeof(prd_t)+scount*bps);
+    #endif
+    
     kvm_free_block(virtual);
 
     if(!(end_status & 5)) return ERROR_DISK_INTERNAL;

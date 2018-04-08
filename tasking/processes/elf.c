@@ -131,6 +131,9 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
         if(prg_h[i].segment_type != 1) continue; //ignore segment if type is not 1 (0 = null, 2 = dynamic, 3 = interpreted, 4 = notes)
         if(!prg_h[i].p_memsz) continue; //ignore segment if memsz is null
 
+        #ifdef PAGING_DEBUG
+        kprintf("%lELF_LOAD : mapping 0x%X (size 0x%X)...\n", 3, prg_h[i].p_vaddr, prg_h[i].p_memsz);
+        #endif
         map_memory(prg_h[i].p_memsz, prg_h[i].p_vaddr, page_directory);
         
         //marking allocated memory on the list

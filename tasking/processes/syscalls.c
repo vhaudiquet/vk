@@ -337,10 +337,10 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 
     free_process_memory(current_process);
 
-    //kprintf("SYS_EXEC : loading executable...\n");
+    //kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
     if(load != ERROR_NONE) fatal_kernel_error("LOAD", "SYSCALL_EXEC"); //TEMP : just kill process
-    //kprintf("SYS_EXEC : executable loaded.\n");
+    //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //QEMU instantly crash if i dont do that (whatever that is, i tried lots of memory access to current_process and it works)
     //TODO : check wtf, is this QEMU bug or does it happen on real hardware and why ?
@@ -355,7 +355,99 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_wait(u32 ebx, u32 ecx, u32 edx)
 {
+    int pid = (int) ebx;
+    int* wstatus = (int*) ecx;
+    if((!current_process->children) | (!current_process->children->element)) 
+    {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_HAS_NO_CHILD)); return;}
 
+    wait_start:
+
+    if(pid < -1)
+    {
+        list_entry_t* ptr = current_process->children;
+        while(ptr)
+        {
+            process_t* element = ptr->element;
+            if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == -pid))
+            {
+                int trpid = element->pid;
+                int retcode = (int) element->gregs.eax;
+                processes[element->pid] = 0;
+                kfree(element);
+                *wstatus = retcode;
+                asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
+                return;
+            }
+            ptr = ptr->next;
+        }
+    }
+    else if(pid == -1)
+    {
+        list_entry_t* ptr = current_process->children;
+        while(ptr)
+        {
+            process_t* element = ptr->element;
+            if((element->status == PROCESS_STATUS_ZOMBIE))
+            {
+                int trpid = element->pid;
+                int retcode = (int) element->gregs.eax;
+                processes[element->pid] = 0;
+                kfree(element);
+                *wstatus = retcode;
+                asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
+                return;
+            }
+            ptr = ptr->next;
+        }
+    }
+    else if(pid == 0)
+    {
+        list_entry_t* ptr = current_process->children;
+        while(ptr)
+        {
+            process_t* element = ptr->element;
+            if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == current_process->group->gid))
+            {
+                int trpid = element->pid;
+                int retcode = (int) element->gregs.eax;
+                processes[element->pid] = 0;
+                kfree(element);
+                *wstatus = retcode;
+                asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
+                return;
+            }
+            ptr = ptr->next;
+        }
+    }
+    else if(pid > 0)
+    {
+        list_entry_t* ptr = current_process->children;
+        bool element_found = false;
+        while(ptr)
+        {
+            process_t* element = ptr->element;
+            if(element->pid == pid)
+            {
+                element_found = true;
+                if(element->status == PROCESS_STATUS_ZOMBIE)
+                {
+                    int trpid = element->pid;
+                    int retcode = (int) element->gregs.eax;
+                    processes[element->pid] = 0;
+                    kfree(element);
+                    *wstatus = retcode;
+                    asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
+                    return;
+                }
+            }
+            ptr = ptr->next;
+        }
+        if(!element_found) asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_PERMISSION));
+    }
+
+    current_process->status = PROCESS_STATUS_ASLEEP_CHILD;
+    scheduler_remove_process(current_process);
+    goto wait_start;
 }
 
 void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)

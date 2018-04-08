@@ -71,6 +71,10 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     //TODO: check if this area isnt already mapped by elf code/data
     void* stack_offset = (void*) 0xC0000000;
     
+    #ifdef PAGING_DEBUG
+    kprintf("%lLOAD_EXECUTABLE : mapping 0x%X (size 0x%X)...\n", 3, stack_offset-PROCESS_STACK_SIZE_DEFAULT, PROCESS_STACK_SIZE_DEFAULT);
+    #endif
+
     map_memory(PROCESS_STACK_SIZE_DEFAULT, (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT, process->page_directory);
     u32 base_stack = (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT;
     process->base_stack = base_stack;
@@ -155,9 +159,6 @@ void exit_process(process_t* process, u32 exitcode)
     //free process page directory
     pt_free(process->page_directory);
 
-    //send SIGCHLD to parent
-    if(process->parent) send_signal(process->parent->pid, SIGCHLD);
-
     //free process children list
     list_entry_t* cptr = process->children;
     while(cptr)
@@ -170,10 +171,22 @@ void exit_process(process_t* process, u32 exitcode)
         kfree(tf);
     }
 
+    //TODO : REMOVE from GROUP and check if group become ORPHAN
+
     /* we put retcode in EAX and the process is zombie */
     process->status = PROCESS_STATUS_ZOMBIE;
     process->gregs.eax = exitcode;
     
+    if(process->parent) 
+    {
+        //send SIGCHLD to parent
+        send_signal(process->parent->pid, SIGCHLD);
+
+        //wake up parent if wait()
+        if(process->parent->status == PROCESS_STATUS_ASLEEP_CHILD)
+            scheduler_add_process(process->parent);
+    }
+
     //free process kernel stack
     kfree((void*) process->base_kstack);
 
@@ -187,6 +200,11 @@ void free_process_memory(process_t* process)
     //mark physical memory reserved for process stack as free
     u32 stack_phys = get_physical(process->base_stack, process->page_directory);
     unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->base_stack, process->page_directory);
+    
+    #ifdef PAGING_DEBUG
+    kprintf("%lFREE_PROCESS_MEM: unmapped 0x%X (size 0x%X).\n", 3, process->base_stack, PROCESS_STACK_SIZE_DEFAULT);
+    #endif
+
     free_block(stack_phys);
 
     //mark all data/code blocks reserved for the process as free
@@ -197,11 +215,22 @@ void free_process_memory(process_t* process)
     {
         u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
         unmap_flexible(((u32*)ptr->element)[1], ((u32*)ptr->element)[0], process->page_directory);
+
+        #ifdef PAGING_DEBUG
+        kprintf("%lFREE_PROCESS_MEM: unmapped 0x%X (size 0x%X).\n", 3, ((u32*)ptr->element)[0], ((u32*)ptr->element)[1]);
+        #endif
+
         aligndown(phys, 4096);
         free_block(phys);
         ptr = ptr->next;
     }
     list_free(dloc, process->data_size);
+
+    //free process heap
+    #ifdef PAGING_DEBUG
+    kprintf("%lFREE_PROCESS_MEM: unmapping if 0x%X (size 0x%X).\n", 3, process->heap_addr, process->heap_size);
+    #endif
+    if(process->heap_size) unmap_memory_if_mapped(process->heap_size, process->heap_addr, process->page_directory);
 }
 
 /* expands process allocated memory (heap) */
@@ -210,6 +239,10 @@ u32 sbrk(process_t* process, u32 incr)
     u32 new_last_addr = process->heap_addr+process->heap_size+incr;
     if(!is_mapped(new_last_addr, process->page_directory))
     {
+        #ifdef PAGING_DEBUG
+        kprintf("%lSBRK: mappping if not 0x%X (size 0x%X)...\n", 3, process->heap_addr+process->heap_size, incr);
+        #endif
+        
         map_memory_if_not_mapped(incr, process->heap_addr+process->heap_size, process->page_directory);        
     }
     process->heap_size += incr;
@@ -308,12 +341,13 @@ static process_t* init_process()
     }
 
     //register as children of current process
+    tr->children = 0;
     if(current_process && current_process != kernel_process)
     {
         list_entry_t** child = &current_process->children;
         while(*(child)) if((*child)->next) child = &(*child)->next;
         (*child) = kmalloc(sizeof(list_entry_t));
-        (*child)->element = current_process;
+        (*child)->element = tr;
         (*child)->next = 0;
         tr->parent = current_process;
     }
