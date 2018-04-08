@@ -25,11 +25,12 @@ static void handle_signal(process_t* process, int sig);
 static int default_action[] = {1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1};
 
 list_entry_t* signal_list = 0;
-mutex_t signal_mutex = 0;
+mutex_t* signal_mutex = 0;
 
 void signals_init()
 {
-    signal_mutex = mutex_alloc(); *signal_mutex = 0;
+    signal_mutex = kmalloc(sizeof(mutex_t));
+    memset(signal_mutex, 0, sizeof(mutex_t));
 }
 
 /*
@@ -121,8 +122,7 @@ void send_signal(int pid, int sig)
     if((sig <= 0) | (sig >= NSIG)) return;
 
     /* adding the signal to the list */
-    //TODO : wait for mutex
-    if(mutex_lock(signal_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock signal mutex", "SEND_SIGNAL");
+    while(mutex_lock(signal_mutex) != ERROR_NONE) mutex_wait(signal_mutex);
     list_entry_t** listptr = &signal_list;
     while(*listptr) listptr = &(*listptr)->next;
     (*listptr) = kmalloc(sizeof(list_entry_t));

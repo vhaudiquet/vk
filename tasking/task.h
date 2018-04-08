@@ -34,6 +34,7 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 #define PROCESS_STATUS_ASLEEP_SIGNAL 4
 #define PROCESS_STATUS_ASLEEP_IO 5
 #define PROCESS_STATUS_ASLEEP_CHILD 6
+#define PROCESS_STATUS_ASLEEP_MUTEX 7
 #define PROCESS_STATUS_ZOMBIE 10
 
 //Process groups and sessions

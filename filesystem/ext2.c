@@ -172,22 +172,26 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
 
     u8* dirent_buffer = kmalloc((u32) length);
     error_t readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
+    if(readop != ERROR_NONE) readop = ext2_inode_read_content(dir, 0, (u32) length, dirent_buffer);
     if(readop != ERROR_NONE) return 0;
 
     u32 offset = 0;
     while(length)
     {
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
-        if(!dirent->inode) break;
 
-        // kprintf("%llooking %s for %s...\n", 3, dirent->name, name);
-        if(strcfirst((char*) dirent->name, name) == name_len) 
+        if(dirent->inode)
         {
-            fsnode_t* tr = ext2_std_inode_read(dirent->inode, dir->file_system);
-            kfree(dirent_buffer); 
-            return tr;
+            // kprintf("%llooking %s for %s...\n", 3, dirent->name, name);
+            if(strcfirst((char*) dirent->name, name) == name_len) 
+            {
+                fsnode_t* tr = ext2_std_inode_read(dirent->inode, dir->file_system);
+                kfree(dirent_buffer); 
+                return tr;
+            }
         }
-
+        
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
         offset += (u32)(8+name_len_real);
         length -= (u32)(8+name_len_real);
@@ -521,8 +525,11 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             return ERROR_FILE_CORRUPTED_FS;
         }
 
-        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        
+        error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        if(err != ERROR_NONE) err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        if(err != ERROR_NONE) err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        if(err != ERROR_NONE) return err;
+
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
 
@@ -542,7 +549,8 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* singly_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
+    error_t readerr0 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
+    if(readerr0 != ERROR_NONE) {kfree(singly_indirect_block); return readerr0;}
 
     for(;i<(ext2->block_size/4);i++)
     {
@@ -554,8 +562,9 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             return ERROR_FILE_CORRUPTED_FS;
         }
 
-        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        
+        error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+        if(err != ERROR_NONE) {kfree(singly_indirect_block); return err;}
+
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
 
@@ -577,8 +586,9 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* doubly_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
-    
+    error_t readerr1 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
+    if(readerr1 != ERROR_NONE) {kfree(doubly_indirect_block); return readerr1;}
+
     u32 j;
     for(j = 0;j<(ext2->block_size/4);j++)
     {
@@ -590,7 +600,8 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             return ERROR_FILE_CORRUPTED_FS;
         }
         u32* sib = kmalloc(ext2->block_size);
-        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+        error_t readerr2 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+        if(readerr2 != ERROR_NONE) {kfree(sib); kfree(doubly_indirect_block); return readerr2;}
 
         for(;i<(ext2->block_size/4);i++)
         {
@@ -602,7 +613,7 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
                 return ERROR_FILE_CORRUPTED_FS;
             }
 
-            block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+            error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
         
             currentloc+=ext2->block_size;
             if(offset) offset = 0;
@@ -610,6 +621,7 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             if(size >= ext2->block_size) size -= ext2->block_size;
             else size = 0;
             
+            if(err != ERROR_NONE) {kfree(sib); kfree(doubly_indirect_block); return err;}
             if(!size) {kfree(sib); kfree(doubly_indirect_block); return ERROR_NONE;}
         }
 
@@ -627,7 +639,8 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* triply_indirect_block = kmalloc(ext2->block_size);
-    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
+    error_t readerr3 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
+    if(readerr3 != ERROR_NONE) {kfree(triply_indirect_block); return readerr3;}
 
     u32 k;
     for(k=0;k<(ext2->block_size/4);k++)
@@ -639,7 +652,8 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             return ERROR_FILE_CORRUPTED_FS;
         }
         u32* dib = kmalloc(ext2->block_size);
-        block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
+        error_t readerr4 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
+        if(readerr4 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); return readerr4;}
 
         for(j=0;j<(ext2->block_size/4);j++)
         {
@@ -651,7 +665,8 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
                 return ERROR_FILE_CORRUPTED_FS;
             }
             u32* sib = kmalloc(ext2->block_size);
-            block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+            error_t readerr5 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
+            if(readerr5 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(sib); return readerr5;}
 
             for(;i<(ext2->block_size/4);i++)
             {
@@ -663,8 +678,9 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
                     return ERROR_FILE_CORRUPTED_FS;
                 }
 
-                block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        
+                error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
+                if(err != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(sib); return err;}
+
                 currentloc+=ext2->block_size;
                 if(offset) offset = 0;
 

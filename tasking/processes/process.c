@@ -328,7 +328,7 @@ static process_t* init_process()
     }
 
     //register process in a group and session
-    if(current_process && current_process != kernel_process) 
+    if((current_process) && (current_process != kernel_process)) 
     {
         tr->group = current_process->group; 
          //add to the group list
@@ -345,15 +345,13 @@ static process_t* init_process()
     if(current_process && current_process != kernel_process)
     {
         list_entry_t** child = &current_process->children;
-        while(*(child)) if((*child)->next) child = &(*child)->next;
+        while(*(child)) child = &(*child)->next;
         (*child) = kmalloc(sizeof(list_entry_t));
         (*child)->element = tr;
         (*child)->next = 0;
         tr->parent = current_process;
     }
     else tr->parent = 0;
-
-    tr->children = 0;
 
     //set sighandler to 0
     memset(&tr->sighandler, 0, sizeof(sighandler_t));

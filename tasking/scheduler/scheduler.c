@@ -25,7 +25,7 @@ process_t* current_process = 0;
 queue_t* p_ready_queue = 0;
 list_entry_t* irq_list[21] = {0};
 dlist_entry_t* wait_list = 0;
-mutex_t wait_mutex = 0;
+mutex_t* wait_mutex = 0;
 
 /*
 * Initializes the data structures needed by the scheduler
@@ -33,7 +33,8 @@ mutex_t wait_mutex = 0;
 void scheduler_init()
 {
     p_ready_queue = queue_init();
-    wait_mutex = mutex_alloc(); *wait_mutex = 0;
+    wait_mutex = kmalloc(sizeof(mutex_t));
+    memset(wait_mutex, 0, sizeof(mutex_t));
 }
 
 /*
@@ -220,8 +221,7 @@ void scheduler_irq_wakeup(u32 irq)
     if(!irq_list[irq]) return;
 
     /* we need to remove/free every element of the list and add every process to the scheduler */
-    //TODO: wait for mutex
-    if(mutex_lock(wait_mutex) != ERROR_NONE) fatal_kernel_error("Could not lock wait mutex", "IRQ_WAKEUP");
+    while(mutex_lock(wait_mutex) != ERROR_NONE) mutex_wait(wait_mutex);
     u32* element = irq_list[irq]->element;
 
     if(element[1])
