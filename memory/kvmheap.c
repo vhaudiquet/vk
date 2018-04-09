@@ -23,6 +23,7 @@ typedef struct VM_BLOCK
 {
     u32 vaddr;
     u32 size;
+    u32 status;
     struct VM_BLOCK* next;
     struct VM_BLOCK* prev;
 } vm_block_t;
@@ -41,6 +42,7 @@ void kvmheap_install()
     vm_first_block->size = 0xFFFFFFFF - FREE_KVM_START;
     vm_first_block->next = 0;
     vm_first_block->prev = 0;
+    vm_first_block->status = 0;
 }
 
 u32 kvm_reserve_block(u32 size)
@@ -49,7 +51,7 @@ u32 kvm_reserve_block(u32 size)
     vm_block_t* curr = vm_first_block;
     while(curr)
     {
-        if(curr->size < size) {curr = curr->next; continue;}
+        if((curr->status) | (curr->size < size)) {curr = curr->next; continue;}
         vm_block_t* newblock = 
         #ifdef MEMLEAK_DBG
         kmalloc(sizeof(vm_block_t), "virtual memory new block (kvm_reserve_block)");
@@ -61,9 +63,11 @@ u32 kvm_reserve_block(u32 size)
         newblock->size = curr->size-size;
         newblock->next = next;
         newblock->prev = curr;
+        newblock->status = 0;
         if(next) next->prev = newblock;
         curr->size = size;
         curr->next = newblock;
+        curr->status = 1;
         return curr->vaddr;
     }
     fatal_kernel_error("Trying to reserve more virtual memory than available", "KVM_RESERVE_BLOCK");
@@ -77,9 +81,10 @@ void kvm_free_block(u32 base_addr)
     {
         if(curr->vaddr == base_addr)
         {
+            curr->status = 0;
             //block merging before and after
             vm_block_t* m = curr->prev;
-            while(m)
+            while(m && (!m->status))
             {
                 m->size += curr->size;
                 m->next = curr->next;
@@ -89,7 +94,7 @@ void kvm_free_block(u32 base_addr)
                 m = m->prev;
             }
             m = curr->next;
-            while(m)
+            while(m && (!m->status))
             {
                 curr->size += m->size;
                 curr->next = m->next;

@@ -85,9 +85,17 @@ void install_block_devices();
 #define ATA_FLAG_MASTER 1
 #define ATA_FLAG_LBA48 2
 #define ATA_FLAG_ATAPI 4
+typedef struct PRD
+{
+    u32 data_pointer;
+    u16 byte_count;
+    u16 reserved;
+} __attribute__((packed)) prd_t;
 typedef struct ata_device
 {
 	struct pci_device* controller;
+	u32 prdt_phys;
+	struct PRD* prdt_virt;
 	u16 base_port;
 	u16 control_port;
 	u16 bar4;

@@ -88,6 +88,8 @@ void syscall_read(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     
+    //kprintf("%lSYSCALL_READ()\n", 3);
+
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = read_file(current_process->files[ebx], (void*) ecx, edx);
     counttr = (u32) (current_process->files[ebx]->offset - counttr);
@@ -339,7 +341,7 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 
     //kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
-    if(load != ERROR_NONE) fatal_kernel_error("LOAD", "SYSCALL_EXEC"); //TEMP : just kill process
+    if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
     //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //QEMU instantly crash if i dont do that (whatever that is, i tried lots of memory access to current_process and it works)

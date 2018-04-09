@@ -106,8 +106,10 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	current->controller = controller;
 	current->irq = irq;
 
-    //write i/o flag (needed for DMA transfers)
+    //write i/o flag, memory flag, and bus enable flag (needed for DMA transfers)
 	pci_write_device(current->controller, 0x04, pci_read_device(current->controller, 0x04)|7);
+	//enable UDMA
+	pci_write_device(current->controller, 0x48, 0xF);
 
 	//select drive
     outb(DEVICE_PORT(current), 0xA0); //always master there, to see if there is a device on the cable or not
@@ -187,6 +189,20 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
     else current_top->device_class = HARD_DISK_DRIVE;
 
 	if(!(current->flags & ATA_FLAG_ATAPI)) ata_read_partitions(current_top);
+
+	//preallocate PRDT (for DMA reads)
+	//PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary, 1 per ATA bus
+	current->prdt_phys = reserve_block(U16_MAX, PHYS_KERNEL_BLOCK_TYPE); //TODO : MAKE SURE THIS IS U16_MAX ALIGNED
+	current->prdt_virt = (prd_t*) kvm_reserve_block(U16_MAX);
+	
+	#ifdef PAGING_DEBUG
+	kprintf("%lATA_IDENTIFY_DRIVE: mapping 0x%X (size 0x%X)...\n", 3, current->prdt_virt, U16_MAX);
+	#endif
+
+	map_flexible(U16_MAX, current->prdt_phys, (u32) current->prdt_virt, kernel_page_directory);
+    current->prdt_virt->data_pointer = current->prdt_phys+sizeof(prd_t);
+	current->prdt_virt->reserved = 0x8000;
+	outl(current->bar4+4, current->prdt_phys);
 
 	return current_top;
 }

@@ -21,13 +21,6 @@
 #include "internal/internal.h"
 #include "error/error.h"
 
-typedef struct PRD
-{
-    u32 data_pointer;
-    u16 byte_count;
-    u16 reserved;
-} __attribute__((packed)) prd_t;
-
 error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
     if(!count) return ERROR_NONE;
@@ -41,33 +34,14 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     if(scount > 127) return ERROR_DISK_INTERNAL;
     if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return ERROR_DISK_INTERNAL;
 
-    /*prepare a PRDT (Physical Region Descriptor Table)*/
-    //PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary,  1 per ATA bus
-    u32 virtual = kvm_reserve_block(sizeof(prd_t)+scount*bps);
-    u32 prdt_phys = reserve_block(sizeof(prd_t)+4+scount*bps, PHYS_KERNELF_BLOCK_TYPE);
-    u32 prdt_phys_aligned = prdt_phys; alignup(prdt_phys_aligned, sizeof(u32));
-    
-    #ifdef PAGING_DEBUG
-    kprintf("%lATA_DMA_READ: mapping 0x%X (size 0x%X)...\n", 3, virtual, sizeof(prd_t)+scount*bps);
-    #endif
-
-    map_flexible(sizeof(prd_t)+scount*bps, prdt_phys_aligned, virtual, kernel_page_directory);
-    prd_t* prd = (prd_t*) virtual;
-    prd->data_pointer = prdt_phys_aligned+sizeof(prd_t);
-    prd->byte_count = (u16) (scount*bps);//count;
-    prd->reserved = 0x8000;
-
-    /*Send the physical PRDT addr to Bus Master PRDT Register*/
-    //stop
-    outb(drive->bar4, 0x0);
-    //prdt
-    outl(drive->bar4+4, prdt_phys_aligned);
+    //set byte count in PRDT
+    drive->prdt_virt->byte_count = (u16) (scount*bps);//count;
 
     /*set read bit in the Bus Master Command Register*/
-    outb(drive->bar4, inb(drive->bar4) | 8); // Set read bit
+    outb(drive->bar4, inb(drive->bar4) & ~8); // clear read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
-    outb(drive->bar4 + 2, inb(drive->bar4 + 2) | 0x04 | 0x02); //Clear interrupt and error flags   
+    outb(drive->bar4 + 2, 0x04 | 0x02); //Clear interrupt and error flags   
 
     if(drive->flags & ATA_FLAG_ATAPI)
     {
@@ -103,17 +77,12 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
 
     //kprintf("end controller status : 0x%X ; disk : 0x%X\n", end_status, end_disk_status);
     
-    memcpy(data, (void*)(virtual+sizeof(prd_t)+offset), count);
-    free_block(prdt_phys);
-    unmap_flexible(sizeof(prd_t)+scount*bps, virtual, kernel_page_directory);
-    
-    #ifdef PAGING_DEBUG
-    kprintf("%lATA_DMA_READ: unmapping 0x%X (size 0x%X)...\n", 3, virtual, sizeof(prd_t)+scount*bps);
-    #endif
-    
-    kvm_free_block(virtual);
+    //copying data from PRDT
+    memcpy(data, (void*)(((u32)drive->prdt_virt)+sizeof(prd_t)+offset), count);
 
+    //neither the active bit or the interrupt bit are set
     if(!(end_status & 5)) return ERROR_DISK_INTERNAL;
+    //DMA ERROR bit is set
     if(end_status & 2) return ERROR_DISK_INTERNAL;
     if(end_disk_status & 1) return ERROR_DISK_INTERNAL;
 
@@ -156,31 +125,15 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
 		ata_dma_read_flexible(last_sector, 0, cached_l, BYTES_PER_SECTOR, drive);		
     }
     
-    /*prepare a PRDT (Physical Region Descriptor Table)*/
-    //PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary,  1 per ATA bus
-    u32 virtual = kvm_reserve_block(sizeof(prd_t)+scount*BYTES_PER_SECTOR);
-    u32 prdt_phys = reserve_block(sizeof(prd_t)+4+scount*BYTES_PER_SECTOR, PHYS_KERNELF_BLOCK_TYPE);
-    u32 prdt_phys_aligned = prdt_phys; alignup(prdt_phys_aligned, sizeof(u32));
-    map_flexible(sizeof(prd_t)+scount*BYTES_PER_SECTOR, prdt_phys_aligned, virtual, kernel_page_directory);
-    memcpy((void*)(virtual+sizeof(prd_t)+offset), data, count);
-    unmap_flexible(sizeof(prd_t)+scount*512, virtual, kernel_page_directory);
-    kvm_free_block(virtual);
-    prd_t* prd = (prd_t*) virtual;
-    prd->data_pointer = prdt_phys_aligned+sizeof(prd_t);
-    prd->byte_count = (u16) (scount*BYTES_PER_SECTOR);//count;
-    prd->reserved = 0x8000;
-
-    /*Send the physical PRDT addr to Bus Master PRDT Register*/
-    //stop
-    outb(drive->bar4, 0x0);
-    //prdt
-    outl(drive->bar4+4, prdt_phys_aligned);
+    //copying data in PRDT
+    memcpy((void*)(((u32)drive->prdt_virt)+sizeof(prd_t)+offset), data, count);
+    drive->prdt_virt->byte_count = (u16) (scount*BYTES_PER_SECTOR);
 
     /*set read bit in the Bus Master Command Register*/
-    outb(drive->bar4, inb(drive->bar4) & ~8); // Set read bit
+    outb(drive->bar4, inb(drive->bar4) | 8); // Set read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
-    outb(drive->bar4 + 2, inb(drive->bar4 + 2) | 0x04 | 0x02); //Clear interrupt and error flags
+    outb(drive->bar4 + 2, 0x04 | 0x02); //Clear interrupt and error flags
 
     if(sector > U32_MAX)
     {
@@ -212,8 +165,6 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
     u8 end_disk_status = inb(COMMAND_PORT(drive));
 
     //kprintf("end controller status : 0x%X ; disk : 0x%X\n", end_status, end_disk_status);
-    
-    free_block(prdt_phys);
 
     if(!(end_status & 5)) return ERROR_DISK_INTERNAL;
     if(end_status & 2) return ERROR_DISK_INTERNAL;
