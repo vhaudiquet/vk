@@ -202,6 +202,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	map_flexible(U16_MAX, current->prdt_phys, (u32) current->prdt_virt, kernel_page_directory);
     current->prdt_virt->data_pointer = current->prdt_phys+sizeof(prd_t);
 	current->prdt_virt->reserved = 0x8000;
+	current->prdt_virt->byte_count = (U16_MAX-sizeof(prd_t));
 	outl(current->bar4+4, current->prdt_phys);
 
 	return current_top;

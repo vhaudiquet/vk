@@ -34,11 +34,8 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     if(scount > 127) return ERROR_DISK_INTERNAL;
     if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return ERROR_DISK_INTERNAL;
 
-    //set byte count in PRDT
-    drive->prdt_virt->byte_count = (u16) (scount*bps);//count;
-
     /*set read bit in the Bus Master Command Register*/
-    outb(drive->bar4, inb(drive->bar4) & ~8); // clear read bit
+    outb(drive->bar4, inb(drive->bar4) | 8); // clear read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
     outb(drive->bar4 + 2, 0x04 | 0x02); //Clear interrupt and error flags   
@@ -127,10 +124,9 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
     
     //copying data in PRDT
     memcpy((void*)(((u32)drive->prdt_virt)+sizeof(prd_t)+offset), data, count);
-    drive->prdt_virt->byte_count = (u16) (scount*BYTES_PER_SECTOR);
 
     /*set read bit in the Bus Master Command Register*/
-    outb(drive->bar4, inb(drive->bar4) | 8); // Set read bit
+    outb(drive->bar4, inb(drive->bar4) & ~8); // Set read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
     outb(drive->bar4 + 2, 0x04 | 0x02); //Clear interrupt and error flags
