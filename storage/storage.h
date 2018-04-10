@@ -19,6 +19,7 @@
 #define STORAGE_HEAD
 
 #include "system.h"
+#include "sync/sync.h"
 
 //PARTITIONS
 typedef struct partition_descriptor
@@ -102,6 +103,7 @@ typedef struct ata_device
 	u16 sectors_per_block;
 	u8 irq;
 	u8 flags;
+	mutex_t* mutex;
 } ata_device_t;
 //global functions
 void ata_install();

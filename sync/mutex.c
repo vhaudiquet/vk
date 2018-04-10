@@ -16,6 +16,7 @@
 */
 
 #include "sync.h"
+#include "tasking/task.h"
 
 void mutex_wait(mutex_t* mutex)
 {

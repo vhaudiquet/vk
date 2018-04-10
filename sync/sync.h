@@ -1,11 +1,10 @@
 #ifndef SYNC_HEAD
 #define SYNC_HEAD
 #include "system.h"
-#include "tasking/task.h"
 
 typedef struct mutex
 {
-    process_t* locked_by;
+    struct PROCESS* locked_by;
     list_entry_t* waiting;
 } mutex_t;
 

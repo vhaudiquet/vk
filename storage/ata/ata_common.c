@@ -205,6 +205,10 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	current->prdt_virt->byte_count = (U16_MAX-sizeof(prd_t));
 	outl(current->bar4+4, current->prdt_phys);
 
+	//init device mutex
+	current->mutex = kmalloc(sizeof(mutex_t));
+	memset(current->mutex, 0, sizeof(mutex_t));
+
 	return current_top;
 }
 
@@ -306,6 +310,7 @@ error_t ata_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_devic
 		* It apppears that when the count is not big, PIO is faster than DMA
 		* When reading time would be really small, we can take the overhead of CPU time and use PIO
 		* (i actually did that for the loading of ELF from an EXT2 fs with blocks of 1024B and loading time was divided by 5)
+		* NOTE : QEMU only, never tested on real hardware + that's without UDMA i think (i dont really know much about that)
 		*/
 		if(!scheduler_started | (count <= 1024))
         {
