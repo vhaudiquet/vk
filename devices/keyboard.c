@@ -58,9 +58,23 @@ u8 azer_maj_kbd_map[] =
     0, '>'
 };
 
+u8 azer_ctrl_kbd_map[] = 
+{
+    0, 0, 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0,
+    0, 26, 0, 0, 0, 0, 21, 0, 0, 0, 0, 0,
+    0, 0,
+    17, 19, 4, 0, 0, '\b', 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0
+};
+
 u8 getchar(u8 keycode)
 {
     if(keycode > sizeof(azer_kbd_map)) return 0;
     if(kbd_maj) return azer_maj_kbd_map[keycode];
+    else if(kbd_ctrl) return azer_ctrl_kbd_map[keycode];
     else return azer_kbd_map[keycode];
 }

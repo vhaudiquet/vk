@@ -22,7 +22,7 @@ static void handle_signal(process_t* process, int sig);
 
 /* default signal actions ; 1=EXIT, 2=IGNORE, 3=CONTINUE, 4=STOP */
 //SIGCONT is set to IGNORE because CONTINUE action will always be executed
-static int default_action[] = {1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1};
+static int default_action[] = {2, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 4, 4, 4, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1};
 
 list_entry_t* signal_list = 0;
 mutex_t* signal_mutex = 0;
@@ -41,21 +41,22 @@ void handle_signals()
 {
     if(!signal_list) return;
 
-    if(mutex_lock(signal_mutex) != ERROR_NONE) return;
-
     list_entry_t* ptr = signal_list;
     while(ptr)
     {
         u32* element = ptr->element;
+        kprintf("handle_signal... ");
         handle_signal((process_t*) element[0], (int) element[1]);
+        kprintf(" ..handled.\n");
+
+        if(mutex_lock(signal_mutex) != ERROR_NONE) mutex_wait(signal_mutex);
         list_entry_t* tofree = ptr;
         ptr = ptr->next;
         kfree(tofree->element);
         kfree(tofree);
+        signal_list = ptr;
+        mutex_unlock(signal_mutex);
     }
-    signal_list = 0;
-
-    mutex_unlock(signal_mutex);
 }
 
 asm(".global sighandler_end \n \
@@ -72,6 +73,7 @@ extern void sighandler_end_end();
 */
 static void handle_signal(process_t* process, int sig)
 {
+    if(process->status == PROCESS_STATUS_ZOMBIE) return;
     void* handler = process->signal_handlers[sig];
     
     if(sig == SIGCONT) if(process->status == PROCESS_STATUS_ASLEEP_SIGNAL) scheduler_add_process(process);
@@ -95,10 +97,13 @@ static void handle_signal(process_t* process, int sig)
     /* custom signal handling function */
     else
     {
+        //OMG no WTF if scheduled, will override all gregs/sregs/eip... of original process
         process->sighandler.eip = (uintptr_t) process->signal_handlers[sig];
         process->sighandler.base_kstack = (uintptr_t) kmalloc(4096);
         process->sighandler.kesp = process->sighandler.base_kstack+4096;
-        process->sighandler.esp = process->esp - 0x10;
+        process->sighandler.esp = process->esp - 0x10; //omg no can be kernel context IM REALLY STUPID
+        process->sighandler.sregs.ds = process->sighandler.sregs.es = process->sighandler.sregs.fs = process->sighandler.sregs.gs = process->sighandler.sregs.ss = 0x23;
+        process->sighandler.sregs.cs = 0x1B;
         
         pd_switch(process->page_directory);
         u32 size = (u32) ((uintptr_t)sighandler_end_end-(uintptr_t)sighandler_end);
@@ -119,12 +124,13 @@ void send_signal(int pid, int sig)
 {
     process_t* process = processes[pid];
 
+    if(process->status == PROCESS_STATUS_ZOMBIE) return;
     if((sig <= 0) | (sig >= NSIG)) return;
 
     /* adding the signal to the list */
     while(mutex_lock(signal_mutex) != ERROR_NONE) mutex_wait(signal_mutex);
     list_entry_t** listptr = &signal_list;
-    while(*listptr) listptr = &(*listptr)->next;
+    while(*listptr) listptr = &((*listptr)->next);
     (*listptr) = kmalloc(sizeof(list_entry_t));
     u32* element = kmalloc(sizeof(u32)*2);
     element[0] = (uintptr_t) process;

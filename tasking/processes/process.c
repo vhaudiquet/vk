@@ -142,7 +142,10 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 /* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
 void exit_process(process_t* process, u32 exitcode)
 {
+    kprintf("%lEXIT(pid %d, code %u)\n", 3, process->pid, exitcode);
     if(process->pid == 1) fatal_kernel_error("Init exited.", "EXIT_PROCESS");
+
+    //TODO : remove non-handled signals from siglist
 
     free_process_memory(process);
 
@@ -163,7 +166,7 @@ void exit_process(process_t* process, u32 exitcode)
     list_entry_t* cptr = process->children;
     while(cptr)
     {
-        process_t* cp = cptr->element;   
+        process_t* cp = cptr->element;
         cp->parent = processes[1]; //all children processes get attached to INIT
 
         list_entry_t* tf = cptr;
@@ -172,6 +175,25 @@ void exit_process(process_t* process, u32 exitcode)
     }
 
     //TODO : REMOVE from GROUP and check if group become ORPHAN
+    list_entry_t* gptr = process->group->processes;
+    if(gptr->element == process)
+    {
+        kprintf("AIE AIE AIE ORPHAN GROUP !\n");
+    }
+    else
+    {
+        list_entry_t* gbef = 0;
+        while(gptr)
+        {
+            if(gptr->element == process)
+            {
+                gbef->next = gptr->next;
+                kfree(gptr);
+            }
+            gbef = gptr;
+            gptr = gptr->next;
+        }
+    }
 
     /* we put retcode in EAX and the process is zombie */
     process->status = PROCESS_STATUS_ZOMBIE;
@@ -190,6 +212,8 @@ void exit_process(process_t* process, u32 exitcode)
     //free process kernel stack
     kfree((void*) process->base_kstack);
 
+    //TODO : remove 'sighandler' if there is one and free stack/kstack
+
     //remove process from schedulers
     scheduler_remove_process(process);
 }
@@ -198,33 +222,41 @@ void exit_process(process_t* process, u32 exitcode)
 void free_process_memory(process_t* process)
 {
     //mark physical memory reserved for process stack as free
-    u32 stack_phys = get_physical(process->base_stack, process->page_directory);
-    unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->base_stack, process->page_directory);
-    
-    #ifdef PAGING_DEBUG
-    kprintf("%lFREE_PROCESS_MEM: unmapped 0x%X (size 0x%X).\n", 3, process->base_stack, PROCESS_STACK_SIZE_DEFAULT);
-    #endif
-
-    free_block(stack_phys);
-
-    //mark all data/code blocks reserved for the process as free
-    u32 i = 0;
-    list_entry_t* dloc = process->data_loc;
-    list_entry_t* ptr = dloc;
-    for(i=0;i<process->data_size;i++)
+    if(process->base_stack)
     {
-        u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
-        unmap_flexible(((u32*)ptr->element)[1], ((u32*)ptr->element)[0], process->page_directory);
+        u32 stack_phys = get_physical(process->base_stack, process->page_directory);
 
         #ifdef PAGING_DEBUG
-        kprintf("%lFREE_PROCESS_MEM: unmapped 0x%X (size 0x%X).\n", 3, ((u32*)ptr->element)[0], ((u32*)ptr->element)[1]);
+        kprintf("%lFREE_PROCESS_MEM(%d): unmapping 0x%X (size 0x%X)\n", 3, process->pid, process->base_stack, PROCESS_STACK_SIZE_DEFAULT);
         #endif
 
-        aligndown(phys, 4096);
-        free_block(phys);
-        ptr = ptr->next;
+        unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->base_stack, process->page_directory);
+        free_block(stack_phys);
+        process->base_stack = 0;
     }
-    list_free(dloc, process->data_size);
+
+    //mark all data/code blocks reserved for the process as free
+    if(process->data_loc)
+    {
+        u32 i = 0;
+        list_entry_t* dloc = process->data_loc;
+        list_entry_t* ptr = dloc;
+        for(i=0;i<process->data_size;i++)
+        {
+            u32 phys = get_physical(((u32*)ptr->element)[0], process->page_directory);
+
+            #ifdef PAGING_DEBUG
+            kprintf("%lFREE_PROCESS_MEM: unmapping 0x%X (size 0x%X)\n", 3, ((u32*)ptr->element)[0], ((u32*)ptr->element)[1]);
+            #endif
+
+            unmap_flexible(((u32*)ptr->element)[1], ((u32*)ptr->element)[0], process->page_directory);
+            aligndown(phys, 4096);
+            free_block(phys);
+            ptr = ptr->next;
+        }
+        list_free(dloc, process->data_size);
+        process->data_loc = 0;
+    }
 
     //free process heap
     #ifdef PAGING_DEBUG
@@ -331,7 +363,7 @@ static process_t* init_process()
     if((current_process) && (current_process != kernel_process)) 
     {
         tr->group = current_process->group; 
-         //add to the group list
+        //add to the group list
         list_entry_t** ptr = &tr->group->processes;
         while(*ptr) ptr = &((*ptr)->next);
         (*ptr) = kmalloc(sizeof(list_entry_t));
@@ -423,6 +455,9 @@ error_t spawn_init_process()
 
     //set tty
     tr->tty = tty1;
+    session->controlling_tty = tty1;
+    tty1->session = session;
+    tty1->foreground_processes = group;
 
     //init stdin, stdout, stderr
     fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty1->pointer;

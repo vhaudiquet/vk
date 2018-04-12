@@ -32,8 +32,8 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     u32 scount = count / bps;
     if(count % bps) scount++;
     
-    if(scount > 127) return ERROR_DISK_INTERNAL;
-    if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) return ERROR_DISK_INTERNAL;
+    if(scount > 127) {mutex_unlock(drive->mutex);return ERROR_DISK_INTERNAL;}
+    if((scount > 31) && (drive->flags & ATA_FLAG_ATAPI)) {mutex_unlock(drive->mutex);return ERROR_DISK_INTERNAL;}
 
     //kprintf("%lDMA: sector %x scount %x (offset %x, buffer %x) drive %x\n", 3, ((u32)sector), scount, offset, data, drive);
     /*set read bit in the Bus Master Command Register*/
@@ -96,7 +96,8 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
 error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive)
 {
     if(!count) return ERROR_NONE;
-    
+    if(mutex_lock(drive->mutex) != ERROR_NONE) return ERROR_MUTEX_ALREADY_LOCKED;
+
     //calculate sector count
     u32 scount = (u32)(count / BYTES_PER_SECTOR);
     if(count % BYTES_PER_SECTOR) scount++;
@@ -132,21 +133,21 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
     //copying data in PRDT
     memcpy((void*)(((u32)drive->prdt_virt)+sizeof(prd_t)+offset), data, count);
 
-    /*set read bit in the Bus Master Command Register*/
-    outb(drive->bar4, inb(drive->bar4) & ~8); // Set read bit
+    /*clear read bit in the Bus Master Command Register*/
+    outb(drive->bar4, inb(drive->bar4) & ~8); // Clear read bit
 
     /*Clear err/interrupt bits in Bus Master Status Register*/
     outb(drive->bar4 + 2, 0x04 | 0x02); //Clear interrupt and error flags
 
     if(sector > U32_MAX)
     {
-        if(!(drive->flags & ATA_FLAG_LBA48)) return ERROR_DISK_OUT;
-        if(sector & 0xFFFF000000000000) return ERROR_DISK_OUT;
+        if(!(drive->flags & ATA_FLAG_LBA48)) {mutex_unlock(drive->mutex);return ERROR_DISK_OUT;}
+        if(sector & 0xFFFF000000000000) {mutex_unlock(drive->mutex);return ERROR_DISK_OUT;}
         ata_cmd_48(sector, scount, ATA_CMD_DMA_WRITE_48, drive);
     }
     else
     {
-        if(sector & 0xF0000000) return ERROR_DISK_OUT;
+        if(sector & 0xF0000000) {mutex_unlock(drive->mutex);return ERROR_DISK_OUT;}
         ata_cmd_28((u32) sector, (u32) scount, ATA_CMD_DMA_WRITE_28, drive);        
     }
 
@@ -169,6 +170,8 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
 
     //kprintf("end controller status : 0x%X ; disk : 0x%X\n", end_status, end_disk_status);
 
+    mutex_unlock(drive->mutex);
+    
     if(!(end_status & 5)) return ERROR_DISK_INTERNAL;
     if(end_status & 2) return ERROR_DISK_INTERNAL;
     if(end_disk_status & 1) return ERROR_DISK_INTERNAL;

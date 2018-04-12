@@ -69,6 +69,15 @@ void send_signal(int pid, int sig);
 void send_signal_to_group(int gid, int sig);
 
 //Processes
+typedef struct THREAD
+{
+    //registers (backed up every schedule)
+    g_regs_t gregs;
+    s_regs_t sregs;
+    u32 eip;
+    u32 esp;
+    u32 ebp;
+} __attribute__((packed)) thread_t;
 typedef struct PROCESS
 {
     //registers (backed up every schedule)

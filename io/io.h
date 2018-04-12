@@ -41,6 +41,8 @@ typedef struct TTY
     io_stream_t* keyboard_stream;
     fsnode_t* pointer;
     struct termios termio;
+    struct pgroup* foreground_processes;
+    struct psession* session;
 } tty_t;
 
 extern tty_t* current_tty;

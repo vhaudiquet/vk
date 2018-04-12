@@ -220,6 +220,42 @@ void tty_input(tty_t* tty, u8 c)
         }
         return;
     }
+    
+    /* handle signals */
+    if((tty->termio.c_lflag & ISIG) && (tty->foreground_processes))
+    {
+        if(c == tty->termio.c_cc[VINTR])
+        {
+            send_signal_to_group(tty->foreground_processes->gid, SIGINT);
+            if(tty->termio.c_lflag & ECHO) tty_write((u8*) "^C\n", 3, tty);
+            return;
+        }
+        else if(c == tty->termio.c_cc[VKILL])
+        {
+            send_signal_to_group(tty->foreground_processes->gid, SIGKILL);
+            if(tty->termio.c_lflag & ECHO) tty_write((u8*) "^U\n", 3, tty);
+            return;
+        }
+        else if(c == tty->termio.c_cc[VSTART])
+        {
+            send_signal_to_group(tty->foreground_processes->gid, SIGCONT);
+            if(tty->termio.c_lflag & ECHO) tty_write((u8*) "^Q\n", 3, tty);
+            return;
+        }
+        else if(c == tty->termio.c_cc[VSTOP])
+        {
+            send_signal_to_group(tty->foreground_processes->gid, SIGSTOP);
+            if(tty->termio.c_lflag & ECHO) tty_write((u8*) "^S\n", 3, tty);
+            return;
+        }
+        else if(c == tty->termio.c_cc[VSUSP])
+        {
+            send_signal_to_group(tty->foreground_processes->gid, SIGTSTP);
+            if(tty->termio.c_lflag & ECHO) tty_write((u8*) "^Z\n", 3, tty);
+            return;
+        }
+    }
+    if(c == tty->termio.c_cc[VEOF]) return;
 
     if(tty->termio.c_lflag & ECHO) tty_write(&c, 1, tty);
     else if(c == '\n' && (tty->termio.c_lflag & ICANON & ECHONL)) tty_write(&c, 1, tty);
