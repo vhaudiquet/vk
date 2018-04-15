@@ -27,15 +27,19 @@
 error_t elf_check(fd_t* file);
 void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* data_size);
 
-#define PROCESS_STATUS_INIT 0
-#define PROCESS_STATUS_RUNNING 1
-#define PROCESS_STATUS_ASLEEP_TIME 2
-#define PROCESS_STATUS_ASLEEP_IRQ 3
-#define PROCESS_STATUS_ASLEEP_SIGNAL 4
-#define PROCESS_STATUS_ASLEEP_IO 5
-#define PROCESS_STATUS_ASLEEP_CHILD 6
-#define PROCESS_STATUS_ASLEEP_MUTEX 7
-#define PROCESS_STATUS_ZOMBIE 10
+#define PROCESS_STATUS_INIT 0 //the process is in INIT state
+#define PROCESS_STATUS_RUNNING 1 //the process is on the active process queue, or running currently
+#define PROCESS_STATUS_ASLEEP_THREADS 2 //the process is asleep cause all his threads are asleep
+#define PROCESS_STATUS_ASLEEP_SIGNAL 3 //the process has been stopped by a signal
+#define PROCESS_STATUS_ZOMBIE 10 //the process is dead
+
+#define THREAD_STATUS_RUNNING 1
+#define THREAD_STATUS_ASLEEP_TIME 2
+#define THREAD_STATUS_ASLEEP_IRQ 3
+#define THREAD_STATUS_ASLEEP_IO 5
+#define THREAD_STATUS_ASLEEP_CHILD 6
+#define THREAD_STATUS_ASLEEP_MUTEX 7
+#define THREAD_STATUS_ZOMBIE
 
 //Process groups and sessions
 typedef struct psession
@@ -68,6 +72,7 @@ typedef struct THREAD
     u32 kesp;
     u32 base_stack;
     u32 base_kstack;
+    u32 status;
 } __attribute__((packed)) thread_t;
 typedef struct PROCESS
 {
@@ -139,6 +144,8 @@ process_t* init_kernel_process();
 //THREADS
 thread_t* init_thread(process_t* process);
 void free_thread_memory(process_t* process, thread_t* thread);
+void scheduler_remove_thread(process_t* process, thread_t* thread);
+void scheduler_add_thread(process_t* process, thread_t* thread);
 
 //SCHEDULER
 extern bool scheduler_started;
@@ -157,7 +164,7 @@ void scheduler_remove_process(process_t* process);
 #define SLEEP_TIME 3
 #define SLEEP_WAIT_MUTEX 4
 
-void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 sleep_data_2);
+void scheduler_wait_thread(process_t* process, thread_t* thread, u8 sleep_reason, u16 sleep_data, u16 sleep_data_2);
 void scheduler_irq_wakeup(u32 irq);
 
 #endif

@@ -26,9 +26,11 @@ thread_t* init_thread(process_t* process)
     thread->kesp = ((u32) kstack) + PROCESS_KSTACK_SIZE_DEFAULT;
     thread->base_kstack = (u32) kstack;
     
+    thread->status = THREAD_STATUS_RUNNING;
+
     if(process->active_thread) queue_add(process->running_threads, thread);
     else process->active_thread = thread;
-    
+
     return thread;
 }
 
@@ -52,4 +54,83 @@ void free_thread_memory(process_t* process, thread_t* thread)
     {
         kfree((void*) thread->base_kstack);
     }
+}
+
+void scheduler_remove_thread(process_t* process, thread_t* thread)
+{
+    if(process->status != PROCESS_STATUS_RUNNING) return;
+
+    /* adding the thread to remove on waiting_threads list */
+    list_entry_t** ptr = &process->waiting_threads;
+    while(*ptr) ptr = &((*ptr)->next);
+    (*ptr) = kmalloc(sizeof(list_entry_t));
+    (*ptr)->next = 0;
+    (*ptr)->element = thread;
+
+    /* if currentprocess activethread, save context */
+    if((process == current_process) && (thread == process->active_thread))
+    {
+        thread_t* next = queue_take(process->running_threads);
+
+        __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx));
+        __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi));
+        __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi));
+        __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp));
+        //save segment registers
+        __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->active_thread->sregs.ds), "=m"(current_process->active_thread->sregs.es), "=m"(current_process->active_thread->sregs.fs), "=m"(current_process->active_thread->sregs.gs));
+        
+        //cs/ss values are obvious cause we are in kernel context
+        current_process->active_thread->sregs.ss = 0x10;
+        current_process->active_thread->sregs.cs = 0x08;
+
+        //set eip to the end of this void
+        current_process->active_thread->eip = (u32) &&srt_end;
+        __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->active_thread->esp)::); //save esp at last moment
+    
+        /* if no more threads, remove process */
+        //TODO : CRITICAL, don't schedule from that
+        process->active_thread = next;
+        if(!next) 
+        {
+            process->status = PROCESS_STATUS_ASLEEP_THREADS;
+            scheduler_remove_process(process);
+        }
+        /* else schedule to that thread */
+        else
+        {
+            __asm__ __volatile__("jmp schedule_switch"::"a"(process->active_thread), "d"(process));
+        }
+
+        srt_end: return;
+    }
+    else queue_remove(process->running_threads, thread);
+}
+
+void scheduler_add_thread(process_t* process, thread_t* thread)
+{
+    if(thread->status == THREAD_STATUS_RUNNING) return;
+
+    /* remove thread from waiting list */
+    list_entry_t* ptr = process->waiting_threads;
+    list_entry_t* bef = 0;
+    while(ptr)
+    {
+        if(ptr->element == thread)
+        {
+            if(bef) bef->next = ptr->next;
+            else process->waiting_threads = 0;
+            kfree(ptr);
+        }
+        bef = ptr;
+        ptr = ptr->next;
+    }
+
+    /* if thread was the only thread of the process, waking up */
+    if((!process->active_thread) && (process->status == PROCESS_STATUS_ASLEEP_THREADS))
+    {
+        thread->status = THREAD_STATUS_RUNNING;
+        process->active_thread = thread;
+        scheduler_add_process(process);
+    }
+    else queue_add(process->running_threads, thread);
 }

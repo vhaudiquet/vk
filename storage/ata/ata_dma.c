@@ -64,7 +64,7 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     outb(drive->bar4, inb(drive->bar4) | 1); // Set start/stop bit
     
     /*Wait for interrupt*/
-    scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, drive->irq, 5000);
+    scheduler_wait_thread(current_process, current_process->active_thread, SLEEP_WAIT_IRQ, drive->irq, 5000);
     
     /*Reset Start/Stop bit*/
     outb(drive->bar4, inb(drive->bar4) & (~1)); // Clear start/stop bit
@@ -157,7 +157,7 @@ error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_
     //kprintf("%lWaiting for interrupt...", 3);
 
     /*Wait for interrupt*/
-    scheduler_wait_process(kernel_process, SLEEP_WAIT_IRQ, drive->irq, 5000);
+    scheduler_wait_thread(current_process, current_process->active_thread, SLEEP_WAIT_IRQ, drive->irq, 5000);
     
     //kprintf("%lInterrupt received !\n", 3);
     

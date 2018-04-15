@@ -446,8 +446,8 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
         if(!element_found) asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_PERMISSION));
     }
 
-    current_process->status = PROCESS_STATUS_ASLEEP_CHILD;
-    scheduler_remove_process(current_process);
+    current_process->active_thread->status = THREAD_STATUS_ASLEEP_CHILD;
+    scheduler_remove_thread(current_process, current_process->active_thread);
     goto wait_start;
 }
 

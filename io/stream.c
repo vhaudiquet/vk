@@ -153,11 +153,14 @@ static void iostream_wait(io_stream_t* iostream)
     //we allocate space and set entry data (our iostream and associated process)
     (*ptr) = kmalloc(sizeof(list_entry_t));
     (*ptr)->next = 0;
-    (*ptr)->element = current_process;
+    void** element = kmalloc(sizeof(void*)*2);
+    element[0] = current_process;
+    element[1] = current_process->active_thread;
+    (*ptr)->element = element;
 
-    //we remove current process from scheduler
-    current_process->status = PROCESS_STATUS_ASLEEP_IO;
-    scheduler_remove_process(current_process);
+    //we remove current thread from scheduler
+    current_process->active_thread->status = THREAD_STATUS_ASLEEP_IO;
+    scheduler_remove_thread(current_process, current_process->active_thread);
 }
 
 static void iostream_wake(io_stream_t* iostream)
@@ -165,7 +168,8 @@ static void iostream_wake(io_stream_t* iostream)
     list_entry_t* ptr = iostream->waiting_processes;
     while(ptr)
     {
-        scheduler_add_process(ptr->element);
+        void** element = ptr->element;
+        scheduler_add_thread(element[0], element[1]);
         list_entry_t* tfree = ptr;
         ptr = ptr->next;
         kfree(tfree);

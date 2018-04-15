@@ -65,37 +65,37 @@ void scheduler_remove_process(process_t* process)
 {
     if(current_process == process)
     {
-        //this method was called by this process to pause himself
-        //once he returns active, the context must be the end of this void
-        //so we can just save the current context with eip = end of scheduler_remove_process
-        //and we are good
+        process_t* tswitch = queue_take(p_ready_queue);
+        if(!tswitch) tswitch = idle_process;
 
-        //following convention, functions can trash eax/ecx/edx, so we dont care about theses
-        //we need to save ebx/esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
-        __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx));
-        __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi));
-        __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi));
-        __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp));
-        //save segment registers
-        __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->active_thread->sregs.ds), "=m"(current_process->active_thread->sregs.es), "=m"(current_process->active_thread->sregs.fs), "=m"(current_process->active_thread->sregs.gs));
-        
-        //cs/ss values are obvious cause we are in kernel context
-        current_process->active_thread->sregs.ss = 0x10;
-        current_process->active_thread->sregs.cs = 0x08;
-
-        //set eip to the end of this void
-        current_process->active_thread->eip = (u32) &&rmv;
-
-        //add idle if there are no processes on queue so that the kernel switch to it (except of crashing)
-        if(p_ready_queue->rear < p_ready_queue->front)
+        //if no active thread, the thread was already removed before
+        if(current_process->active_thread)
         {
-            scheduler_add_process(idle_process);
+            //this method was called by this process to pause himself
+            //once he returns active, the context must be the end of this void
+            //so we can just save the current context with eip = end of scheduler_remove_process
+            //and we are good
+
+            //following convention, functions can trash eax/ecx/edx, so we dont care about theses
+            //we need to save ebx/esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
+            __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx));
+            __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi));
+            __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi));
+            __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp));
+            //save segment registers
+            __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->active_thread->sregs.ds), "=m"(current_process->active_thread->sregs.es), "=m"(current_process->active_thread->sregs.fs), "=m"(current_process->active_thread->sregs.gs));
+        
+            //cs/ss values are obvious cause we are in kernel context
+            current_process->active_thread->sregs.ss = 0x10;
+            current_process->active_thread->sregs.cs = 0x08;
+
+            //set eip to the end of this void
+            current_process->active_thread->eip = (u32) &&rmv;
+            
+            __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->active_thread->esp)::); //save esp at last moment
         }
         
-        __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->active_thread->esp)::); //save esp at last moment
-        
         /* we directly jump to the part of schedule function that switch processes */
-        process_t* tswitch = queue_take(p_ready_queue);
         __asm__ __volatile__("jmp schedule_switch"::"a"(tswitch->active_thread), "d"(tswitch));
 
         rmv: return;
@@ -107,7 +107,7 @@ void scheduler_remove_process(process_t* process)
 * Put a process to sleep, either for an ammount of time or to wait an IRQ
 * valid 'sleep_reason' are : SLEEP_WAIT_IRQ, SLEEP_TIME
 */
-void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data, u16 wait_time)
+void scheduler_wait_thread(process_t* process, thread_t* thread, u8 sleep_reason, u16 sleep_data, u16 wait_time)
 {
     while(mutex_lock(wait_mutex) != ERROR_NONE) mutex_wait(wait_mutex);
 
@@ -141,13 +141,14 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         wait_entry->prev = last;
 
         //allocate space for time/process and put it into the entry
-        uintptr_t* element = kmalloc(sizeof(uintptr_t)*2);
+        uintptr_t* element = kmalloc(sizeof(uintptr_t)*3);
         element[0] = (uintptr_t) process;
         element[1] = wait_time;
+        element[2] = (uintptr_t) thread;
         wait_entry->element = element;
 
-        //set process status
-        process->status = PROCESS_STATUS_ASLEEP_TIME;
+        //set thread status
+        thread->status = THREAD_STATUS_ASLEEP_TIME;
     }
 
     /* if we need to wait for an irq */
@@ -160,17 +161,18 @@ void scheduler_wait_process(process_t* process, u8 sleep_reason, u16 sleep_data,
         //we allocate space and set entry data (our process)
         (*ptr) = kmalloc(sizeof(list_entry_t));
         (*ptr)->next = 0;
-        u32* element = kmalloc(sizeof(u32)*2);
+        u32* element = kmalloc(sizeof(u32)*3);
         element[0] = (uintptr_t) process;
         element[1] = (uintptr_t) wait_entry;
+        element[2] = (uintptr_t) thread;
         (*ptr)->element = element;
 
-        //set process status
-        process->status = PROCESS_STATUS_ASLEEP_IRQ;
+        //set thread status
+        thread->status = THREAD_STATUS_ASLEEP_IRQ;
     }
 
     mutex_unlock(wait_mutex);
-    scheduler_remove_process(process);
+    scheduler_remove_thread(process, thread);
 }
 
 /*
@@ -192,7 +194,7 @@ void scheduler_sleep_update()
         wait_list = 0;
         do
         {
-            scheduler_add_process((process_t*) element[0]);
+            scheduler_add_thread((process_t*) element[0], (thread_t*) element[2]);
 
             dlist_entry_t* to_free = ptr;
             ptr = ptr->next;
@@ -229,7 +231,7 @@ void scheduler_irq_wakeup(u32 irq)
         if(wlist_entry->next) wlist_entry->next->prev = wlist_entry->prev;
         kfree(wlist_entry->element); kfree(wlist_entry);
     }
-    scheduler_add_process((process_t*) element[0]);
+    scheduler_add_thread((process_t*) element[0], (thread_t*) element[2]);
     list_entry_t* ptr = irq_list[irq]->next;
     kfree(irq_list[irq]->element); kfree(irq_list[irq]); irq_list[irq] = 0;
     while(ptr)
@@ -243,7 +245,7 @@ void scheduler_irq_wakeup(u32 irq)
             if(wlist_entry->next) wlist_entry->next->prev = wlist_entry->prev;
             kfree(wlist_entry->element); kfree(wlist_entry);
         }
-        scheduler_add_process((process_t*) element[0]);
+        scheduler_add_thread((process_t*) element[0], (thread_t*) element[2]);
         list_entry_t* to_free = ptr;
         ptr = ptr->next;
         kfree(to_free->element);

@@ -24,11 +24,14 @@ void mutex_wait(mutex_t* mutex)
     list_entry_t** ptr = &mutex->waiting;
     while(*(ptr)) ptr = &(*ptr)->next;
     (*ptr) = kmalloc(sizeof(list_entry_t));
-    (*ptr)->element = current_process;
+    void** element = kmalloc(sizeof(void*)*2);
+    element[0] = current_process;
+    element[0] = current_process->active_thread;
+    (*ptr)->element = element;
     (*ptr)->next = 0;
 
-    current_process->status = PROCESS_STATUS_ASLEEP_MUTEX;
-    scheduler_remove_process(current_process);
+    current_process->active_thread->status = THREAD_STATUS_ASLEEP_MUTEX;
+    scheduler_remove_thread(current_process, current_process->active_thread);
 }
 
 void mutex_unlock_wakeup(mutex_t* mutex)
@@ -36,10 +39,10 @@ void mutex_unlock_wakeup(mutex_t* mutex)
     //waking up first waiting list element and removing it from list
     if(!mutex->waiting) return;
     
-    process_t* tw = mutex->waiting->element;
+    void** tw = mutex->waiting->element;
     list_entry_t* ptr = mutex->waiting;
     mutex->waiting = mutex->waiting->next;
     kfree(ptr);
 
-    scheduler_add_process(tw);
+    scheduler_add_thread(tw[0], tw[1]);
 }

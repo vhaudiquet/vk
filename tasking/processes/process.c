@@ -207,8 +207,13 @@ void exit_process(process_t* process, u32 exitcode)
         send_signal(process->parent->pid, SIGCHLD);
 
         //wake up parent if wait()
-        if(process->parent->status == PROCESS_STATUS_ASLEEP_CHILD)
-            scheduler_add_process(process->parent);
+        list_entry_t* wptr = process->parent->waiting_threads;
+        while(wptr)
+        {
+            thread_t* thread = wptr->element;
+            if(thread->status == THREAD_STATUS_ASLEEP_CHILD)
+                {scheduler_add_thread(process->parent, thread); break;}
+        }
     }
 
     //free process kernel stack
