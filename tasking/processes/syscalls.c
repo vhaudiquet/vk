@@ -345,8 +345,7 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //schedule to force reload eip/esp + registers that are in memory
-    __asm__ __volatile__("mov %0, %%eax \n \
-        jmp schedule_switch"::"g"(current_process));
+    __asm__ __volatile__("jmp schedule_switch"::"a"(current_process->active_thread), "d"(current_process));
 
     //asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(load));
 }
@@ -369,9 +368,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == -pid))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->threads[element->active_thread].gregs.eax;
+                int retcode = (int) element->active_thread->gregs.eax;
                 processes[element->pid] = 0;
-                kfree(element->threads);
+                kfree(element->active_thread);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -389,9 +388,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->threads[element->active_thread].gregs.eax;
+                int retcode = (int) element->active_thread->gregs.eax;
                 processes[element->pid] = 0;
-                kfree(element->threads);
+                kfree(element->active_thread);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -409,9 +408,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == current_process->group->gid))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->threads[element->active_thread].gregs.eax;
+                int retcode = (int) element->active_thread->gregs.eax;
                 processes[element->pid] = 0;
-                kfree(element->threads);
+                kfree(element->active_thread);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -433,9 +432,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
                 if(element->status == PROCESS_STATUS_ZOMBIE)
                 {
                     int trpid = element->pid;
-                    int retcode = (int) element->threads[element->active_thread].gregs.eax;
+                    int retcode = (int) element->active_thread->gregs.eax;
                     processes[element->pid] = 0;
-                    kfree(element->threads);
+                    kfree(element->active_thread);
                     kfree(element);
                     *wstatus = retcode;
                     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -566,7 +565,7 @@ pushl %esp /* push esp to be restored later on the forked process */ \n \
 pushl current_process /* push current process as fork() argument */ \n \
 call fork /* call fork() */ \n \
 addl $0x8, %esp /* clean esp after fork() call */ \n \
-movl 0x38(%eax), %eax /* return new process pid */ \n \
+movl 0x34(%eax), %eax /* return new process pid */ \n \
 ret");
 
 int fork_ret()

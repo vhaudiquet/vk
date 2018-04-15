@@ -32,7 +32,7 @@ mutex_t* wait_mutex = 0;
 */
 void scheduler_init()
 {
-    p_ready_queue = queue_init();
+    p_ready_queue = queue_init(10);
     wait_mutex = kmalloc(sizeof(mutex_t));
     memset(wait_mutex, 0, sizeof(mutex_t));
 }
@@ -71,21 +71,20 @@ void scheduler_remove_process(process_t* process)
         //and we are good
 
         //following convention, functions can trash eax/ecx/edx, so we dont care about theses
-        current_process->threads[current_process->active_thread].gregs.eax = current_process->threads[current_process->active_thread].gregs.ecx = current_process->threads[current_process->active_thread].gregs.edx = 0;
         //we need to save ebx/esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
-        __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->threads[current_process->active_thread].gregs.ebx));
-        __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->threads[current_process->active_thread].gregs.edi));
-        __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->threads[current_process->active_thread].gregs.esi));
-        __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->threads[current_process->active_thread].ebp));
+        __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx));
+        __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi));
+        __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi));
+        __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp));
         //save segment registers
-        __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->threads[current_process->active_thread].sregs.ds), "=m"(current_process->threads[current_process->active_thread].sregs.es), "=m"(current_process->threads[current_process->active_thread].sregs.fs), "=m"(current_process->threads[current_process->active_thread].sregs.gs));
+        __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->active_thread->sregs.ds), "=m"(current_process->active_thread->sregs.es), "=m"(current_process->active_thread->sregs.fs), "=m"(current_process->active_thread->sregs.gs));
         
         //cs/ss values are obvious cause we are in kernel context
-        current_process->threads[current_process->active_thread].sregs.ss = 0x10;
-        current_process->threads[current_process->active_thread].sregs.cs = 0x08;
+        current_process->active_thread->sregs.ss = 0x10;
+        current_process->active_thread->sregs.cs = 0x08;
 
         //set eip to the end of this void
-        current_process->threads[current_process->active_thread].eip = (u32) &&rmv;
+        current_process->active_thread->eip = (u32) &&rmv;
 
         //add idle if there are no processes on queue so that the kernel switch to it (except of crashing)
         if(p_ready_queue->rear < p_ready_queue->front)
@@ -93,13 +92,11 @@ void scheduler_remove_process(process_t* process)
             scheduler_add_process(idle_process);
         }
         
-        __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->threads[current_process->active_thread].esp)::); //save esp at last moment
+        __asm__ __volatile__("mov %%esp, %%eax":"=a"(current_process->active_thread->esp)::); //save esp at last moment
         
         /* we directly jump to the part of schedule function that switch processes */
-        __asm__ __volatile__("pushl p_ready_queue \n \
-        call  queue_take \n \
-        add $0x4, %esp \n \
-        jmp schedule_switch");
+        process_t* tswitch = queue_take(p_ready_queue);
+        __asm__ __volatile__("jmp schedule_switch"::"a"(tswitch->active_thread), "d"(tswitch));
 
         rmv: return;
     }

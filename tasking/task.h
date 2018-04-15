@@ -71,11 +71,10 @@ typedef struct THREAD
 } __attribute__((packed)) thread_t;
 typedef struct PROCESS
 {
-    //registers (backed up every schedule)
-    thread_t* threads;
-    u32 threads_size;
-    u32 threads_count;
-    u32 active_thread;
+    //threads
+    thread_t* active_thread;
+    queue_t* running_threads;
+    list_entry_t* waiting_threads;
     u32 flags;
     //page directory of the process
     u32* page_directory;
@@ -111,6 +110,9 @@ typedef struct PROCESS
 #define EXIT_CONDITION_USER ((u32)(1 << 8))
 #define EXIT_CONDITION_SIGNAL ((u32)(2 << 8))
 
+#define PROCESS_KSTACK_SIZE_DEFAULT 8192
+#define PROCESS_STACK_SIZE_DEFAULT 8192
+
 void process_init();
 error_t spawn_init_process();
 void free_process_memory(process_t* process);
@@ -133,6 +135,10 @@ extern process_t* kernel_process;
 extern process_t* idle_process;
 process_t* init_idle_process();
 process_t* init_kernel_process();
+
+//THREADS
+thread_t* init_thread(process_t* process);
+void free_thread_memory(process_t* process, thread_t* thread);
 
 //SCHEDULER
 extern bool scheduler_started;

@@ -1,4 +1,4 @@
-LDOBJ=kernel.o ckernel.o lib.o gdt.o cpu.o idt.o vga_text.o video.o isrs.o isr.o paging.o error.o pic.o kheap.o physical.o kpageheap.o ata_pio.o block_devices.o pci.o fat32.o vfs.o args.o elf.o syscalls.o process.o keyboard.o data_structs.o scheduler.o ata_dma.o ata_common.o atapi.o iso_9660.o kvmheap.o time.o ext2.o devfs.o stream.o ttys.o asm_scheduler.o asm_mutex.o mutex.o signal.o groups.o
+LDOBJ=kernel.o ckernel.o lib.o gdt.o cpu.o idt.o vga_text.o video.o isrs.o isr.o paging.o error.o pic.o kheap.o physical.o kpageheap.o ata_pio.o block_devices.o pci.o fat32.o vfs.o args.o elf.o syscalls.o process.o keyboard.o data_structs.o scheduler.o ata_dma.o ata_common.o atapi.o iso_9660.o kvmheap.o time.o ext2.o devfs.o stream.o ttys.o asm_scheduler.o asm_mutex.o mutex.o signal.o groups.o threads.o
 CPATH=/home/valentin/Programmes/i386-elf-7.2.0/bin
 CC=$(CPATH)/i386-elf-gcc -std=gnu11
 AS=$(CPATH)/i386-elf-as

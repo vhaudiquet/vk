@@ -38,20 +38,40 @@ schedule:
     /* call handle_signals to handle every incoming process signal */
     call handle_signals
 
-    /* call queue_take to get the next processus (in eax) */
+    /* call queue_take to get the next processus (in edx) */
     pushl p_ready_queue
     call queue_take
     add $0x4, %esp
+    mov %eax, %edx
 
-    /* if !eax, and no next thread, we return */
-    test %eax, %eax
-    jne schedule_save
+    /* if !edx, and no next thread, we return */
     movl current_process, %ebx
-    movl 0xC(%ebx), %esi # move active thread in esi
-    movl 0x8(%ebx), %edi # move threads_count in edi
-    subl $1, %edi # substract 1
-    cmp %esi, %edi # compare with active_thread
-    jle schedule_pop # if less/equal, we have no more processes and no more threads
+
+    test %edx, %edx
+    jnz get_next_thread # we have a process switch to do
+
+    /* get old process new thread in eax */
+    pushl 0x4(%ebx)
+    call queue_take
+    add $0x4, %esp
+
+    test %eax, %eax
+    jz schedule_pop # if zero we have no more processes and no more threads
+    
+    mov %ebx, %edx # we don't switch processes, just threads
+    jmp schedule_save
+
+    /* if we are switching processes, get new process new thread in eax */
+    get_next_thread:
+    pushl 0x4(%edx)
+    call queue_take
+    add $0x4, %esp
+    test %eax, %eax
+    jnz schedule_save # there is another thread, we'll switch to that
+
+    /* if new process has only one thread, we take back the active thread in eax */
+    old_thread:
+    mov (%edx), %eax
 
     schedule_save:
     /* if(current process && current_process != idle_process) we save current process context */
@@ -60,14 +80,13 @@ schedule:
     cmp %ebx, idle_process
     je schedule_switch
 
-    movl (%ebx), %ecx # move threads addr in ecx
-    leal (%ecx, %esi, 4), %ecx # move active thread addr in ecx
+    movl (%ebx), %ecx # move active thread in ecx
 
     /* save general registers */
     popl (%ecx) # edi
     popl 0x4(%ecx) # esi
     popl 0x38(%ecx) # ebp
-    popl %ebp # esp, we'll see later
+    popl %esi # esp, we'll see later
     popl 0x8(%ecx) # ebx
     popl 0xC(%ecx) # edx
     popl 0x10(%ecx) # ecx
@@ -76,18 +95,18 @@ schedule:
     /* save eip */
     popl 0x30(%ecx) # eip
 
-    /* get cs in edx and save it*/
-    popl %edx
-    movl %edx, 0x2C(%ecx)
+    /* get cs in ebp and save it*/
+    popl %ebp
+    movl %ebp, 0x2C(%ecx)
 
     /* save flags */
-    popl 0x10(%ebx)
+    popl 0xC(%ebx)
 
     /* 
     * if process was in usermode, save interrupt pushed esp and ss 
-    * else save current esp (the one in ecx) and ss
+    * else save current esp (the one in esi) and ss
     */
-    cmpl $0x08, %edx
+    cmpl $0x08, %ebp
     je save_kernelmode
 
     save_usermode:
@@ -96,7 +115,7 @@ schedule:
     jmp save_segments
 
     save_kernelmode:
-    movl %ebp, 0x34(%ecx) # esp
+    movl %esi, 0x34(%ecx) # esp
     mov %ss, 0x28(%ecx) # ss
 
     /* save segment registers */
@@ -106,37 +125,33 @@ schedule:
     mov %fs, 0x20(%ecx)
     mov %gs, 0x24(%ecx)
 
+    /* put the process back in queue */
+    cmp %edx, %ebx # if we are not switching process, just go to switch
+    je schedule_switch
+
+    pushl %ebx
+    pushl p_ready_queue
+    call queue_add
+    add $0x8, %esp
+
     schedule_switch:
-    movl %eax, current_process # switch current_process
-
-    /* if we can go to next thread, we do */
-
-    movl 0xC(%eax), %esi # move active thread in esi
-    movl 0x8(%eax), %edi # move threads_count in edi
-    subl $1, %edi # substract 1
-    cmp %esi, %edi # compare with active_thread
-    jle schedule_restore # if less/equal, we have no more processes and no more threads
-    addl $1, 0xC(%eax) # update active_thread
-    addl $1, %esi
-
-    schedule_restore:
-    movl (%eax), %ecx # move threads addr in ecx
-    leal (%ecx, %esi, 4), %ecx # move active thread addr in ecx
+    movl %edx, current_process # switch current_process
+    movl %eax, (%edx) # switch active_thread
 
     /* restore segment registers */
-    mov 0x18(%ecx), %ds
-    mov 0x1C(%ecx), %es
-    mov 0x20(%ecx), %fs
-    mov 0x24(%ecx), %gs
+    mov 0x18(%eax), %ds
+    mov 0x1C(%eax), %es
+    mov 0x20(%eax), %fs
+    mov 0x24(%eax), %gs
 
     /* restore page directory */
-    movl 0x14(%eax), %esi
+    movl 0x10(%edx), %esi
     leal 0x40000000(%esi), %edi
     movl %edi, %cr3
     movl %esi, current_page_directory
 
     /* restore TSS.esp0 (to match process kstack, usefull on a syscall / interrupt) */
-    movl 0x3C(%ecx), %esi
+    movl 0x3C(%eax), %esi
     movl $TSS, %edi
     movl %esi, 0x4(%edi)
 
@@ -144,33 +159,33 @@ schedule:
     * if process was in usermode, we push esp and ss (and let iret do the job)
     * else we restore esp directly
     */
-    cmpl $0x08, 0x2C(%ecx)
+    cmpl $0x08, 0x2C(%eax)
     je restore_kernelmode
 
     restore_usermode:
-    pushl 0x28(%ecx) # ss
-    pushl 0x34(%ecx) # esp
+    pushl 0x28(%eax) # ss
+    pushl 0x34(%eax) # esp
     jmp restore_end
 
     restore_kernelmode:
-    movl 0x34(%ecx), %esp
+    movl 0x34(%eax), %esp
 
     restore_end:
     /* restore interrupt stack (for iret) */
-    orl $0x200, 0x10(%eax) # set interrupt flag if it wasnt
-    andl $0xffffbeff, 0x10(%eax) # clear nested task and trap flags if they were set
-    push 0x10(%eax) # push flags
-    push 0x2C(%ecx) # push cs
-    push 0x30(%ecx) # push eip
+    orl $0x200, 0xC(%edx) # set interrupt flag if it wasnt
+    andl $0xffffbeff, 0xC(%edx) # clear nested task and trap flags if they were set
+    push 0xC(%edx) # push flags
+    push 0x2C(%eax) # push cs
+    push 0x30(%eax) # push eip
 
     /* restore general registers */
-    movl (%ecx), %edi # edi
-    movl 0x4(%ecx), %esi # esi
-    movl 0x38(%ecx), %ebp # ebp
-    movl 0x8(%ecx), %ebx # ebx
-    movl 0xC(%ecx), %edx # edx
-    movl 0x14(%ecx), %eax # eax
-    movl 0x10(%ecx), %ecx # ecx
+    movl (%eax), %edi # edi
+    movl 0x4(%eax), %esi # esi
+    movl 0x38(%eax), %ebp # ebp
+    movl 0x8(%eax), %ebx # ebx
+    movl 0xC(%eax), %edx # edx
+    movl 0x10(%eax), %ecx # ecx
+    movl 0x14(%eax), %eax # eax
 
     jmp schedule_end
 

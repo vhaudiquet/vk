@@ -23,10 +23,8 @@
 *  of the kernel (if there is no loop in the piece of code, we have to make one to fill the list))
 */
 
-#define QUEUE_STACK_DEFAULT_SIZE 10
-
 //QUEUES
-queue_t* queue_init()
+queue_t* queue_init(u32 size)
 {
     queue_t* tr = 
     #ifdef MEMLEAK_DBG
@@ -36,12 +34,12 @@ queue_t* queue_init()
     #endif
     tr->front = 
     #ifdef MEMLEAK_DBG
-    kmalloc(QUEUE_STACK_DEFAULT_SIZE*sizeof(void*), "queue data");
+    kmalloc(size*sizeof(void*), "queue data");
     #else
-    kmalloc(QUEUE_STACK_DEFAULT_SIZE*sizeof(void*));
+    kmalloc(size*sizeof(void*));
     #endif
     tr->rear = tr->front - sizeof(void*);
-    tr->size = QUEUE_STACK_DEFAULT_SIZE;
+    tr->size = size;
     return tr;
 }
 
@@ -82,11 +80,11 @@ void queue_remove(queue_t* queue, void* element)
 }
 
 //STACKS
-stack_t* stack_init()
+stack_t* stack_init(u32 size)
 {
     stack_t* tr = kmalloc(sizeof(stack_t));
-    tr->buffer_size = QUEUE_STACK_DEFAULT_SIZE;
-    tr->buffer = kmalloc(sizeof(void*)*QUEUE_STACK_DEFAULT_SIZE);
+    tr->buffer_size = size;
+    tr->buffer = kmalloc(sizeof(void*)*size);
     tr->count = 0;
     return tr;
 }

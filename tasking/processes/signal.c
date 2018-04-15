@@ -83,7 +83,17 @@ static void handle_signal(process_t* process, int sig)
     {
         if(default_action[sig] == 1)
         {
-            if(process->pid != 1) exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
+            if(process->pid != 1)
+            {
+                exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
+                // int thread = init_thread(process);
+                // process->threads[thread].eip = (uintptr_t) exit_process;
+                // u32* kesp = (u32*) process->threads[thread].kesp;
+                // kesp-=4; *(kesp) = EXIT_CONDITION_SIGNAL | ((u8) sig);
+                // kesp-=4; *(kesp) = (uintptr_t) process;
+                // process->threads[thread].esp = (uintptr_t) kesp;
+                // process->active_thread = (u32) (thread-1);
+            }
         }
         else if(default_action[sig] == 2) return;
         else if(default_action[sig] == 4)
