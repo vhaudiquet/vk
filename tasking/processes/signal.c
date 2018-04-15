@@ -45,9 +45,9 @@ void handle_signals()
     while(ptr)
     {
         u32* element = ptr->element;
-        kprintf("handle_signal... ");
+        //kprintf("handle_signal... ");
         handle_signal((process_t*) element[0], (int) element[1]);
-        kprintf(" ..handled.\n");
+        //kprintf(" ..handled.\n");
 
         if(mutex_lock(signal_mutex) != ERROR_NONE) mutex_wait(signal_mutex);
         list_entry_t* tofree = ptr;
@@ -97,22 +97,7 @@ static void handle_signal(process_t* process, int sig)
     /* custom signal handling function */
     else
     {
-        //OMG no WTF if scheduled, will override all gregs/sregs/eip... of original process
-        process->sighandler.eip = (uintptr_t) process->signal_handlers[sig];
-        process->sighandler.base_kstack = (uintptr_t) kmalloc(4096);
-        process->sighandler.kesp = process->sighandler.base_kstack+4096;
-        process->sighandler.esp = process->esp - 0x10; //omg no can be kernel context IM REALLY STUPID
-        process->sighandler.sregs.ds = process->sighandler.sregs.es = process->sighandler.sregs.fs = process->sighandler.sregs.gs = process->sighandler.sregs.ss = 0x23;
-        process->sighandler.sregs.cs = 0x1B;
-        
-        pd_switch(process->page_directory);
-        u32 size = (u32) ((uintptr_t)sighandler_end_end-(uintptr_t)sighandler_end);
-        memcpy((u32*) process->sighandler.esp-size, sighandler_end, size);
-        *((u32*) process->sighandler.esp - size - 0x4) = process->sighandler.esp - size;
-        *((int32_t*) process->sighandler.esp - size - 0x8) = sig;
-        pd_switch(current_process->page_directory);
-
-        process->sighandler.esp -= (size + 0x8);
+       
     }
 }
 

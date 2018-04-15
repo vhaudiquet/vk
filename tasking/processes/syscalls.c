@@ -344,10 +344,6 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
     //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
-    //QEMU instantly crash if i dont do that (whatever that is, i tried lots of memory access to current_process and it works)
-    //TODO : check wtf, is this QEMU bug or does it happen on real hardware and why ?
-    current_process->sregs.cs = 0x1B;
-
     //schedule to force reload eip/esp + registers that are in memory
     __asm__ __volatile__("mov %0, %%eax \n \
         jmp schedule_switch"::"g"(current_process));
@@ -373,8 +369,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == -pid))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->gregs.eax;
+                int retcode = (int) element->threads[element->active_thread].gregs.eax;
                 processes[element->pid] = 0;
+                kfree(element->threads);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -392,8 +389,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->gregs.eax;
+                int retcode = (int) element->threads[element->active_thread].gregs.eax;
                 processes[element->pid] = 0;
+                kfree(element->threads);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -411,8 +409,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             if((element->status == PROCESS_STATUS_ZOMBIE) && (element->group->gid == current_process->group->gid))
             {
                 int trpid = element->pid;
-                int retcode = (int) element->gregs.eax;
+                int retcode = (int) element->threads[element->active_thread].gregs.eax;
                 processes[element->pid] = 0;
+                kfree(element->threads);
                 kfree(element);
                 *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -434,8 +433,9 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
                 if(element->status == PROCESS_STATUS_ZOMBIE)
                 {
                     int trpid = element->pid;
-                    int retcode = (int) element->gregs.eax;
+                    int retcode = (int) element->threads[element->active_thread].gregs.eax;
                     processes[element->pid] = 0;
+                    kfree(element->threads);
                     kfree(element);
                     *wstatus = retcode;
                     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
@@ -549,9 +549,7 @@ void syscall_sigaction(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_sigret(u32 ebx, u32 ecx, u32 edx)
 {
-    if(!current_process->sighandler.eip) return;
-    current_process->sighandler.eip = 0;
-    kfree((void*) current_process->sighandler.base_kstack);
+    
 }
 
 void syscall_sbrk(u32 ebx, u32 ecx, u32 edx)
@@ -562,27 +560,13 @@ void syscall_sbrk(u32 ebx, u32 ecx, u32 edx)
 
 #pragma GCC diagnostic pop
 
-__asm__(".extern fork_ret \n \
-.global syscall_fork \n \
+__asm__(".global syscall_fork \n \
 syscall_fork: \n \
-push %esp /* push esp to be restored later on the forked process */ \n \
-push current_process /* push current process as fork() argument */ \n \
+pushl %esp /* push esp to be restored later on the forked process */ \n \
+pushl current_process /* push current process as fork() argument */ \n \
 call fork /* call fork() */ \n \
-add $0x4, %esp /* clean esp after fork() call */ \n \
-mov %ebp, 0x38(%eax) /* restoring unalterable registers (ebp, esi, edi) */ \n \
-mov %edi, (%eax) \n \
-mov %esi, 0x4(%eax) \n \
-movl $fork_ret, 0x30(%eax) /* moving fork_ret addr to EIP of forked process (in eax) */ \n \
-pop %ecx /* poping esp to restore in ecx */ \n \
-mov current_process, %edx /* move current_process to edx */ \n \
-subl 0x4C(%edx), %ecx /* substract base_kstack of current_process to esp */ \n \
-addl 0x4C(%eax), %ecx /* add base_kstack of new process to esp */ \n \
-mov %ecx, 0x34(%eax) /* restore new process esp */ \n \
-push 0x70(%eax) /* push new process pid */ \n \
-push %eax /* push new process as argument of scheduler_add_process() */ \n \
-call scheduler_add_process /* call scheduler_add_process() */ \n \
-add $0x4, %esp /* clean esp after scheduler_add_process() call */ \n \
-pop %eax /* pop new process pid into eax (as return value) */ \n \
+addl $0x8, %esp /* clean esp after fork() call */ \n \
+movl 0x38(%eax), %eax /* return new process pid */ \n \
 ret");
 
 int fork_ret()

@@ -48,6 +48,10 @@ void fault_handler(struct regs_int * r)
 	if(r->int_no == 8) _fatal_kernel_error("DOUBLE FAULT", "DOUBLE FAULT", "Unknown", 0);
 	
 	kprintf("%lFAULT in process 0x%X / %d\n", 2, current_process, current_process->pid);
+	kprintf("Processes : ");
+	u32 i; for(i = 0; i<processes_size;i++) kprintf("%x ", processes[i]);
+	kprintf("\n");
+	kprintf("Kernel : %x , idle : %x \n", kernel_process, idle_process);
 	kprintf("%lEIP = 0x%X\n", 3, r->eip);
     switch(r->int_no)
 	{

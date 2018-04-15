@@ -3,7 +3,7 @@ C kernel project ; current architecture : x86
 
 Current status : the kernel can load an ELF executable, statically linked with newlib, and execute the code, from an ATA disk with a FAT32/EXT2 fs or an ATAPI cd-rom with an ISO9660 fs.
 (even if for now almost every executable cause a page fault from iso9660, idk why...)
-Multitasking is working, and processes can use fork() and exec() system calls to run other processes (but i have no threading support).
+Multitasking is working, and processes can use fork() and exec() system calls to run other processes.
 
 I want to get ACPI support, at least for ACPI shutdown but also to use things like HPET...
 
@@ -16,7 +16,7 @@ If you want to compile the kernel or to contribute, you're welcome.
 All i need now is to fix all the bugs so if you want to provide patches or bug reports, feel free.
 For now there is no binary distribution, but the kernel is easy to compile.
 You can look at my makefile (which is ugly and basic) to see all the tools that you need.
-Basically, you just need to have gcc 7.2 with some flags or i386-elf-gcc 7.2. (i'm trying to switch from gcc 5.4)
+Basically, you just need to have gcc 7.2 with some flags or i386-elf-gcc 7.2.
 You can try to compile it with another gcc version but you might get compile warning or bugs.
 
 Source code organization:

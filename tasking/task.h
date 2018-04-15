@@ -52,18 +52,6 @@ typedef struct pgroup
 } pgroup_t;
 
 //Signals
-typedef struct SIGHANDLER
-{
-    u32 eip;
-    g_regs_t gregs;
-    s_regs_t sregs;
-    u32 esp;
-    u32 ebp;
-    u32 kesp;
-    u32 base_stack;
-    u32 base_kstack;
-} sighandler_t;
-
 void signals_init();
 void send_signal(int pid, int sig);
 void send_signal_to_group(int gid, int sig);
@@ -77,23 +65,20 @@ typedef struct THREAD
     u32 eip;
     u32 esp;
     u32 ebp;
+    u32 kesp;
+    u32 base_stack;
+    u32 base_kstack;
 } __attribute__((packed)) thread_t;
 typedef struct PROCESS
 {
     //registers (backed up every schedule)
-    g_regs_t gregs;
-    s_regs_t sregs;
-    u32 eip;
-    u32 esp;
-    u32 ebp;
+    thread_t* threads;
+    u32 threads_size;
+    u32 threads_count;
+    u32 active_thread;
     u32 flags;
     //page directory of the process
     u32* page_directory;
-    //process kernel stack current esp
-    u32 kesp;
-    //process base stack and kernel stack (to free them on exit_process)
-    u32 base_stack;
-    u32 base_kstack;
     //location of all elf data segments in memory (to free them on exit_process)
     list_entry_t* data_loc;
     u32 data_size;
@@ -115,8 +100,6 @@ typedef struct PROCESS
     struct PROCESS* parent;
     //signals
     void* signal_handlers[NSIG];
-    //sighandler : custom signal handling function
-    sighandler_t sighandler;
     //current directory
     char current_dir[100];
 } __attribute__((packed)) process_t;
@@ -134,7 +117,8 @@ void free_process_memory(process_t* process);
 error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv);
 void exit_process(process_t* process, u32 exitcode);
 u32 sbrk(process_t* process, u32 incr);
-process_t* fork(process_t* process);
+process_t* fork(process_t* process, u32 old_esp);
+int fork_ret();
 
 extern process_t** processes;
 extern u32 processes_size;

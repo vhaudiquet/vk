@@ -22,6 +22,8 @@
 #include "cpu/cpu.h"
 
 #define PROCESS_STACK_SIZE_DEFAULT 8192
+#define PROCESS_KSTACK_SIZE_DEFAULT 8192
+#define PROCESS_DEFAULT_THREADS_SIZE 3
 
 #define PROCESSES_ARRAY_SIZE 20
 process_t** processes = 0;
@@ -77,7 +79,7 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 
     map_memory(PROCESS_STACK_SIZE_DEFAULT, (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT, process->page_directory);
     u32 base_stack = (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT;
-    process->base_stack = base_stack;
+    process->threads[0].base_stack = base_stack;
 
     /* ARGUMENTS PASSING */
     pd_switch(process->page_directory);
@@ -127,14 +129,14 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     process->heap_size = 0;
 
     //force general register reset
-    process->gregs.eax = process->gregs.ebx = process->gregs.ecx = process->gregs.edx = 0;
-    process->gregs.edi = process->gregs.esi = process->ebp = 0;
-    process->sregs.ds = process->sregs.es = process->sregs.fs = process->sregs.gs = process->sregs.ss = 0x23;
-    process->sregs.cs = 0x1B;
+    process->threads[0].gregs.eax = process->threads[0].gregs.ebx = process->threads[0].gregs.ecx = process->threads[0].gregs.edx = 0;
+    process->threads[0].gregs.edi = process->threads[0].gregs.esi = process->threads[0].ebp = 0;
+    process->threads[0].sregs.ds = process->threads[0].sregs.es = process->threads[0].sregs.fs = process->threads[0].sregs.gs = process->threads[0].sregs.ss = 0x23;
+    process->threads[0].sregs.cs = 0x1B;
 
     //executable stack and code
-    process->esp = (u32) stack_offset;
-    process->eip = (u32) code_offset;
+    process->threads[0].esp = (u32) stack_offset;
+    process->threads[0].eip = (u32) code_offset;
 
     return ERROR_NONE;
 }
@@ -142,7 +144,7 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
 /* exit a process and do all the actions (send SIGCHLD, transform zombie, ...) */
 void exit_process(process_t* process, u32 exitcode)
 {
-    kprintf("%lEXIT(pid %d, code %u)\n", 3, process->pid, exitcode);
+    //kprintf("%lEXIT(pid %d, code %u)\n", 3, process->pid, exitcode);
     if(process->pid == 1) fatal_kernel_error("Init exited.", "EXIT_PROCESS");
 
     //TODO : remove non-handled signals from siglist
@@ -174,11 +176,12 @@ void exit_process(process_t* process, u32 exitcode)
         kfree(tf);
     }
 
-    //TODO : REMOVE from GROUP and check if group become ORPHAN
     list_entry_t* gptr = process->group->processes;
     if(gptr->element == process)
     {
-        kprintf("AIE AIE AIE ORPHAN GROUP !\n");
+        process->group->processes = gptr->next;
+        kfree(gptr);
+        //TODO : send SIGHUP/SIGCONT if process stopped...
     }
     else
     {
@@ -197,9 +200,9 @@ void exit_process(process_t* process, u32 exitcode)
 
     /* we put retcode in EAX and the process is zombie */
     process->status = PROCESS_STATUS_ZOMBIE;
-    process->gregs.eax = exitcode;
+    process->threads[process->active_thread].gregs.eax = exitcode;
     
-    if(process->parent) 
+    if(process->parent)
     {
         //send SIGCHLD to parent
         send_signal(process->parent->pid, SIGCHLD);
@@ -210,9 +213,7 @@ void exit_process(process_t* process, u32 exitcode)
     }
 
     //free process kernel stack
-    kfree((void*) process->base_kstack);
-
-    //TODO : remove 'sighandler' if there is one and free stack/kstack
+    kfree((void*) process->threads[process->active_thread].base_kstack);
 
     //remove process from schedulers
     scheduler_remove_process(process);
@@ -221,18 +222,29 @@ void exit_process(process_t* process, u32 exitcode)
 /* free all memory used by a process (for exec() or exit()) */
 void free_process_memory(process_t* process)
 {
-    //mark physical memory reserved for process stack as free
-    if(process->base_stack)
+    u32 threads = process->threads_count;
+    process->threads_count = 1;
+
+    u32 i = 0;
+    for(i=0; i<threads; i++)
     {
-        u32 stack_phys = get_physical(process->base_stack, process->page_directory);
+        //mark physical memory reserved for process stack as free
+        if(process->threads[i].base_stack)
+        {
+            u32 stack_phys = get_physical(process->threads[i].base_stack, process->page_directory);
 
-        #ifdef PAGING_DEBUG
-        kprintf("%lFREE_PROCESS_MEM(%d): unmapping 0x%X (size 0x%X)\n", 3, process->pid, process->base_stack, PROCESS_STACK_SIZE_DEFAULT);
-        #endif
+            #ifdef PAGING_DEBUG
+            kprintf("%lFREE_PROCESS_MEM(%d): unmapping 0x%X (size 0x%X)\n", 3, process->pid, process->threads[i].base_stack, PROCESS_STACK_SIZE_DEFAULT);
+            #endif
 
-        unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->base_stack, process->page_directory);
-        free_block(stack_phys);
-        process->base_stack = 0;
+            unmap_flexible(PROCESS_STACK_SIZE_DEFAULT, process->threads[i].base_stack, process->page_directory);
+            free_block(stack_phys);
+            process->threads[i].base_stack = 0;
+        }
+        if(i != process->active_thread)
+        {
+            kfree((void*) process->threads[i].base_kstack);
+        }
     }
 
     //mark all data/code blocks reserved for the process as free
@@ -282,21 +294,23 @@ u32 sbrk(process_t* process, u32 incr)
 }
 
 /* create a new process by copying the current one */
-process_t* fork(process_t* old_process)
+process_t* fork(process_t* old_process, u32 old_esp)
 {
     process_t* tr = init_process();
 
-    //copy registers from old process
-    memcpy(tr, old_process, sizeof(g_regs_t) + sizeof(s_regs_t) + sizeof(u32)*4);
+    u32 base_kstack = tr->threads[0].base_kstack;
+    //copy active thread from old process
+    memcpy(&tr->threads[0], &old_process->threads[old_process->active_thread], sizeof(thread_t));
+    tr->threads[0].base_kstack = base_kstack;
 
     //get own copy of data_loc
+    tr->flags = old_process->flags;
     tr->data_loc = kmalloc(sizeof(list_entry_t));
     list_copy(tr->data_loc, old_process->data_loc, old_process->data_size, sizeof(u32)*3);
     tr->data_size = old_process->data_size;
     tr->heap_addr = old_process->heap_addr;
     tr->heap_size = old_process->heap_size;
     tr->tty = old_process->tty;
-    tr->base_stack = old_process->base_stack;
 
     //copy signal handlers
     memcpy(tr->signal_handlers, old_process->signal_handlers, NSIG*sizeof(void*));
@@ -308,12 +322,14 @@ process_t* fork(process_t* old_process)
     tr->page_directory = page_directory;
 
     //copy kernel stack
-    memcpy((void*) tr->base_kstack, (void*) old_process->base_kstack, 8192);
+    memcpy((void*) base_kstack, (void*) old_process->threads[old_process->active_thread].base_kstack, PROCESS_KSTACK_SIZE_DEFAULT);
 
     //set registers to match current status (kernel space)
-    tr->sregs.cs = 0x08;
-    tr->sregs.ss = 0x10;
-    //note: we will restore ESP later, because we cant know it there
+    tr->threads[0].sregs.cs = 0x08;
+    tr->threads[0].sregs.ss = 0x10;
+    tr->threads[0].eip = (uintptr_t) fork_ret;
+    tr->threads[0].esp = old_esp - old_process->threads[old_process->active_thread].base_kstack + base_kstack;
+    tr->threads[0].kesp = base_kstack + PROCESS_KSTACK_SIZE_DEFAULT;
 
     //get own copies of file_descriptors
     tr->files_size = old_process->files_size;
@@ -330,6 +346,8 @@ process_t* fork(process_t* old_process)
         tr->files[i] = toadd;
     }
 
+    scheduler_add_process(tr);
+
     return tr;
 }
 
@@ -339,10 +357,17 @@ static process_t* init_process()
     process_t* tr = kmalloc(sizeof(process_t));
     tr->status = PROCESS_STATUS_INIT;
 
+    //process main thread
+    tr->threads = kmalloc(sizeof(thread_t)*PROCESS_DEFAULT_THREADS_SIZE);
+    tr->threads_size = PROCESS_DEFAULT_THREADS_SIZE;
+    memset(tr->threads, 0, sizeof(thread_t)*PROCESS_DEFAULT_THREADS_SIZE);
+    tr->threads_count = 1;
+    tr->active_thread = 0;
+
     //process kernel stack
-    void* kstack = kmalloc(8192);
-    tr->kesp = ((u32) kstack) + 8192;
-    tr->base_kstack = (u32) kstack;
+    void* kstack = kmalloc(PROCESS_KSTACK_SIZE_DEFAULT);
+    tr->threads[0].kesp = ((u32) kstack) + PROCESS_KSTACK_SIZE_DEFAULT;
+    tr->threads[0].base_kstack = (u32) kstack;
 
     //register process in process list
     tr->pid = PROCESS_INVALID_PID;
@@ -384,11 +409,6 @@ static process_t* init_process()
         tr->parent = current_process;
     }
     else tr->parent = 0;
-
-    //set sighandler to 0
-    memset(&tr->sighandler, 0, sizeof(sighandler_t));
-    tr->sighandler.sregs.ds = tr->sighandler.sregs.es = tr->sighandler.sregs.fs = tr->sighandler.sregs.gs = tr->sighandler.sregs.ss = 0x23;
-    tr->sighandler.sregs.cs = 0x1B;
 
     return tr;
 }
@@ -433,20 +453,20 @@ error_t spawn_init_process()
     tr->session = session;
 
     //set default registers to 0
-    tr->gregs.eax = 0;
-    tr->gregs.ebx = 0;
-    tr->gregs.ecx = 0;
-    tr->gregs.edx = 0;
-    tr->gregs.esi = 0;
-    tr->gregs.edi = 0;
-    tr->ebp = 0;
+    tr->threads[0].gregs.eax = 0;
+    tr->threads[0].gregs.ebx = 0;
+    tr->threads[0].gregs.ecx = 0;
+    tr->threads[0].gregs.edx = 0;
+    tr->threads[0].gregs.esi = 0;
+    tr->threads[0].gregs.edi = 0;
+    tr->threads[0].ebp = 0;
     
     //set flags (just copy from current flags)
     tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
 
     //set default segment registers
-    tr->sregs.ds = tr->sregs.es = tr->sregs.fs = tr->sregs.gs = tr->sregs.ss = 0x23;
-    tr->sregs.cs = 0x1B;
+    tr->threads[0].sregs.ds = tr->threads[0].sregs.es = tr->threads[0].sregs.fs = tr->threads[0].sregs.gs = tr->threads[0].sregs.ss = 0x23;
+    tr->threads[0].sregs.cs = 0x1B;
 
     //init process file array
     tr->files_size = 5;
@@ -495,19 +515,23 @@ process_t* init_idle_process()
     #endif
     idle_process->status = PROCESS_STATUS_INIT;
     idle_process->pid = PROCESS_IDLE_PID;
+    idle_process->active_thread = 0;
+    idle_process->threads_count = 1;
+    idle_process->threads_size = 1;
+    idle_process->threads = kmalloc(sizeof(thread_t));
     idle_process->flags = 0; asm("pushf; pop %%eax":"=a"(idle_process->flags):);
-    idle_process->gregs.eax = idle_process->gregs.ebx = idle_process->gregs.ecx = idle_process->gregs.edx = 0;
-    idle_process->gregs.edi = idle_process->gregs.esi = idle_process->ebp = 0;
-    idle_process->sregs.ds = idle_process->sregs.es = idle_process->sregs.fs = idle_process->sregs.gs = idle_process->sregs.ss = 0x10;
-    idle_process->sregs.cs = 0x08;
-    idle_process->eip = (u32) idle_loop; //IDLE LOOP
-    idle_process->esp = idle_process->kesp = 
+    idle_process->threads[0].gregs.eax = idle_process->threads[0].gregs.ebx = idle_process->threads[0].gregs.ecx = idle_process->threads[0].gregs.edx = 0;
+    idle_process->threads[0].gregs.edi = idle_process->threads[0].gregs.esi = idle_process->threads[0].ebp = 0;
+    idle_process->threads[0].sregs.ds = idle_process->threads[0].sregs.es = idle_process->threads[0].sregs.fs = idle_process->threads[0].sregs.gs = idle_process->threads[0].sregs.ss = 0x10;
+    idle_process->threads[0].sregs.cs = 0x08;
+    idle_process->threads[0].eip = (u32) idle_loop; //IDLE LOOP
+    idle_process->threads[0].esp = idle_process->threads[0].kesp = 
     #ifdef MEMLEAK_DBG
     ((u32) kmalloc(1024, "idle process kernel stack"))+1024;
     #else
     ((u32) kmalloc(1024))+1024;
     #endif
-    idle_process->base_stack = idle_process->base_kstack = idle_process->kesp - 1024;
+    idle_process->threads[0].base_stack = idle_process->threads[0].base_kstack = idle_process->threads[0].kesp - 1024;
     idle_process->page_directory = kernel_page_directory;
     return idle_process;
 }
@@ -520,6 +544,10 @@ process_t* init_kernel_process()
     #else
     kmalloc(sizeof(process_t));
     #endif
+    kernel_process->threads = kmalloc(sizeof(thread_t));
+    kernel_process->threads_size = 1;
+    kernel_process->threads_count = 1;
+    kernel_process->active_thread = 0;
     kernel_process->pid = PROCESS_KERNEL_PID;
     kernel_process->page_directory = kernel_page_directory;
     kernel_process->status = PROCESS_STATUS_RUNNING;
