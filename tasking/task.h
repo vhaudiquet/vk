@@ -33,13 +33,14 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
 #define PROCESS_STATUS_ASLEEP_SIGNAL 3 //the process has been stopped by a signal
 #define PROCESS_STATUS_ZOMBIE 10 //the process is dead
 
+#define THREAD_STATUS_INIT 0
 #define THREAD_STATUS_RUNNING 1
 #define THREAD_STATUS_ASLEEP_TIME 2
 #define THREAD_STATUS_ASLEEP_IRQ 3
 #define THREAD_STATUS_ASLEEP_IO 5
 #define THREAD_STATUS_ASLEEP_CHILD 6
 #define THREAD_STATUS_ASLEEP_MUTEX 7
-#define THREAD_STATUS_ZOMBIE
+#define THREAD_STATUS_ZOMBIE 10
 
 //Process groups and sessions
 typedef struct psession
@@ -142,7 +143,7 @@ process_t* init_idle_process();
 process_t* init_kernel_process();
 
 //THREADS
-thread_t* init_thread(process_t* process);
+thread_t* init_thread();
 void free_thread_memory(process_t* process, thread_t* thread);
 void scheduler_remove_thread(process_t* process, thread_t* thread);
 void scheduler_add_thread(process_t* process, thread_t* thread);

@@ -83,10 +83,12 @@ void fault_handler(struct regs_int * r)
 
 static void handle_user_fault(struct regs_int* r)
 {
+	kprintf("%l%s\n", 2, exceptionMessages[r->int_no]);
 	kprintf("%lERROR_CODE = 0x%X\n", 3, r->err_code);
 	kprintf("%lesp = 0x%X ; cs = 0x%X\n", 3, r->esp, r->cs);
 	kprintf("%lgs = 0x%X ; fs = 0x%X ; es = 0x%X ; ds = 0x%X\n", 3, r->gs, r->fs, r->es, r->ds);
-	kprintf("%l%s\n", 2, exceptionMessages[r->int_no]);
+	kprintf("%lEAX: 0x%X, EBX: 0x%X, ECX: 0x%X, EDX: 0x%X\nEBP: 0x%X, EDI: 0x%X, ESI: 0x%X\n", 3, r->eax, r->ebx, r->ecx, r->edx, r->ebp, r->edi, r->esi);
+	kprintf("%lFLAGS = 0x%X\n", 3, r->eflags);
 	//notify user (on exiting)
 	//exit current task, or hlt if currenttask == kernelTask
 	_fatal_kernel_error("Kernel exception", "Kernel exception catched", "Unknown", 0);

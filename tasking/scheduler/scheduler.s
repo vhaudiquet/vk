@@ -199,4 +199,5 @@ schedule:
     out %al, $0x20 
     pop %ax
 
+    sti
     iret

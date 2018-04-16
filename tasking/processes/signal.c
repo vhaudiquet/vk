@@ -85,21 +85,40 @@ static void handle_signal(process_t* process, int sig)
         {
             if(process->pid != 1)
             {
-                exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
-                // int thread = init_thread(process);
-                // process->threads[thread].eip = (uintptr_t) exit_process;
-                // u32* kesp = (u32*) process->threads[thread].kesp;
-                // kesp-=4; *(kesp) = EXIT_CONDITION_SIGNAL | ((u8) sig);
-                // kesp-=4; *(kesp) = (uintptr_t) process;
-                // process->threads[thread].esp = (uintptr_t) kesp;
-                // process->active_thread = (u32) (thread-1);
+                //exit_process(process, EXIT_CONDITION_SIGNAL | ((u8) sig));
+                //setup thread
+                thread_t* thread = init_thread();
+                thread->eip = (uintptr_t) exit_process;
+                
+                //setup stack
+                u32* kesp = (u32*) thread->kesp;
+                kesp -= 0x10;
+
+                //push exit_process() args
+                *((u32*) (((u32)kesp)+8)) = EXIT_CONDITION_SIGNAL | ((u8) sig);
+                *((u32*) (((u32)kesp)+4)) = (uintptr_t) process;
+
+                //setup registers
+                thread->esp = (uintptr_t) kesp;
+                thread->sregs.cs = 0x08; thread->sregs.ss = 0x10;
+                thread->sregs.ds = thread->sregs.es = thread->sregs.fs = thread->sregs.gs = 0x10;
+                //add thread
+                scheduler_add_thread(process, thread);
             }
         }
         else if(default_action[sig] == 2) return;
         else if(default_action[sig] == 4)
         {
-            process->status = PROCESS_STATUS_ASLEEP_SIGNAL;
-            scheduler_remove_process(process);
+            //TODO : find a good way to suspend processes (even if they are already suspended waiting)
+            if(process != current_process)
+            {
+                if(process->status == PROCESS_STATUS_RUNNING)
+                {
+                    process->status = PROCESS_STATUS_ASLEEP_SIGNAL;
+                    scheduler_remove_process(process);
+                }
+            }
+            //else : TODO
         }
     }
     /* SIG_IGN */
@@ -107,7 +126,7 @@ static void handle_signal(process_t* process, int sig)
     /* custom signal handling function */
     else
     {
-       
+        //TODO
     }
 }
 

@@ -71,6 +71,8 @@ void scheduler_remove_process(process_t* process)
         //if no active thread, the thread was already removed before
         if(current_process->active_thread)
         {
+            asm("cli"); //critical section, we don't want the process to be scheduled from here
+            
             //this method was called by this process to pause himself
             //once he returns active, the context must be the end of this void
             //so we can just save the current context with eip = end of scheduler_remove_process

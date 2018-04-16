@@ -144,6 +144,9 @@ void exit_process(process_t* process, u32 exitcode)
     //kprintf("%lEXIT(pid %d, code %u)\n", 3, process->pid, exitcode);
     if(process->pid == 1) fatal_kernel_error("Init exited.", "EXIT_PROCESS");
 
+    //we don't want the process to be scheduled on exiting.
+    asm("cli");
+
     //TODO : remove non-handled signals from siglist
 
     free_process_memory(process);
@@ -154,9 +157,6 @@ void exit_process(process_t* process, u32 exitcode)
     {
         if(process->files[i]) close_file(process->files[i]);
     }
-
-    //swap process pd to kernel pd (in case of scheduling)
-    process->page_directory = kernel_page_directory;
 
     //free process page directory
     pt_free(process->page_directory);
@@ -199,6 +199,7 @@ void exit_process(process_t* process, u32 exitcode)
 
     /* we put retcode in EAX and the process is zombie */
     process->status = PROCESS_STATUS_ZOMBIE;
+    process->active_thread->status = THREAD_STATUS_ZOMBIE;
     process->active_thread->gregs.eax = exitcode;
     
     if(process->parent)
@@ -356,7 +357,8 @@ static process_t* init_process()
     tr->running_threads = queue_init(PROCESS_DEFAULT_THREADS_SIZE);
     tr->active_thread = 0;
     tr->waiting_threads = 0;
-    init_thread(tr);
+    thread_t* t = init_thread();
+    scheduler_add_thread(tr, t);
 
     //register process in process list
     tr->pid = PROCESS_INVALID_PID;
