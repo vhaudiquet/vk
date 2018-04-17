@@ -67,6 +67,9 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     if((!code_offset) | (((u32)code_offset) > 0xC0000000)) 
     {kfree(data_loc); return UNKNOWN_ERROR;}
 
+    //that part is critical, we dont want the process to be scheduled from here
+    asm("cli");
+
     //TODO: check if this area isnt already mapped by elf code/data
     void* stack_offset = (void*) 0xC0000000;
     
@@ -134,6 +137,9 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     //executable stack and code
     process->active_thread->esp = (u32) stack_offset;
     process->active_thread->eip = (u32) code_offset;
+
+    //re-enabling interrupts at end of critical part
+    asm("sti");
 
     return ERROR_NONE;
 }
@@ -331,6 +337,7 @@ process_t* fork(process_t* old_process, u32 old_esp)
     tr->files_size = old_process->files_size;
     tr->files_count = old_process->files_count;
     tr->files = kmalloc(old_process->files_size*sizeof(fd_t));
+    memset(tr->files, 0, old_process->files_size*sizeof(fd_t));
     u32 i = 0;
     for(;i<old_process->files_size;i++)
     {
@@ -341,7 +348,7 @@ process_t* fork(process_t* old_process, u32 old_esp)
         memcpy(toadd, tocopy, sizeof(fd_t));
         tr->files[i] = toadd;
     }
-
+    
     scheduler_add_process(tr);
 
     return tr;

@@ -25,6 +25,8 @@ static error_t ext2_std_inode_write(fsnode_t* node);
 static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, void* buffer);
 static error_t ext2_inode_write_content(fsnode_t* node, u32 offset, u32 size, void* buffer);
 
+static void ext2_queue_read(ext2_read_request_t* requests, u32 sector, u32 count, u32 offset, void* buffer);
+
 static error_t ext2_remove_dirent(char* name, fsnode_t* dir);
 static error_t ext2_create_dirent(u32 inode, char* name, fsnode_t* dir);
 
@@ -514,6 +516,11 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
 
     u32 currentloc = 0;
 
+    //prepare request array
+    u32 request_size = (size + ((size % ext2->block_size) ? ext2->block_size : 0))/ext2->block_size;
+    ext2_read_request_t* requests = kmalloc(sizeof(ext2_read_request_t)*request_size);
+    memset(requests, 0, sizeof(ext2_read_request_t)*request_size);
+
     //reading 12 direct pointers at first
     u32 i;
     for(i=first_block;i<12;i++)
@@ -522,13 +529,11 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         if(!inode->direct_block_pointers[i]) 
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (direct block pointer %u ->0)\n", 0b00000110, i);
+            kfree(requests);
             return ERROR_FILE_CORRUPTED_FS;
         }
 
-        error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        if(err != ERROR_NONE) err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        if(err != ERROR_NONE) err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        if(err != ERROR_NONE) return err;
+        ext2_queue_read(requests, ext2->superblock_offset+BLOCK_OFFSET(inode->direct_block_pointers[i]), size >= ext2->block_size ? ext2->block_size : size, offset, buffer+currentloc);
 
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
@@ -536,7 +541,7 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
 
-        if(!size) return ERROR_NONE;
+        if(!size) goto send_requests;
     }
 
     //resetting block counter
@@ -546,11 +551,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
     if(!inode->singly_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->0)\n", 0b00000110);
+        kfree(requests);
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* singly_indirect_block = kmalloc(ext2->block_size);
     error_t readerr0 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->singly_indirect_block_pointer), 0, (u8*) singly_indirect_block, ext2->block_size, fs->drive);
-    if(readerr0 != ERROR_NONE) {kfree(singly_indirect_block); return readerr0;}
+    if(readerr0 != ERROR_NONE) {kfree(singly_indirect_block); kfree(requests); return readerr0;}
 
     for(;i<(ext2->block_size/4);i++)
     {
@@ -559,11 +565,11 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->direct block pointer->0)\n", 0b00000110);
             kfree(singly_indirect_block);
+            kfree(requests);
             return ERROR_FILE_CORRUPTED_FS;
         }
 
-        error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        if(err != ERROR_NONE) {kfree(singly_indirect_block); return err;}
+        ext2_queue_read(requests, ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), size >= ext2->block_size ? ext2->block_size : size, offset, buffer+currentloc);
 
         currentloc+=ext2->block_size;
         if(offset) offset = 0;
@@ -571,7 +577,7 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
         
-        if(!size) {kfree(singly_indirect_block); return ERROR_NONE;}
+        if(!size) {kfree(singly_indirect_block); goto send_requests;}
     }
         
     kfree(singly_indirect_block);
@@ -583,11 +589,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
     if(!inode->doubly_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->0)\n", 0b00000110);
+        kfree(requests);
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* doubly_indirect_block = kmalloc(ext2->block_size);
     error_t readerr1 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->doubly_indirect_block_pointer), 0, (u8*) doubly_indirect_block, ext2->block_size, fs->drive);
-    if(readerr1 != ERROR_NONE) {kfree(doubly_indirect_block); return readerr1;}
+    if(readerr1 != ERROR_NONE) {kfree(doubly_indirect_block); kfree(requests); return readerr1;}
 
     u32 j;
     for(j = 0;j<(ext2->block_size/4);j++)
@@ -597,11 +604,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly indirect pointer->singly indirect pointer->0)\n", 0b00000110);
             kfree(doubly_indirect_block);
+            kfree(requests);
             return ERROR_FILE_CORRUPTED_FS;
         }
         u32* sib = kmalloc(ext2->block_size);
         error_t readerr2 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(doubly_indirect_block[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
-        if(readerr2 != ERROR_NONE) {kfree(sib); kfree(doubly_indirect_block); return readerr2;}
+        if(readerr2 != ERROR_NONE) {kfree(sib); kfree(doubly_indirect_block); kfree(requests); return readerr2;}
 
         for(;i<(ext2->block_size/4);i++)
         {
@@ -610,19 +618,19 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             {
                 kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (doubly->singly->direct->0)\n", 0b00000110);
                 kfree(sib); kfree(doubly_indirect_block);
+                kfree(requests);
                 return ERROR_FILE_CORRUPTED_FS;
             }
 
-            error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-        
+            ext2_queue_read(requests, ext2->superblock_offset+BLOCK_OFFSET(sib[i]), size >= ext2->block_size ? ext2->block_size : size, offset, buffer+currentloc);
+
             currentloc+=ext2->block_size;
             if(offset) offset = 0;
 
             if(size >= ext2->block_size) size -= ext2->block_size;
             else size = 0;
-            
-            if(err != ERROR_NONE) {kfree(sib); kfree(doubly_indirect_block); return err;}
-            if(!size) {kfree(sib); kfree(doubly_indirect_block); return ERROR_NONE;}
+
+            if(!size) {kfree(sib); kfree(doubly_indirect_block); goto send_requests;}
         }
 
         kfree(sib);
@@ -636,11 +644,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
     if(!inode->triply_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->0)\n", 0b00000110);
+        kfree(requests);
         return ERROR_FILE_CORRUPTED_FS;
     }
     u32* triply_indirect_block = kmalloc(ext2->block_size);
     error_t readerr3 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode->triply_indirect_block_pointer), 0, (u8*) triply_indirect_block, ext2->block_size, fs->drive);
-    if(readerr3 != ERROR_NONE) {kfree(triply_indirect_block); return readerr3;}
+    if(readerr3 != ERROR_NONE) {kfree(triply_indirect_block); kfree(requests); return readerr3;}
 
     u32 k;
     for(k=0;k<(ext2->block_size/4);k++)
@@ -649,11 +658,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
         {
             kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (triply indirect pointer->doubly indirect pointer->0)\n", 0b00000110);
             kfree(triply_indirect_block);
+            kfree(requests);
             return ERROR_FILE_CORRUPTED_FS;
         }
         u32* dib = kmalloc(ext2->block_size);
         error_t readerr4 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(triply_indirect_block[j]), 0, (u8*) dib, ext2->block_size, fs->drive);
-        if(readerr4 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); return readerr4;}
+        if(readerr4 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(requests); return readerr4;}
 
         for(j=0;j<(ext2->block_size/4);j++)
         {
@@ -662,11 +672,12 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
             {
                 kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->0)\n", 0b00000110);
                 kfree(triply_indirect_block); kfree(dib);
+                kfree(requests);
                 return ERROR_FILE_CORRUPTED_FS;
             }
             u32* sib = kmalloc(ext2->block_size);
             error_t readerr5 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(dib[j]), 0, (u8*) sib, ext2->block_size, fs->drive);
-            if(readerr5 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(sib); return readerr5;}
+            if(readerr5 != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(sib); kfree(requests); return readerr5;}
 
             for(;i<(ext2->block_size/4);i++)
             {
@@ -675,11 +686,11 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
                 {
                     kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (tip->dip->sip->direct->0)\n", 0b00000110);
                     kfree(sib); kfree(dib); kfree(triply_indirect_block);
+                    kfree(requests);
                     return ERROR_FILE_CORRUPTED_FS;
                 }
 
-                error_t err = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(sib[i]), offset, buffer+currentloc, size >= ext2->block_size ? ext2->block_size : size, fs->drive);
-                if(err != ERROR_NONE){kfree(triply_indirect_block); kfree(dib); kfree(sib); return err;}
+                ext2_queue_read(requests, ext2->superblock_offset+BLOCK_OFFSET(singly_indirect_block[i]), size >= ext2->block_size ? ext2->block_size : size, offset, buffer+currentloc);
 
                 currentloc+=ext2->block_size;
                 if(offset) offset = 0;
@@ -687,7 +698,7 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
                 if(size >= ext2->block_size) size -= ext2->block_size;
                 else size = 0;
             
-                if(!size) {kfree(sib); kfree(dib); kfree(triply_indirect_block); return ERROR_NONE;}
+                if(!size) {kfree(sib); kfree(dib); kfree(triply_indirect_block); goto send_requests;}
             }
 
             kfree(sib);
@@ -700,7 +711,44 @@ static error_t ext2_inode_read_content(fsnode_t* node, u32 offset, u32 size, voi
 
     kfree(triply_indirect_block);
 
+    /* sending all queued requests */
+    send_requests:
+    {
+        u32 ri = 0;
+        while(requests[ri].sector && (ri < request_size))
+        {
+            error_t err = block_read_flexible(requests[ri].sector, requests[ri].offset, (u8*) requests[ri].buffer, requests[ri].count, fs->drive);
+            if(err != ERROR_NONE) err = block_read_flexible(requests[ri].sector, requests[ri].offset, (u8*) requests[ri].buffer, requests[ri].count, fs->drive);
+            if(err != ERROR_NONE) {kfree(requests); return err;}
+            ri++;
+        }
+    }
+    
+    kfree(requests);
+
     return ERROR_NONE;
+}
+
+/*
+* This function add a block_read request to the request array, merging it with another if sectors are contiguous
+*/
+static void ext2_queue_read(ext2_read_request_t* requests, u32 sector, u32 count, u32 offset, void* buffer)
+{
+    u32 i = 0;
+    while(requests[i].sector)
+    {
+        if((requests[i].sector == (sector - (requests[i].count/BYTES_PER_SECTOR))) && (((u32) requests[i].buffer) == (((u32)buffer) - requests[i].count)))
+        {
+            requests[i].count += count;
+            return;
+        }
+        i++;
+    }
+    
+    requests[i].sector = sector;
+    requests[i].count = count;
+    requests[i].offset = offset;
+    requests[i].buffer = buffer;
 }
 
 /*

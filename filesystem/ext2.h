@@ -133,6 +133,14 @@ typedef struct ext2fs_specific
     u32 blockgroup_count;
 } ext2fs_specific_t;
 
+typedef struct ext2_read_request
+{
+    u32 sector;
+    u32 count;
+    u32 offset;
+    void* buffer;
+} ext2_read_request_t;
+
 file_system_t* ext2_init(block_device_t* drive, u8 partition);
 fsnode_t* ext2_open(fsnode_t* dir, char* name);
 error_t ext2_write_file(fd_t* fd, void* buffer, u64 count);

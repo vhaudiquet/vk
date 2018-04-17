@@ -80,10 +80,10 @@ void scheduler_remove_process(process_t* process)
 
             //following convention, functions can trash eax/ecx/edx, so we dont care about theses
             //we need to save ebx/esi/edi, and to keep something (stack frame) on ebp (but we dont really care)
-            __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx));
-            __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi));
-            __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi));
-            __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp));
+            __asm__ __volatile__("mov %%ebx, %0":"=m"(current_process->active_thread->gregs.ebx)::"%ebx");
+            __asm__ __volatile__("mov %%edi, %0":"=m"(current_process->active_thread->gregs.edi)::"%edi");
+            __asm__ __volatile__("mov %%esi, %0":"=m"(current_process->active_thread->gregs.esi)::"%esi");
+            __asm__ __volatile__("mov %%ebp, %0":"=m"(current_process->active_thread->ebp)::"%ebp");
             //save segment registers
             __asm__ __volatile__ ("mov %%ds, %0 ; mov %%es, %1 ; mov %%fs, %2 ; mov %%gs, %3":"=m"(current_process->active_thread->sregs.ds), "=m"(current_process->active_thread->sregs.es), "=m"(current_process->active_thread->sregs.fs), "=m"(current_process->active_thread->sregs.gs));
         

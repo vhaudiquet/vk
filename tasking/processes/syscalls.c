@@ -57,7 +57,7 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     {
         current_process->files_size*=2; 
         current_process->files = krealloc(current_process->files, current_process->files_size*sizeof(fd_t));
-        memset(current_process->files+current_process->files_size/2, 0, current_process->files_size/2);
+        memset((void*)(((u32)current_process->files)+(current_process->files_size/2)*sizeof(fd_t)), 0, (current_process->files_size/2)*sizeof(fd_t));
     }
 
     u32 i = 0;
@@ -77,9 +77,10 @@ void syscall_close(u32 ebx, u32 ecx, u32 edx)
 {
     if((ebx >= 3) && (current_process->files_size >= ebx) && (current_process->files[ebx]))
     {
-        close_file(current_process->files[ebx]);
+        fd_t* file = current_process->files[ebx]; 
         current_process->files[ebx] = 0;
         current_process->files_count--;
+        close_file(file);
     }
 }
 
@@ -335,7 +336,7 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
     
     error_t is_elf = elf_check(current_process->files[ebx]);
-    if(is_elf != ERROR_NONE) {asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(is_elf)); return;}
+    if(is_elf != ERROR_NONE) {asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(is_elf):"%eax", "%ecx"); return;}
 
     free_process_memory(current_process);
 

@@ -144,10 +144,12 @@ void* elf_load(fd_t* file, u32* page_directory, list_entry_t* data_loc, u32* dat
         data_loc = data_loc->next;
         (*data_size)++;
 
+        asm("cli"); //critical, we dont want process to be scheduled
         pd_switch(page_directory);
         memcpy((void*)prg_h[i].p_vaddr, buffer + prg_h[i].p_offset, prg_h[i].p_filesz);
         memset((void*)prg_h[i].p_vaddr + prg_h[i].p_filesz, 0, prg_h[i].p_memsz - prg_h[i].p_filesz);
-        pd_switch(kernel_page_directory);
+        pd_switch(current_process->page_directory);
+        asm("sti"); //end of critical, we restored page dir
     }
     //freeing last list entry, unused
     kfree(data_loc);
