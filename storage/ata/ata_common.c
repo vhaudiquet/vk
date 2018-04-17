@@ -23,16 +23,45 @@
 
 typedef struct ATA_IDENTIFY
 {
-    u16 unused0[23];
+    u16 unused0[7];
+	u16 vendor_unique[3];
+	u8 serial_number[20];
+	u16 unused1[3];
     u8 firmware[8];
     u8 model[40];
-    u16 unused1[11];
-    u16 capabilities;
-    u16 size_rw_multiple;
-    u32 sectors_28;
-    u16 unused2[28];
-    u64 sectors_48;
-    u16 unused3[158];
+	u8 maximum_block_transfer;
+	u8 vendor_unique2;
+	u32 capabilities;
+	u16 unused2[9];
+	u32 user_adressable_sectors;
+	u16 unused3;
+	u8 multiword_dma_support;
+	u8 multiword_dma_active;
+	u8 advanced_pio_modes;
+	u8 unused4;
+	u16 unused5[11];
+	u32 serial_ata_capabilities;
+	u16 unused6[3];
+	u32 command_set_support0;
+	u16 command_set_support1;
+	u32 command_set_active0;
+	u16 command_set_active1;
+	u8 ultra_dma_support;
+	u8 ultra_dma_active;
+	u16 unused7[11];
+	u32 max_48bit_lba[2];
+	u16 unused8[15];
+	u16 command_set_support_ext;
+	u16 command_set_active_ext;
+	u16 unused9[49];
+	u16 additional_product_id[4];
+	u16 unused10[2];
+	u16 current_media_serial_number[30];
+	u16 unused11[21];
+	u64 user_adressable_sectors_ext;
+	u16 unused12[21];
+	u8 signature;
+	u8 checksum;
 } ata_identify_data_t;
 
 static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 bar4, bool master, u8 irq, pci_device_t* controller);
@@ -106,16 +135,13 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	current->controller = controller;
 	current->irq = irq;
 
-    //write i/o flag, memory flag, and bus enable flag (needed for DMA transfers)
-	pci_write_device(current->controller, 0x04, pci_read_device(current->controller, 0x04)|7);
-	//enable UDMA
-	pci_write_device(current->controller, 0x48, 0xF);
-
+	/* detect ATA/ATAPI drive and send IDENTIFY command */
 	//select drive
     outb(DEVICE_PORT(current), 0xA0); //always master there, to see if there is a device on the cable or not
 	error_t status = inb(COMMAND_PORT(current));
 	if(status == 0xFF)
 	{
+		kfree(current); kfree(current_top);
 		return 0; //no device found
 	}
 
@@ -136,6 +162,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	status = inb(COMMAND_PORT(current));
 	if(status == 0x0)
 	{
+		kfree(current); kfree(current_top);
 		return 0; //no device
 	}
 	
@@ -154,43 +181,89 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
             status = inb(COMMAND_PORT(current));
             if(status == 0x0)
             {
+				kfree(current); kfree(current_top);
                 return 0; //no device (strange and should never happen)
             }
             //wait for drive busy/drive error
             status = ata_pio_poll_status((ata_device_t*) current);
             if(status != ERROR_NONE)
             {
+				kfree(current); kfree(current_top);
                 return 0;
             }
         }
-		else return 0;
+		else {kfree(current); kfree(current_top); return 0;}
 	}
 
     //at this point we know that data is ready
     ata_identify_data_t id = {0};
+	u16* buffer = (u16*) &id;
 	u16 i;
 	for(i = 0;i < BYTES_PER_SECTOR/2; i++)
 	{
-		*((u16*)(&id+i)) = inw(DATA_PORT(current));
+		buffer[i] = inw(DATA_PORT(current));
 	}
 
+	/* use identify command results to look at device capabilities */
     current->flags = (u8)(current->flags | (((id.capabilities >> 9 << 15) != 0) ? ATA_FLAG_LBA48 : 0));
 
-	if((id.sectors_48 > 0) && (current->flags & ATA_FLAG_LBA48))
-		current_top->device_size = (u32) (id.sectors_48);
+	if((id.user_adressable_sectors_ext > 0) && (current->flags & ATA_FLAG_LBA48))
+		current_top->device_size = (u32) (id.user_adressable_sectors_ext);
 	else
-		current_top->device_size = (u32) (id.sectors_28);
+		current_top->device_size = (u32) (id.user_adressable_sectors);
 
-	current->sectors_per_block = id.size_rw_multiple;
+	current->sectors_per_block = id.maximum_block_transfer;
+
+	// kprintf("DISK %s : serial = %s : size %u MiB ; %s\n", id.model, id.serial_number, (current_top->device_size/1024/1024*512), current->flags & ATA_FLAG_ATAPI ? "atapi" : "ata");
 
 	current_top->device_struct = (void*) current;
 	current_top->device_type = ATA_DEVICE;
     if(current->flags & ATA_FLAG_ATAPI) current_top->device_class = CD_DRIVE;
     else current_top->device_class = HARD_DISK_DRIVE;
 
+	/* read device partitions */
 	if(!(current->flags & ATA_FLAG_ATAPI)) ata_read_partitions(current_top);
 
-	//preallocate PRDT (for DMA reads)
+	/* check and set device capabilities */
+	//multiword DMA mode
+	if(id.multiword_dma_support > id.multiword_dma_active)
+	{
+		//select drive
+		outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
+    	ata_io_wait(current); //wait for drive selection
+		//set features
+		outb(LBA_LOW_PORT(current), 0);
+		outb(LBA_MID_PORT(current), 0);
+		outb(LBA_HI_PORT(current), 0);
+		outb(SECTOR_COUNT_PORT(current), (0b00100 << 3) | (id.multiword_dma_support)); // (multiword_dma) | (selected_mode)
+		outb(ERROR_PORT(current), 0x3); //setmode subcmd
+		outb(COMMAND_PORT(current), 0xEF); //set_features cmd
+	}
+
+	if((id.ultra_dma_support > id.ultra_dma_active) && (id.ultra_dma_support >= 2) && (id.ultra_dma_active < 2))
+	{
+		//select drive
+		outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
+    	ata_io_wait(current); //wait for drive selection
+		//set features
+		outb(LBA_LOW_PORT(current), 0);
+		outb(LBA_MID_PORT(current), 0);
+		outb(LBA_HI_PORT(current), 0);
+		outb(SECTOR_COUNT_PORT(current), (0b01000 << 3) | (2)); // (ultra_dma) | (selected_mode)
+		outb(ERROR_PORT(current), 0x3); //setmode subcmd
+		outb(COMMAND_PORT(current), 0xEF); //set_features cmd
+	}
+
+	// kprintf("device multiword dma support = 0x%X, active = 0x%X\n", id.multiword_dma_support, id.multiword_dma_active);
+	// kprintf("device ultra dma support = 0x%X, active = 0x%X\n", id.ultra_dma_support, id.ultra_dma_active);
+
+	/* set up PCI controller */
+    //write i/o flag, memory flag, and bus enable flag (needed for DMA transfers)
+	pci_write_device(current->controller, 0x04, pci_read_device(current->controller, 0x04)|7);
+	//enable UDMA on the controller
+	pci_write_device(current->controller, 0x48, 0xF);
+
+	/* set up the PRDT in the PCI controller (for DMA reads) */
 	//PRDT : u32 aligned, contiguous in physical, cannot cross 64k boundary, 1 per ATA bus
 	current->prdt_phys = reserve_block(U16_MAX, PHYS_KERNEL_BLOCK_TYPE); //TODO : MAKE SURE THIS IS U16_MAX ALIGNED
 	current->prdt_virt = (prd_t*) kvm_reserve_block(U16_MAX);
@@ -205,7 +278,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	current->prdt_virt->byte_count = (U16_MAX-sizeof(prd_t));
 	outl(current->bar4+4, current->prdt_phys);
 
-	//init device mutex
+	/* init device mutex */
 	current->mutex = kmalloc(sizeof(mutex_t));
 	memset(current->mutex, 0, sizeof(mutex_t));
 
@@ -243,7 +316,7 @@ void ata_cmd_48(u64 sector, u32 scount, u8 cmd, ata_device_t* drive)
 	
 		/*Send LBA and sector count*/
 		//write sector count top bytes
-		outb(SECTOR_COUNT_PORT(drive), 0); //always 1 sector for now
+		outb(SECTOR_COUNT_PORT(drive), 0);
 	
 		//split address in 8-bits values
 		u8* addr = (u8*) ((u64*)&sector);
