@@ -182,7 +182,6 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
     while(length)
     {
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
-
         if(dirent->inode)
         {
             // kprintf("%llooking %s for %s...\n", 3, dirent->name, name);
@@ -196,6 +195,7 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
         
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
         offset += (u32)(8+name_len_real);
+        if(length < (8+name_len_real)) break;
         length -= (u32)(8+name_len_real);
     }
 
