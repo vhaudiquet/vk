@@ -28,7 +28,9 @@ syscall_link, syscall_unlink, syscall_seek, syscall_stat, syscall_rename, syscal
 syscall_mount, syscall_umount, syscall_mkdir, syscall_readdir, syscall_openio, syscall_dup, 
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 syscall_fork, syscall_exit, syscall_exec, syscall_wait, syscall_getpinfo, syscall_setpinfo, 
-syscall_sig, syscall_sigaction, syscall_sigret, syscall_sbrk};
+syscall_sig, syscall_sigaction, syscall_sigret, syscall_sbrk,
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+syscall_ioctl};
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -222,7 +224,7 @@ void syscall_mkdir(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_readdir(u32 ebx, u32 ecx, u32 edx)
 {
-    if((current_process->files_count < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
+    if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     u8* buffer = (u8*) edx;
 
@@ -556,6 +558,28 @@ void syscall_sbrk(u32 ebx, u32 ecx, u32 edx)
 {
     u32 tr = sbrk(current_process, ebx);
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(tr), "N"(ERROR_NONE));
+}
+
+void syscall_ioctl(u32 ebx, u32 ecx, u32 edx)
+{
+    if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
+    fd_t* file = current_process->files[ebx];
+
+    /* check if the file is a device (if file.fs == DEVFS) */
+    if(file->file->file_system->fs_type != FS_TYPE_DEVFS) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NO_DEVICE)); return;}
+
+    devfs_node_specific_t* spe = file->file->specific;
+    switch(spe->device_type)
+    {
+        case DEVFS_TYPE_TTY:
+        {
+            error_t err = tty_ioctl(spe->device_struct, ecx, edx);
+            asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(err));
+            return;
+        }
+    }
+
+    asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR));
 }
 
 #pragma GCC diagnostic pop

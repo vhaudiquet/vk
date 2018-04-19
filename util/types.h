@@ -44,9 +44,13 @@ typedef __builtin_va_list va_list;
 #define va_copy(dest, src) __builtin_va_copy(dest, src)
 
 //Limits
-#define U8_MAX 255
-#define U16_MAX 65535
-#define U32_MAX 4294967295
-#define U64_MAX 18446744073709551615
+#define U8_MAX (255)
+#define U16_MAX (65535)
+#define U32_MAX (4294967295)
+#define U64_MAX (18446744073709551615)
+#define S8_MAX (128)
+#define S16_MAX (32768)
+#define S32_MAX (2147483648)
+#define S64_MAX (0x8000000000000000)
 
 #endif

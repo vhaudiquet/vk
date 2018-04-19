@@ -59,3 +59,6 @@ typedef u32 error_t;
 #define ERROR_INVALID_PTR 36
 //other
 #define ERROR_PERMISSION 41 //no permission
+#define ERROR_NO_TTY 42 //the file is not a tty
+#define ERROR_NO_DEVICE 43 //the file is not a device
+#define ERROR_IO 44 //an I/O error has ocurred

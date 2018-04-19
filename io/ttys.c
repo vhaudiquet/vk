@@ -19,6 +19,7 @@
 #include "video/video.h"
 #include "tasking/task.h"
 #include "error/error.h"
+#include "ioctl.h"
 
 #define TTY_DEFAULT_BUFFER_SIZE 1024
 
@@ -90,6 +91,16 @@ tty_t* tty_init(char* name)
 */
 error_t tty_write(u8* buffer, u32 count, tty_t* tty)
 {
+    if(current_process->group != tty->foreground_processes)
+    {
+        /* if TOSTOP is set and process is not ignoring/blocking SIGTTOU */
+        if((tty->termio.c_lflag & TOSTOP) && (current_process->signal_handlers[SIGTTOU] != ((void*) 1)))
+        {
+            send_signal(current_process->pid, SIGTTOU);
+            return ERROR_IO;
+        }
+    }
+
     if(tty->count+count > tty->buffer_size)
     {
         tty->buffer_size*=2;
@@ -118,6 +129,12 @@ error_t tty_write(u8* buffer, u32 count, tty_t* tty)
 */
 error_t tty_read(u8* buffer, u32 count, tty_t* tty)
 {
+    if(current_process->group != tty->foreground_processes)
+    {
+        send_signal(current_process->pid, SIGTTIN);
+        return ERROR_IO;
+    }
+
     if(tty->termio.c_lflag & ICANON)
     {
         while(count)
@@ -261,4 +278,37 @@ void tty_input(tty_t* tty, u8 c)
     else if(c == '\n' && (tty->termio.c_lflag & ICANON & ECHONL)) tty_write(&c, 1, tty);
 
     iostream_write(&c, 1, tty->keyboard_stream);
+}
+
+error_t tty_ioctl(tty_t* tty, u32 func, u32 arg)
+{
+    switch(func)
+    {
+        case I_TTY_SETPGRP:
+        {
+            if(tty != current_process->tty) return ERROR_NO_TTY;
+            if(tty->session != current_process->session) return ERROR_IS_ANOTHER_SESSION;
+            pgroup_t* group = get_group((int) arg);
+            if((!group) | (group->session != current_process->session) | (!group->processes) || (!group->processes->element))
+                return ERROR_PERMISSION;
+
+            tty->foreground_processes = group;
+            return ERROR_NONE;
+        }
+        case I_TTY_GETPGRP:
+        {
+            if(tty != current_process->tty) return ERROR_NO_TTY;
+
+            int* i = (int*) arg;
+            
+            if(tty->foreground_processes)
+                *i = tty->foreground_processes->gid;
+            else
+                *i = (S32_MAX-1);
+
+            return ERROR_NONE;
+        }
+    }
+    
+    return UNKNOWN_ERROR;
 }

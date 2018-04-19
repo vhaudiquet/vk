@@ -67,4 +67,6 @@ void syscall_sigaction(u32 ebx, u32 ecx, u32 edx);
 void syscall_sigret(u32 ebx, u32 ecx, u32 edx);
 void syscall_sbrk(u32 ebx, u32 ecx, u32 edx);
 
+void syscall_ioctl(u32 ebx, u32 ecx, u32 edx);
+
 #endif

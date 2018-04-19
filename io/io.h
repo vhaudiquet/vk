@@ -54,5 +54,6 @@ error_t tty_write(u8* buffer, u32 count, tty_t* tty);
 error_t tty_read(u8* buffer, u32 count, tty_t* tty);
 void tty_input(tty_t* tty, u8 c);
 void tty_switch(tty_t* tty);
+error_t tty_ioctl(tty_t* tty, u32 func, u32 arg);
 
 #endif
