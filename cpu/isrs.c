@@ -102,6 +102,7 @@ static void handle_page_fault(struct regs_int* r)
 	else kprintf("%lIncorrect CS !\n", 1);
 	kprintf("%lEAX: 0x%X, EBX: 0x%X, ECX: 0x%X, EDX: 0x%X\nEBP: 0x%X, EDI: 0x%X, ESI: 0x%X\n", 3, r->eax, r->ebx, r->ecx, r->edx, r->ebp, r->edi, r->esi);
 	u32 f_addr; asm("movl %%cr2, %0":"=r"(f_addr):);
+	kprintf("%lFLAGS = 0x%X\n", 3, r->eflags);
 	kprintf("Page fault at address : 0x%X\n", f_addr);
 	kprintf("Error code : %d\n", r->err_code);
 	_fatal_kernel_error("Page fault", "Unknown", "Unknown", 0);

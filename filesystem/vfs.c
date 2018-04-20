@@ -30,12 +30,6 @@
 * to provides general functions to open a file from a path, either the file is on disk/ram/external, fat32/ext2/... (once supported)
 */
 
-typedef struct mount_point
-{
-    char* path;
-    file_system_t* fs;
-    struct mount_point* next;
-} mount_point_t;
 mount_point_t* root_point = 0;
 u16 current_mount_points = 0;
 

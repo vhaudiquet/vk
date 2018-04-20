@@ -15,6 +15,22 @@ VBOXDISKIMAGE=../disk.vdi
 
 all: $(EXEC)
 
+userland:
+	# make newlib
+	cd /home/valentin/Documents/vk/res/userland/libc/newlib/build ; ./build.sh
+	# make dash
+	cd /home/valentin/Documents/vk/res/userland/dash/build ; ./build.sh
+	# make init
+	cd ~/Desktop ; i386-vk-gcc init.c -o init
+	cp ~/Desktop/init /home/valentin/Documents/vk/res/hdd/sys
+	# make ls
+	cd ~/Desktop ; i386-vk-gcc ls.c -o ls
+	cp ~/Desktop/ls /home/valentin/Documents/vk/res/hdd/sys
+	# copy init/dash/ls
+	cp /home/valentin/Documents/vk/sysroot/bin/dash /home/valentin/Documents/vk/res/hdd/sys
+	cp ~/Desktop/init /home/valentin/Documents/vk/res/hdd/sys
+	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc
+
 async:
 	make run > /dev/null 2>&1 &
 

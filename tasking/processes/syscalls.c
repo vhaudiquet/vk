@@ -20,13 +20,14 @@
 #include "video/video.h"
 #include "memory/mem.h"
 #include "syscalls.h"
+#include "external_structures.h"
 
 static bool ptr_validate(u32 ptr, u32* page_directory);
 
 void* system_calls[] = {0, syscall_open, syscall_close, syscall_read, syscall_write, 
 syscall_link, syscall_unlink, syscall_seek, syscall_stat, syscall_rename, syscall_finfo, 
-syscall_mount, syscall_umount, syscall_mkdir, syscall_readdir, syscall_openio, syscall_dup, 
-0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+syscall_mount, syscall_umount, syscall_mkdir, syscall_readdir, syscall_openio, syscall_dup, syscall_fsinfo,
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 syscall_fork, syscall_exit, syscall_exec, syscall_wait, syscall_getpinfo, syscall_setpinfo, 
 syscall_sig, syscall_sigaction, syscall_sigret, syscall_sbrk,
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -326,6 +327,49 @@ void syscall_dup(u32 ebx, u32 ecx, u32 edx)
     }
 
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(new), "N"(ERROR_NONE):"%eax", "%ecx");
+}
+
+void syscall_fsinfo(u32 ebx, u32 ecx, u32 edx)
+{
+    if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
+
+    switch(ebx)
+    {
+        case VK_FSINFO_MOUNTED_FS_NUMBER:
+        {
+            *((u32*) ecx) = current_mount_points;
+            asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(current_mount_points), "N"(ERROR_NONE):"%eax", "%ecx"); return;
+        }
+        case VK_FSINFO_MOUNTED_FS_ALL:
+        {
+            mount_point_t* ptr = root_point;
+            while(ptr)
+            {
+                file_system_t* fs = ptr->fs;
+                statfs_t* dest = (statfs_t*) ecx;
+                dest->f_type = fs->fs_type;
+                dest->f_flags = fs->flags;
+                dest->f_bsize = 512; //TODO
+                //TODO
+                if(fs->partition) dest->f_blocks = fs->drive->partitions[fs->partition-1]->length;
+                else dest->f_blocks = fs->drive->device_size;
+                dest->f_bfree = dest->f_blocks;
+                dest->f_bavail = dest->f_bfree;
+                dest->f_files = U32_MAX-1;
+                dest->f_ffree = dest->f_files;
+                dest->f_fsid = (u32) fs;
+                u32 len = strlen(ptr->path); if(len > 99) len = 99; //TODO assert
+                memcpy(dest->mount_path, ptr->path, len);
+                *(dest->mount_path+len) = 0;
+
+                dest++;
+                ptr = ptr->next;
+            }
+            asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(current_mount_points), "N"(ERROR_NONE):"%eax", "%ecx"); return;
+        }
+    }
+
+    asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR):"%eax", "%ecx"); 
 }
 
 void syscall_exit(u32 ebx, u32 ecx, u32 edx)

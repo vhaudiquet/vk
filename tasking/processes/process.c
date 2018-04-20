@@ -459,8 +459,8 @@ error_t spawn_init_process()
     tr->active_thread->gregs.edi = 0;
     tr->active_thread->ebp = 0;
     
-    //set flags (just copy from current flags)
-    tr->flags = 0; asm("pushf; pop %%eax":"=a"(tr->flags):);
+    //set flags
+    tr->flags = 0x202; // [IF]
 
     //set default segment registers
     tr->active_thread->sregs.ds = tr->active_thread->sregs.es = tr->active_thread->sregs.fs = tr->active_thread->sregs.gs = tr->active_thread->sregs.ss = 0x23;

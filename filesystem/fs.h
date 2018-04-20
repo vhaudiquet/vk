@@ -74,6 +74,14 @@ typedef struct file_system
 } file_system_t;
 
 //mounting
+typedef struct mount_point
+{
+    char* path;
+    file_system_t* fs;
+    struct mount_point* next;
+} mount_point_t;
+extern mount_point_t* root_point;
+extern u16 current_mount_points;
 u8 detect_fs_type(block_device_t* drive, u8 partition);
 u8 mount_volume(char* path, block_device_t* drive, u8 partition);
 void mount(char* path, file_system_t* fs);

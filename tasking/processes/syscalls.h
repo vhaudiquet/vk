@@ -39,6 +39,10 @@
 #define VK_PINFO_GID 4
 #define VK_PINFO_WORKING_DIRECTORY 3
 
+//SYSCALL_FSINFO values
+#define VK_FSINFO_MOUNTED_FS_NUMBER 1
+#define VK_FSINFO_MOUNTED_FS_ALL 2
+
 void syscall_open(u32 ebx, u32 ecx, u32 edx);
 void syscall_close(u32 ebx, u32 ecx, u32 edx);
 void syscall_read(u32 ebx, u32 ecx, u32 edx);
@@ -55,6 +59,7 @@ void syscall_mkdir(u32 ebx, u32 ecx, u32 edx);
 void syscall_readdir(u32 ebx, u32 ecx, u32 edx);
 void syscall_openio(u32 ebx, u32 ecx, u32 edx);
 void syscall_dup(u32 ebx, u32 ecx, u32 edx);
+void syscall_fsinfo(u32 ebx, u32 ecx, u32 edx);
 
 void syscall_fork(u32 ebx, u32 ecx, u32 edx);
 void syscall_exit(u32 ebx, u32 ecx, u32 edx);
