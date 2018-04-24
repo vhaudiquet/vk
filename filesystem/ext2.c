@@ -115,13 +115,14 @@ error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
 
         dirent_t* fd = 
         #ifdef MEMLEAK_DBG
-        kmalloc(sizeof(dirent_t)+dirent->name_len, "ext2_read_dir dirent");
+        kmalloc(sizeof(dirent_t)+dirent->name_len+1, "ext2_read_dir dirent");
         #else
-        kmalloc(sizeof(dirent_t)+dirent->name_len);
+        kmalloc(sizeof(dirent_t)+dirent->name_len+1);
         #endif
 
         fd->name_len = dirent->name_len;
         strncpy(fd->name, (char*) dirent->name, dirent->name_len);
+        *(fd->name+dirent->name_len) = 0;
         fd->inode = dirent->inode;
 
         ptr->element = fd;

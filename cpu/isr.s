@@ -149,6 +149,9 @@ SYSCALL_H:
     push %es
     push %fs
     push %gs
+    push %esi
+    push %edi
+    push %ebp
     pushl %edx
     pushl %ecx
     pushl %ebx
@@ -162,6 +165,9 @@ SYSCALL_H:
     call *%eax
     add $0xC, %esp
 
+    pop %ebp
+    pop %edi
+    pop %esi
     pop %gs
     pop %fs
     pop %es
