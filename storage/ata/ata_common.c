@@ -94,6 +94,7 @@ void ata_install()
 
 			if(curr->subclass_id == 0x01)
 			{
+				kprintf("%lFound PATA IDE controller\n", 1);
 				block_device_t* primary_master = ata_identify_drive(port, control_port, bar4, true, 14, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
 				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, 14, curr);
@@ -107,10 +108,11 @@ void ata_install()
 				//if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
             }
             //Note : DEBUG message
-			//else if(curr->subclass_id == 0x06)
-			//{
-			//	kprintf("%lFound unsupported AHCI ATA controller\n", 2);
-			//}
+			else if(curr->subclass_id == 0x06)
+			{
+				kprintf("%lFound unsupported AHCI ATA controller\n", 2);
+			}
+			else kprintf("%lFound 0x%X Mass Storage subclass\n", 2, curr->subclass_id);
 		}
 		curr = curr->next;
 	}
@@ -172,24 +174,29 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
     //if error, check if drive is atapi, or return
 	if(status != ERROR_NONE)
 	{
+		//wait for device
+		ata_io_wait(current);
+
 		u8 t0 = inb(LBA_MID_PORT(current));
 		u8 t1 = inb(LBA_HI_PORT(current));
-        if(t0 == 0x14 && t1 == 0xEB) //if device is an ATAPI device
+		
+		//wait again
+		ata_io_wait(current);
+        
+		if(t0 == 0x14 && t1 == 0xEB) //if device is an ATAPI device
         {
-            current->flags |= ATA_FLAG_ATAPI;
+			//just one last time to be sure
+			ata_io_wait(current);
+            
+			current->flags |= ATA_FLAG_ATAPI;
             outb(COMMAND_PORT(current), 0xA1); //identify packet cmd
-            status = inb(COMMAND_PORT(current));
-            if(status == 0x0)
-            {
-				kfree(current); kfree(current_top);
-                return 0; //no device (strange and should never happen)
-            }
+
             //wait for drive busy/drive error
             status = ata_pio_poll_status((ata_device_t*) current);
             if(status != ERROR_NONE)
             {
-				kfree(current); kfree(current_top);
-                return 0;
+				kprintf("%lATAPI BUSY = %u ; adding drive anyway.\n", 3, status);
+				/* TODO : check WTF is going on... */
             }
         }
 		else {kfree(current); kfree(current_top); return 0;}
@@ -214,7 +221,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 
 	current->sectors_per_block = id.maximum_block_transfer;
 
-	// kprintf("DISK %s : serial = %s : size %u MiB ; %s\n", id.model, id.serial_number, (current_top->device_size/1024/1024*512), current->flags & ATA_FLAG_ATAPI ? "atapi" : "ata");
+	// kprintf("%lDISK %s : serial = %s : size %u MiB ; %s\n", 3, id.model, id.serial_number, (current_top->device_size/1024*512/1024), current->flags & ATA_FLAG_ATAPI ? "atapi" : "ata");
 
 	current_top->device_struct = (void*) current;
 	current_top->device_type = ATA_DEVICE;
