@@ -70,13 +70,15 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
     kprintf("Getting kernel execution context...");
     //kprintf("%lARGS : m=%u, r=%s\n", 3, aboot_hint_present, aroot_dir);
 
-    //getting live / root dir infos (for now we are ignoring args, we'll update that later)
-    u8 root_drive = 0;
-    u8 part_index = 1;
-    u8 mode = 0; //aboot_hint_present
+    //getting live / root dir infos
+    int8_t root_drive = -1;
+    int8_t part_index = -1;
+    
+    //first if we need to check if we want LIVE boot or INSTALLED boot
+    u8 mode = aboot_hint_present;
+    //if there were no boot args, we try to guess kernel context depending on boot_device
     if(!mode)
     {
-        if(block_device_count == 0) {vga_text_failmsg(); fatal_kernel_error("No block device detected", "KERNEL_CONTEXT_GUESSING");}
         //the kernel will try to guess what mode is needed (relatively to boot_device)
         if(mbt->flags & 0b10)
         {
@@ -84,29 +86,14 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
             else if((mbt->boot_device >> 24 == 0x80) | (mbt->boot_device >> 24 == 0x81)) 
             {
                 mode = KERNEL_MODE_INSTALLED;
-                while(block_devices[root_drive]->device_class != HARD_DISK_DRIVE && root_drive < block_device_count)
-                {
-                    root_drive++;
-                    //TODO : check if this loop ended well or not ; if not : fatal error
-                }
             }
             else if(mbt->boot_device >> 24 == 0xE0) 
             {
                 mode = KERNEL_MODE_LIVE;
-                while(block_devices[root_drive]->device_class != CD_DRIVE && root_drive < block_device_count)
-                {
-                    root_drive++;
-                    //TODO : check if this loop ended well or not ; if not : fatal error
-                }
             }
             else if(mbt->boot_device >> 24 == 0xA0) 
             {
                 mode = KERNEL_MODE_LIVE;
-                while(block_devices[root_drive]->device_class != USB_DRIVE && root_drive < block_device_count)
-                {
-                    root_drive++;
-                    //TODO : check if this loop ended well or not ; if not : fatal error
-                }
             }
             else mode = 0;
         }
@@ -114,39 +101,52 @@ void kmain(multiboot_info_t* mbt, void* stack_pointer)
         if(!mode) {vga_text_failmsg(); fatal_kernel_error("Could not guess kernel context...", "KERNEL_CONTEXT_GUESSING");}
     }
 
+    //now let's check for root drive
+    if(root_drive == -1)
+    {
+        if(mode == KERNEL_MODE_LIVE)
+        {
+            //root_drive is the first CD drive we find
+            int8_t drive = 0;
+            while(block_devices[(u8) drive]->device_class != CD_DRIVE)
+            {
+                drive++;
+                if(drive == block_device_count) fatal_kernel_error("Could not find any CD Drive...", "KERNEL_ROOT_GUESSING");
+            }
+            root_drive = drive;
+            //assume the CD has no partitions
+            part_index = 0;
+        }
+        else if(mode == KERNEL_MODE_INSTALLED)
+        {
+            //root_drive is the first HDD we find
+            int8_t drive = 0;
+            while(block_devices[(u8) drive]->device_class != HARD_DISK_DRIVE)
+            {
+                drive++;
+                if(drive == block_device_count) fatal_kernel_error("Could not find any Hard Disk...", "KERNEL_ROOT_GUESSING");
+            }
+            root_drive = drive;
+            //assume the drive is partitionned and the first part is root
+            part_index = 1;
+        }
+    }
+
     //printing kernel context
     char* context = (mode == KERNEL_MODE_LIVE ? "LIVE\n" : mode == KERNEL_MODE_INSTALLED ? "INSTALLED\n" : "FAILED\n");
     u8 color = (mode == KERNEL_MODE_LIVE ? 0b00001111 : mode == KERNEL_MODE_INSTALLED ? 0b00001111 : 0b00001100);
     vga_text_spemsg(context, color);
 
-    //mounting root directory
-    if(mode == KERNEL_MODE_LIVE)
+    //mounting root drive/part on /
+    kprintf("Mounting root directory...");
+    block_device_t* dev = block_devices[(u8) root_drive];
+    if(!dev) fatal_kernel_error("Could not find root drive !", "KERNEL_LOADING");
+    if(!mount_volume("/", dev, (u8) (part_index)))
     {
-        //mounting live CD on /
-        kprintf("Mounting root directory...");
-        block_device_t* dev = block_devices[root_drive];
-        if(!dev) fatal_kernel_error("Could not find root drive !", "LIVE_KERNEL_LOADING");
-        if(!mount_volume("/", dev, (u8) 0))
-        {
-            vga_text_failmsg();
-            fatal_kernel_error("Could not mount root directory.", "LIVE_KERNEL_LOADING");
-        }
-        vga_text_okmsg();
+        vga_text_failmsg();
+        fatal_kernel_error("Could not mount root directory.", "KERNEL_LOADING");
     }
-    else if(mode == KERNEL_MODE_INSTALLED)
-    {
-        //mounting hard disk on /
-        kprintf("Mounting root directory...");
-
-        block_device_t* dev = block_devices[root_drive];
-        if(!dev) fatal_kernel_error("Could not find root drive !", "INSTALLED_KERNEL_LOADING");
-        if(!mount_volume("/", dev, (u8) (part_index)))
-        {
-            vga_text_failmsg();
-            fatal_kernel_error("Could not mount root directory.", "INSTALLED_KERNEL_LOADING");
-        }
-        vga_text_okmsg();
-    }
+    vga_text_okmsg();
 
     //initializing/mounting devfs
     devfs_init();

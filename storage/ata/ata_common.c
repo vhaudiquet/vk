@@ -94,7 +94,7 @@ void ata_install()
 
 			if(curr->subclass_id == 0x01)
 			{
-				kprintf("%lFound PATA IDE controller\n", 1);
+				//kprintf("%lFound PATA IDE controller\n", 1);
 				block_device_t* primary_master = ata_identify_drive(port, control_port, bar4, true, 14, curr);
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
 				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, 14, curr);
@@ -108,11 +108,11 @@ void ata_install()
 				//if((secondary_master != 0) | (secondary_slave != 0)) {init_idt_desc(in+33, 0x08, (u32) _irq15,0x8E00);}
             }
             //Note : DEBUG message
-			else if(curr->subclass_id == 0x06)
-			{
-				kprintf("%lFound unsupported AHCI ATA controller\n", 2);
-			}
-			else kprintf("%lFound 0x%X Mass Storage subclass\n", 2, curr->subclass_id);
+			// else if(curr->subclass_id == 0x06)
+			// {
+			// 	kprintf("%lFound unsupported AHCI ATA controller\n", 2);
+			// }
+			// else kprintf("%lFound 0x%X Mass Storage subclass\n", 2, curr->subclass_id);
 		}
 		curr = curr->next;
 	}
