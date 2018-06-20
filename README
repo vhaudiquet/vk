@@ -1,5 +1,8 @@
 VK is a Kernel
 C kernel project ; current architecture : x86
+The goal of this project is to get a POSIX-compliant C kernel. 
+I started it to learn POSIX, C, UNIX conventions and how does a computer really works.
+I also want to have a working kernel to actually use it on old hardware that i have that can barely run linux.
 
 Current status : the kernel can load an ELF executable, statically linked with newlib, and execute the code, from an ATA disk with a FAT32/EXT2 fs or an ATAPI cd-rom with an ISO9660 fs.
 (even if for now almost every executable cause a page fault from iso9660, idk why...)

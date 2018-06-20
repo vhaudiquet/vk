@@ -91,6 +91,7 @@ static void handle_signal(process_t* process, int sig)
                 thread->eip = (uintptr_t) exit_process;
                 
                 //setup stack
+                //aligndown(thread->kesp, 0x10);
                 u32* kesp = (u32*) thread->kesp;
                 kesp -= 0x10;
 

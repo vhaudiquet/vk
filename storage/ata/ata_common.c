@@ -99,9 +99,9 @@ void ata_install()
 				if(primary_master) {block_devices[block_device_count] = primary_master; block_device_count++;}
 				block_device_t* primary_slave = ata_identify_drive(port, control_port, bar4, false, 14, curr);
 				if(primary_slave) {block_devices[block_device_count] = primary_slave; block_device_count++;}
-				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), true, (u8) (15), curr);
+				block_device_t* secondary_master = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), true, 15, curr);
 				if(secondary_master) {block_devices[block_device_count] = secondary_master; block_device_count++;}
-				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), false, (u8) (15), curr);
+				block_device_t* secondary_slave = ata_identify_drive(port_s, control_port_s, (u16)(bar4+0x8), false, 15, curr);
 				if(secondary_slave) {block_devices[block_device_count] = secondary_slave; block_device_count++;}
 				//TEMP IDT
 				//if((primary_master != 0) | (primary_slave != 0)) {init_idt_desc(in+32, 0x08, (u32) _irq14,0x8E00);}

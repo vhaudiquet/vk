@@ -282,17 +282,18 @@ void free_process_memory(process_t* process)
 /* expands process allocated memory (heap) */
 u32 sbrk(process_t* process, u32 incr)
 {
-    u32 new_last_addr = process->heap_addr+process->heap_size+incr;
+    u32 old_last_addr = process->heap_addr+process->heap_size;
+    u32 new_last_addr = old_last_addr+incr;
     if(!is_mapped(new_last_addr, process->page_directory))
     {
         #ifdef PAGING_DEBUG
-        kprintf("%lSBRK: mappping if not 0x%X (size 0x%X)...\n", 3, process->heap_addr+process->heap_size, incr);
+        kprintf("%lSBRK: mappping if not 0x%X (size 0x%X)...\n", 3, old_last_addr, incr);
         #endif
         
-        map_memory_if_not_mapped(incr, process->heap_addr+process->heap_size, process->page_directory);        
+        map_memory_if_not_mapped(incr, old_last_addr, process->page_directory);        
     }
     process->heap_size += incr;
-    return process->heap_addr+process->heap_size;
+    return old_last_addr; //return previous program break (specs)
 }
 
 /* create a new process by copying the current one */

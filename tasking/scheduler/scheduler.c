@@ -182,6 +182,10 @@ void scheduler_wait_thread(process_t* process, thread_t* thread, u8 sleep_reason
 */
 void scheduler_sleep_update()
 {
+    //u32 esi = 0; asm("mov %%esi, %%eax":"=a"(esi));
+    //u32 edi = 0; asm("mov %%edi, %%eax":"=a"(edi));
+    //if(esi != 0x0 || current_process->active_thread->gregs.esi != 0x0) kprintf("%lschedule ; esi = 0x%X (current_process->esi = 0x%X)\n edi = 0x%X (current_process->edi = 0x%X)\n", 3, esi, current_process->active_thread->gregs.esi, edi, current_process->active_thread->gregs.edi);
+
     //check if there are processes on the list
     if(!wait_list) return;
     if(mutex_lock(wait_mutex) != ERROR_NONE) return;

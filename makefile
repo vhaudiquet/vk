@@ -4,7 +4,7 @@ CC=$(CPATH)/i386-elf-gcc -std=gnu11
 AS=$(CPATH)/i386-elf-as
 LD=$(CPATH)/i386-elf-ld
 AFLAGS=--32
-CFLAGS=-c -m32 -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -nostdinc -O -I.
+CFLAGS=-c -Wall -Wextra -Wconversion -Wstack-protector -fno-stack-protector -fno-builtin -fomit-frame-pointer -nostdinc -O -I.
 LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
 QEMU=qemu-system-i386 -enable-kvm # kvm
