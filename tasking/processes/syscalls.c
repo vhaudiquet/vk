@@ -385,10 +385,25 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     error_t is_elf = elf_check(current_process->files[ebx]);
     if(is_elf != ERROR_NONE) {asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(is_elf):"%eax", "%ecx"); return;}
 
+    //copy arguments before process memory freeing
+    char** argv = kmalloc(sizeof(char*)*ecx);
+    u32 i = 0;
+    for(i = 0;i<ecx;i++)
+    {
+        char* oldarg = ((char**) edx)[i];
+        if(oldarg == 0) {argv[i] = 0; break;}
+
+        size_t len = strlen(oldarg);
+        char* newarg = kmalloc(len+1);
+        strcpy(newarg, oldarg);
+        argv[i] = newarg;
+    }
+
+    //free old process memory
     free_process_memory(current_process);
 
     //kprintf("%lSYS_EXEC : loading executable...\n", 3);
-    error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, (char**) edx);
+    error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, argv);
     if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
     //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 

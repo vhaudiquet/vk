@@ -235,7 +235,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 	//multiword DMA mode
 	if(id.multiword_dma_support > id.multiword_dma_active)
 	{
-		// kprintf("%lMultiword DMA : supported = %u, active = %u\n", 3, id.multiword_dma_support, id.multiword_dma_active);
+		kprintf("%lMultiword DMA : supported = %u, active = %u\n", 3, id.multiword_dma_support, id.multiword_dma_active);
 		//select drive
 		outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
     	ata_io_wait(current); //wait for drive selection
@@ -254,7 +254,7 @@ static block_device_t* ata_identify_drive(u16 base_port, u16 control_port, u16 b
 
 	if((id.ultra_dma_support > id.ultra_dma_active) && (id.ultra_dma_support >= 2) && (id.ultra_dma_active < 2))
 	{
-		// kprintf("%lUDMA : supported = %u, active = %u\n", 3, id.ultra_dma_support, id.ultra_dma_active);
+		kprintf("%lUDMA : supported = %u, active = %u\n", 3, id.ultra_dma_support, id.ultra_dma_active);
 		//select drive
 		outb(DEVICE_PORT(current), master ? 0xA0 : 0xB0); //0xB0 = slave
     	ata_io_wait(current); //wait for drive selection

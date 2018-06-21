@@ -9,7 +9,7 @@ LDFLAGS=-melf_i386 -nostdlib -T link.ld
 EXEC=run
 QEMU=qemu-system-i386 -enable-kvm # kvm
 VBVMNAME=VK
-MEDIAPATH=/run/media/valentin/VALOU3433/boot/iso
+MEDIAPATH=/run/media/valentin/MULTISYSTEM
 DISKIMAGE=../extdisk.img
 VBOXDISKIMAGE=../disk.vdi
 
