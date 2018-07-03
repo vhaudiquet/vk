@@ -82,14 +82,15 @@ error_t devfs_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
 
     list_entry_t* ptr = dest;
 
-    while(((uintptr_t)dirptr) < ((uintptr_t)(spe->device_struct+dir->length)))
+    while(((uintptr_t)dirptr) < (((uintptr_t)(spe->device_struct))+dir->length))
     {
         devfs_dirent_t* dirent = (devfs_dirent_t*) dirptr;
         if(!dirent->node) break;
-        
+
         u32 name_len = strlen(dirent->name);
-        dirent_t* fd = kmalloc(sizeof(dirent)+name_len);
-        strcpy(fd->name, dirent->name);
+        dirent_t* fd = kmalloc(sizeof(dirent_t)+name_len+1);
+
+        strncpy(fd->name, dirent->name, name_len);
         fd->name_len = name_len;
         fd->inode = (uintptr_t) dirent->node;
 

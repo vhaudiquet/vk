@@ -54,9 +54,9 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     }
 
     fd_t* file = open_file(path, (u8) ecx);
-    //kprintf("%lSYS_OPEN : %s = 0x%X\n", 3, path, file);
+    kprintf("%lSYS_OPEN : %s = 0x%X\n", 3, path, file);
     if(!file) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
-            
+    
     if(current_process->files_count == current_process->files_size)
     {
         current_process->files_size*=2; 
@@ -402,10 +402,10 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     //free old process memory
     free_process_memory(current_process);
 
-    //kprintf("%lSYS_EXEC : loading executable...\n", 3);
+    kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, argv);
     if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
-    //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
+    kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //schedule to force reload eip/esp + registers that are in memory
     __asm__ __volatile__("jmp schedule_switch"::"a"(current_process->active_thread), "d"(current_process));

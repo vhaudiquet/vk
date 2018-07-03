@@ -94,26 +94,33 @@ void vga_text_reset()
     TEXT_CURSOR_Y = 0;
 }
 
-static void vga_text_scroll_up()
+//static
+ void vga_text_scroll_up()
 {
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
     if(VIDEO_TYPE == VIDEO_TYPE_NONE) return;
-    unsigned char *VRAM, *tmp;
-    for (VRAM = VGA_MEM_START; VRAM < VGA_MEM_END; VRAM += 2)
-    {
-        tmp = (u8*) (VRAM + 160);
 
+    u8* VRAM;
+    u8* tmp;
+    for (VRAM = VGA_MEM_START; (VRAM+1) < VGA_MEM_END; VRAM += 2)
+    {
+        //assign temp position to start of next line
+        tmp = (u8*) (VRAM + VGA_COLUMNS*2);
+
+        //if temp position is in VRAM, put it back in previous line
         if (tmp < VGA_MEM_END)
         {
-            *VRAM = *tmp;
-            *(VRAM + 1) = *(tmp + 1);
+            VRAM[0] = tmp[0];
+            VRAM[1] = tmp[1];
         }
-        else 
+        //else this means that this line is the last, so we empty it
+        else
         {
-            *VRAM = 0;
-            *(VRAM + 1) = 0x07;
+            VRAM[0] = 0;
+            VRAM[1] = 0x07;
         }
     }
+
     if(TEXT_CURSOR_Y > 0)
         TEXT_CURSOR_Y = (u8) (TEXT_CURSOR_Y - 1);
 }
@@ -173,18 +180,25 @@ void vga_text_putc(unsigned char c, u8 color)
     }
     else
     {
+        //get current video mem address and put char in it, + color if video mode = color
         u8* CURRENT = (u8*) (VGA_MEM_START + 2 * TEXT_CURSOR_X + 2*VGA_COLUMNS * TEXT_CURSOR_Y);
         *CURRENT = c;
         if(VIDEO_TYPE == VIDEO_TYPE_COLOR) *(CURRENT+1) = color;
+        //update X
         TEXT_CURSOR_X++;
-        if (TEXT_CURSOR_X > VGA_COLUMNS - 1)
-        {
-            TEXT_CURSOR_X = 0;
-            TEXT_CURSOR_Y++;
-        }
     }
 
-    if (TEXT_CURSOR_Y > VGA_LINES - 1){vga_text_scroll_up();} //this actually causes the last line not to be used
+    //update text cursor X if line end reached
+    if(TEXT_CURSOR_X >= VGA_COLUMNS)
+    {
+        TEXT_CURSOR_X = 0;
+        TEXT_CURSOR_Y++;
+    }
+
+    //update text cursor Y if screen end reached
+    if(TEXT_CURSOR_Y >= (VGA_LINES)) vga_text_scroll_up(); //this actually causes the last line not to be used
+    
+    //update vga cursor
     vga_text_update_cursor();
 }
 
