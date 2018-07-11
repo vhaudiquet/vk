@@ -122,7 +122,7 @@ typedef struct PROCESS
 void process_init();
 error_t spawn_init_process();
 void free_process_memory(process_t* process);
-error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv);
+error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv, char** env, int envc);
 void exit_process(process_t* process, u32 exitcode);
 u32 sbrk(process_t* process, u32 incr);
 process_t* fork(process_t* process, u32 old_esp);

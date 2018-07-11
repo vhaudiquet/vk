@@ -385,25 +385,55 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     error_t is_elf = elf_check(current_process->files[ebx]);
     if(is_elf != ERROR_NONE) {asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(is_elf):"%eax", "%ecx"); return;}
 
-    //copy arguments before process memory freeing
-    char** argv = kmalloc(sizeof(char*)*ecx);
-    u32 i = 0;
-    for(i = 0;i<ecx;i++)
+    //copy/counts arguments before process memory freeing
+    int argc = 0;
+    u32 argv_size = 5;
+    char** argv = kmalloc(sizeof(char*)*argv_size);
+    while(true)
     {
-        char* oldarg = ((char**) edx)[i];
-        if(oldarg == 0) {argv[i] = 0; break;}
+        char* oldarg = ((char**) edx)[argc];
+        if(oldarg == 0) {argv[argc] = 0; break;}
 
         size_t len = strlen(oldarg);
         char* newarg = kmalloc(len+1);
         strcpy(newarg, oldarg);
-        argv[i] = newarg;
+        argv[argc] = newarg;
+        argc++;
+
+        if(((u32)argc) >= argv_size)
+        {
+            argv_size *= 2;
+            argv = krealloc(argv, sizeof(char*)*argv_size);
+        }
+    }
+
+    //copy environment before process memory freeing
+    int envc = 0;
+    u32 env_size = 5;
+    char** env = kmalloc(sizeof(char*)*env_size);
+    while(true)
+    {
+        char* oldenv = ((char**) ecx)[envc];
+        if(oldenv == 0) {env[envc] = 0; break;}
+
+        size_t len = strlen(oldenv);
+        char* newenv = kmalloc(len+1);
+        strcpy(newenv, oldenv);
+        env[envc] = newenv;
+        envc++;
+
+        if(((u32)envc) >= env_size)
+        {
+            env_size *= 2;
+            env = krealloc(env, sizeof(char*)*env_size);
+        }
     }
 
     //free old process memory
     free_process_memory(current_process);
 
     kprintf("%lSYS_EXEC : loading executable...\n", 3);
-    error_t load = load_executable(current_process, current_process->files[ebx], (int) ecx, argv);
+    error_t load = load_executable(current_process, current_process->files[ebx], argc, argv, env, envc);
     if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
     kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 

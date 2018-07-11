@@ -22,17 +22,17 @@ userland:
 	cd /home/valentin/Documents/vk/res/userland/dash/build ; ./build.sh
 	cp /home/valentin/Documents/vk/sysroot/bin/dash /home/valentin/Documents/vk/res/hdd/sys
 	# make init
-	cd ~/Desktop ; i386-vk-gcc init.c -o init
-	cp ~/Desktop/init /home/valentin/Documents/vk/res/hdd/sys
+	cd /home/valentin/Documents/vk/res ; i386-vk-gcc init.c -o init
+	cp /home/valentin/Documents/vk/res/init /home/valentin/Documents/vk/res/hdd/sys
 	# make ls
-	cd ~/Desktop ; i386-vk-gcc ls.c -o ls
-	cp ~/Desktop/ls /home/valentin/Documents/vk/res/hdd/sys
+	cd /home/valentin/Documents/vk/res ; i386-vk-gcc ls.c -o ls
+	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/res/hdd/sys
 	# copy init/dash/ls
 	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc
 	# copy init/dash/ls to iso
 	cp /home/valentin/Documents/vk/sysroot/bin/dash /home/valentin/Documents/vk/iso/bin
-	cp ~/Desktop/init /home/valentin/Documents/vk/iso/sys
-	cp ~/Desktop/ls /home/valentin/Documents/vk/iso/bin
+	cp /home/valentin/Documents/vk/res/init /home/valentin/Documents/vk/iso/sys
+	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/iso/bin
 
 async:
 	make run > /dev/null 2>&1 &

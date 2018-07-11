@@ -51,7 +51,7 @@ void process_init()
 }
 
 /* load an elf executable to 'process' memory */
-error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv)
+error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv, char** env, int envc)
 {
     //check if the file is really an ELF executable
     error_t elfc = elf_check(executable);
@@ -81,11 +81,11 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     u32 base_stack = (u32) stack_offset-PROCESS_STACK_SIZE_DEFAULT;
     process->active_thread->base_stack = base_stack;
 
-    /* ARGUMENTS PASSING */
     pd_switch(process->page_directory);
-    
+
+    /* ARGUMENTS PASSING */    
     int i;
-    char** uparam = (char**) kmalloc(sizeof(char*) * ((u32) argc));
+    char** uparam = (char**) kmalloc(sizeof(char*) * ((u32) argc+1));
     
     //copy strings
     for (i=0; i<argc; i++) 
@@ -102,19 +102,49 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
         if(i != argc) *((char**) stack_offset) = uparam[i]; 
         else *((char**) stack_offset) = 0;
     }
+    char* argvaddr = stack_offset;
+
+    /* ENVIRONMENT PASSING */
+    uparam = kmalloc(sizeof(char*)*((u32) envc+1));
+
+    //copy strings
+    for (i=0; i<envc; i++)
+    {
+        stack_offset -= (strlen(env[i]) + 1);
+        strcpy((char*) stack_offset, env[i]);
+        uparam[i] = (char*) stack_offset;
+    }
+
+    //copy adresses
+    for (i=envc; i>=0; i--)
+    {
+        stack_offset -= sizeof(char*);
+        if(i != envc) *((char**) stack_offset) = uparam[i]; 
+        else *((char**) stack_offset) = 0;
+    }
+
+    char* envaddr = stack_offset;
 
     //copy argv
     stack_offset -= sizeof(char*);
-    *((char**) stack_offset) = (char*) (stack_offset + 4); 
+    *((char**) stack_offset) = (char*) argvaddr; 
 
     //copy argc
     stack_offset -= sizeof(char*);
     *((int*) stack_offset) = argc; 
 
+    //copy env
     stack_offset -= sizeof(char*);
+    *((char**) stack_offset) = (char*) envaddr; 
+
+    //copy envc
+    stack_offset -= sizeof(char*);
+    *((int*) stack_offset) = envc;
+
+    stack_offset -= sizeof(char*);
+    /* ENVIRONMENT/ARGS PASSED */
 
     pd_switch(current_process->page_directory);
-    /* ARGUMENTS PASSED */
 
     //set process heap
     //for now we decide that the last mem segment will be the start of the heap (cause it's easier and i'm lazy)
@@ -427,7 +457,7 @@ error_t spawn_init_process()
     tr->page_directory = page_directory;
 
     //load ELF executable
-    error_t elf = load_executable(tr, init_file, 0, 0);
+    error_t elf = load_executable(tr, init_file, 0, 0, 0, 0);
 
     //close init file
     close_file(init_file);
