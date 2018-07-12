@@ -54,7 +54,7 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     }
 
     fd_t* file = open_file(path, (u8) ecx);
-    kprintf("%lSYS_OPEN : %s = 0x%X\n", 3, path, file);
+    //kprintf("%lSYS_OPEN : %s = 0x%X\n", 3, path, file);
     if(!file) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     
     if(current_process->files_count == current_process->files_size)

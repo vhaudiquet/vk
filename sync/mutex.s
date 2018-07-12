@@ -19,14 +19,34 @@
 .extern mutex_unlock_wakeup
 .global mutex_lock
 mutex_lock:
+    /* get argument (mutex pointer) into eax */
     mov 4(%esp), %eax
+    
+    /* clear interrupts to lock the mutex, and cache flags in edx */
+    pushf
+    popl %edx
     cli
-    movl (%eax), %ecx
+    movl (%eax), %ecx # move the process into ecx
+    
+    /* check if mutex is already locked by current process, if so return good */
+    cmp %ecx, current_process
+    je lock_end
+
+    /* check if mutex is locked by another process (!=0), if so return bad */
     test %ecx, %ecx
     jnz lock_end_bad
+
+    /* lock the mutex : put current process addr in struct */
     movl current_process, %ecx
     movl %ecx, (%eax)
+
+    lock_end:
+    test $0x200, %edx
+    jz no_int
+
     sti
+    
+    no_int:
     movl $0, %eax
     ret
 

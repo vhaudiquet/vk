@@ -16,6 +16,7 @@
 */
 
 #include "video.h"
+#include "tasking/task.h"
 
 #define VIDEO_TYPE_NONE 0x0
 #define VIDEO_TYPE_COLOR 0x20
@@ -52,6 +53,8 @@ u8 g_80x25_text[] =
 	0x0C, 0x00, 0x0F, 0x08, 0x00
 };
 
+mutex_t screen_mutex = {0};
+
 bool vga_setup(void)
 {
     //Set video_mode to VGA_TEXT 80*25
@@ -75,6 +78,15 @@ bool vga_setup(void)
     return true;
 }
 
+void vga_text_mutex_lock()
+{
+    if(!scheduler_started) return;
+    while(mutex_lock(&screen_mutex) != ERROR_NONE)
+    {
+        mutex_wait(&screen_mutex);
+    }
+}
+
 void vga_text_cls()
 {
     u32 i = 0;
@@ -94,8 +106,7 @@ void vga_text_reset()
     TEXT_CURSOR_Y = 0;
 }
 
-//static
- void vga_text_scroll_up()
+static void vga_text_scroll_up()
 {
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
     if(VIDEO_TYPE == VIDEO_TYPE_NONE) return;
@@ -122,7 +133,7 @@ void vga_text_reset()
     }
 
     if(TEXT_CURSOR_Y > 0)
-        TEXT_CURSOR_Y = (u8) (TEXT_CURSOR_Y - 1);
+        TEXT_CURSOR_Y = (u8) (TEXT_CURSOR_Y - 1);   
 }
 
 static void vga_text_update_cursor()
@@ -152,6 +163,8 @@ void vga_text_putc(unsigned char c, u8 color)
 {
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
     if(VIDEO_TYPE == VIDEO_TYPE_NONE) return;
+
+    vga_text_mutex_lock();
 
     if(c == '\n'){TEXT_CURSOR_X = 0; TEXT_CURSOR_Y++;}
     else if(c == '\t')
@@ -200,6 +213,8 @@ void vga_text_putc(unsigned char c, u8 color)
     
     //update vga cursor
     vga_text_update_cursor();
+
+    mutex_unlock(&screen_mutex);
 }
 
 void vga_text_puts(unsigned char* str, u8 color)
