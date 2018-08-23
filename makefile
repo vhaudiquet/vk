@@ -28,7 +28,7 @@ userland:
 	cd /home/valentin/Documents/vk/res ; i386-vk-gcc ls.c -o ls
 	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/res/hdd/sys
 	# copy init/dash/ls
-	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc
+	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc ; make vkvshc
 	# copy init/dash/ls to iso
 	cp /home/valentin/Documents/vk/sysroot/bin/dash /home/valentin/Documents/vk/iso/bin
 	cp /home/valentin/Documents/vk/res/init /home/valentin/Documents/vk/iso/sys

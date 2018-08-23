@@ -36,13 +36,13 @@ u8 azer_kbd_map[] =
 {
     0, 0, 
     '&', 130, '"', '\'', '(', '-', 138, '_', 135, 133, ')', '=',
-    '\b', '\t',
+    '\b', '\t', //15
     'a', 'z', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '^', '$',
-    '\n', 0,
+    '\n', 0, //29
     'q', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 151, 0, 0, '*',
-    'w', 'x', 'c', 'v', 'b', 'n', ',', ';', ':', '!', 0,
+    'w', 'x', 'c', 'v', 'b', 'n', ',', ';', ':', '!', 0, //54
     0, 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, '<'
+    0, '<' //86
 };
 
 u8 azer_maj_kbd_map[] =
@@ -73,6 +73,7 @@ u8 azer_ctrl_kbd_map[] =
 
 u8 getchar(u8 keycode)
 {
+    kprintf("getchar: keycode = %u\n", keycode);
     if(keycode > sizeof(azer_kbd_map)) return 0;
     if(kbd_maj) return azer_maj_kbd_map[keycode];
     else if(kbd_ctrl) return azer_ctrl_kbd_map[keycode];

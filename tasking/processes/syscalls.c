@@ -474,6 +474,7 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
     }
     else if(pid == -1)
     {
+        //waiting for any child processes
         list_entry_t* ptr = current_process->children;
         while(ptr)
         {
