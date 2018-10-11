@@ -73,7 +73,7 @@ u8 azer_ctrl_kbd_map[] =
 
 u8 getchar(u8 keycode)
 {
-    kprintf("getchar: keycode = %u\n", keycode);
+    //kprintf("getchar: keycode = %u\n", keycode);
     if(keycode > sizeof(azer_kbd_map)) return 0;
     if(kbd_maj) return azer_maj_kbd_map[keycode];
     else if(kbd_ctrl) return azer_ctrl_kbd_map[keycode];
