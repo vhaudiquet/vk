@@ -108,32 +108,26 @@ void vga_text_reset()
 
 static void vga_text_scroll_up()
 {
+    //make sure we're in VGA_TEXT and VIDEO_TYPE is set
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
     if(VIDEO_TYPE == VIDEO_TYPE_NONE) return;
 
-    u8* VRAM;
-    u8* tmp;
-    for (VRAM = VGA_MEM_START; (VRAM+1) < VGA_MEM_END; VRAM += 2)
+    u8* VRAM = VGA_MEM_START;
+    
+    //copy VRAM+ONE_LINE in VRAM
+    memcpy(VRAM, VRAM+(VGA_COLUMNS*2), (size_t) (VGA_MEM_END-VGA_MEM_START-(VGA_COLUMNS*2)));
+    
+    //set VRAM LAST LINE to 0
+    u8* LAST_LINE = (u8*) (VGA_MEM_END-2*VGA_COLUMNS);
+    u32 add = 0;
+    for(add = 0; add < VGA_COLUMNS*2; add+=2)
     {
-        //assign temp position to start of next line
-        tmp = (u8*) (VRAM + VGA_COLUMNS*2);
-
-        //if temp position is in VRAM, put it back in previous line
-        if (tmp < VGA_MEM_END)
-        {
-            VRAM[0] = tmp[0];
-            VRAM[1] = tmp[1];
-        }
-        //else this means that this line is the last, so we empty it
-        else
-        {
-            VRAM[0] = 0;
-            VRAM[1] = 0x07;
-        }
+        LAST_LINE[add] = 0;
+        LAST_LINE[add+1] = 0x7;
     }
 
     if(TEXT_CURSOR_Y > 0)
-        TEXT_CURSOR_Y = (u8) (TEXT_CURSOR_Y - 1);   
+        TEXT_CURSOR_Y = (u8) (TEXT_CURSOR_Y - 1);
 }
 
 static void vga_text_update_cursor()
@@ -161,11 +155,13 @@ void vga_text_enable_cursor()
 
 void vga_text_putc(unsigned char c, u8 color)
 {
+    //make sure we're in VGA_TEXT and VIDEO_TYPE is set
     if(get_video_mode() != VIDEO_MODE_VGA_TEXT) return;
     if(VIDEO_TYPE == VIDEO_TYPE_NONE) return;
 
     vga_text_mutex_lock();
 
+    //handle special characters
     if(c == '\n'){TEXT_CURSOR_X = 0; TEXT_CURSOR_Y++;}
     else if(c == '\t')
     {
@@ -191,6 +187,7 @@ void vga_text_putc(unsigned char c, u8 color)
             }
         }
     }
+    //handle other (standard) characters
     else
     {
         //get current video mem address and put char in it, + color if video mode = color
