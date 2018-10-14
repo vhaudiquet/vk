@@ -187,6 +187,7 @@ fd_t* open_file(char* path, u8 mode)
         fd_t* tr = kmalloc(sizeof(fd_t));
         tr->file = fs->root_dir;
         tr->offset = 0;
+        tr->instances = 1;
         return tr;
     }
 
@@ -213,6 +214,7 @@ fd_t* open_file(char* path, u8 mode)
         fd_t* tr = kmalloc(sizeof(fd_t));
         tr->file = best->fs->root_dir;
         tr->offset = 0;
+        tr->instances = 1;
         return tr;
     }
 
@@ -225,6 +227,7 @@ fd_t* open_file(char* path, u8 mode)
     fd_t* tr = kmalloc(sizeof(fd_t));
     tr->file = node;
     tr->offset = 0;
+    tr->instances = 1;
 
     //depending on mode
     if((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP)) return tr;
@@ -248,7 +251,8 @@ fd_t* open_file(char* path, u8 mode)
 
 void close_file(fd_t* file)
 {
-    kfree(file);
+    file->instances--;
+    if(!file->instances) kfree(file);
 }
 
 error_t list_directory(char* path, list_entry_t* dest, u32* size)

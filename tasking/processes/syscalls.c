@@ -86,6 +86,8 @@ void syscall_close(u32 ebx, u32 ecx, u32 edx)
         current_process->files[ebx] = 0;
         current_process->files_count--;
         close_file(file);
+        
+        //kprintf("%lSYS_CLOSE : closed file %u\n", 3, ebx);
     }
 }
 
@@ -190,14 +192,14 @@ void syscall_finfo(u32 ebx, u32 ecx, u32 edx)
     {
         case VK_FINFO_DEVICE_TYPE: 
         {
-            fsnode_t* node = current_process->files[ecx]->file;
+            fsnode_t* node = current_process->files[ebx]->file;
             if(node->file_system->fs_type == FS_TYPE_DEVFS)
             {
                 devfs_node_specific_t* spe = node->specific;
                 *((u32*)edx) = spe->device_type;
-                break;
             }
-            *((u32*)edx) = VK_NOT_A_DEVICE;
+            else *((u32*)edx) = VK_NOT_A_DEVICE;
+            
             break;
         }
         default:{asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR):"%eax", "%ecx"); return;}
@@ -301,8 +303,8 @@ void syscall_dup(u32 ebx, u32 ecx, u32 edx)
             memset(current_process->files+current_process->files_size/2, 0, current_process->files_size/2);
         }
 
+        oldf->instances++;
         if(current_process->files[ecx]) close_file(current_process->files[ecx]);
-
         current_process->files[ecx] = oldf;
         new = (int) ecx;
     }
@@ -324,8 +326,11 @@ void syscall_dup(u32 ebx, u32 ecx, u32 edx)
                 break;
             }
         }
+        oldf->instances++;
         current_process->files_count++;
         new = (int) i;
+
+        //kprintf("%lSYS_DUP: duplicated file %d (0x%X) to %d (by default)\n", 3, ebx, oldf, new);
     }
 
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(new), "N"(ERROR_NONE):"%eax", "%ecx");
@@ -446,16 +451,19 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_wait(u32 ebx, u32 ecx, u32 edx)
 {
+    //kprintf("%lSYS_WAIT(%d, 0x%X, 0x%X)\n", 3, ebx, ecx, edx);
     int pid = (int) ebx;
+    
     int* wstatus = (int*) ecx;
-    if((!current_process->children) | (!current_process->children->element)) 
-    {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_HAS_NO_CHILD)); return;}
+    if(wstatus) if(!ptr_validate((uintptr_t) wstatus, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
+
+    if((!current_process->children) || (!current_process->children->element)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_HAS_NO_CHILD)); return;}
 
     wait_start:
-
     if(pid < -1)
     {
         list_entry_t* ptr = current_process->children;
+        list_entry_t* prev = 0;
         while(ptr)
         {
             process_t* element = ptr->element;
@@ -463,40 +471,60 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             {
                 int trpid = element->pid;
                 int retcode = (int) element->active_thread->gregs.eax;
+                
                 processes[element->pid] = 0;
                 kfree(element->active_thread);
                 kfree(element);
-                *wstatus = retcode;
+
+                //remove zombie process from parent's children list
+                if(prev) prev->next = ptr->next;
+                else current_process->children = 0;
+                kfree(ptr);
+
+                if(wstatus) *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
                 return;
             }
+            prev = ptr;
             ptr = ptr->next;
         }
     }
     else if(pid == -1)
     {
         //waiting for any child processes
+        list_entry_t* prev = 0;
         list_entry_t* ptr = current_process->children;
         while(ptr)
         {
             process_t* element = ptr->element;
             if((element->status == PROCESS_STATUS_ZOMBIE))
             {
+                //get zombie process pid and return code
                 int trpid = element->pid;
                 int retcode = (int) element->active_thread->gregs.eax;
+                
+                //completely remove zombie process from process list
                 processes[element->pid] = 0;
                 kfree(element->active_thread);
                 kfree(element);
-                *wstatus = retcode;
+
+                //remove zombie process from parent's children list
+                if(prev) prev->next = ptr->next;
+                else current_process->children = 0;
+                kfree(ptr);
+
+                if(wstatus) *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
                 return;
             }
+            prev = ptr;
             ptr = ptr->next;
         }
     }
     else if(pid == 0)
     {
         list_entry_t* ptr = current_process->children;
+        list_entry_t* prev = 0;
         while(ptr)
         {
             process_t* element = ptr->element;
@@ -504,19 +532,28 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
             {
                 int trpid = element->pid;
                 int retcode = (int) element->active_thread->gregs.eax;
+                
                 processes[element->pid] = 0;
                 kfree(element->active_thread);
                 kfree(element);
-                *wstatus = retcode;
+
+                //remove zombie process from parent's children list
+                if(prev) prev->next = ptr->next;
+                else current_process->children = 0;
+                kfree(ptr);
+
+                if(wstatus) *wstatus = retcode;
                 asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
                 return;
             }
+            prev = ptr;
             ptr = ptr->next;
         }
     }
     else if(pid > 0)
     {
         list_entry_t* ptr = current_process->children;
+        list_entry_t* prev = 0;
         bool element_found = false;
         while(ptr)
         {
@@ -528,14 +565,22 @@ void syscall_wait(u32 ebx, u32 ecx, u32 edx)
                 {
                     int trpid = element->pid;
                     int retcode = (int) element->active_thread->gregs.eax;
+                    
                     processes[element->pid] = 0;
                     kfree(element->active_thread);
                     kfree(element);
-                    *wstatus = retcode;
+
+                    //remove zombie process from parent's children list
+                    if(prev) prev->next = ptr->next;
+                    else current_process->children = 0;
+                    kfree(ptr);
+
+                    if(wstatus) *wstatus = retcode;
                     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(trpid), "N"(ERROR_NONE));
                     return;
                 }
             }
+            prev = ptr;
             ptr = ptr->next;
         }
         if(!element_found) asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_PERMISSION));
@@ -575,8 +620,6 @@ void syscall_getpinfo(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
 {
-    if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
-
     int pid = (int) ebx;
     if((pid < 0) | (pid > (int) processes_size)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PID):"%eax", "%ecx"); return;}
 
@@ -592,6 +635,8 @@ void syscall_setpinfo(u32 ebx, u32 ecx, u32 edx)
     {
         case VK_PINFO_WORKING_DIRECTORY:
         {
+            if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
+
             char* newdir = (char*) edx;
             u32 len = strlen(newdir); if(len >= 99) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_OUT):"%eax", "%ecx"); return;}
             fd_t* t = open_file(newdir, 0);
@@ -654,7 +699,8 @@ void syscall_sbrk(u32 ebx, u32 ecx, u32 edx)
 
 void syscall_ioctl(u32 ebx, u32 ecx, u32 edx)
 {
-    if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
+    //kprintf("%lSYS_IOCTL(%u, 0x%X, 0x%X)\n", 3, ebx, ecx, edx);
+    if((current_process->files_size < ebx) || (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     fd_t* file = current_process->files[ebx];
 
     /* check if the file is a device (if file.fs == DEVFS) */

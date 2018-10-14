@@ -282,14 +282,15 @@ void tty_input(tty_t* tty, u8 c)
 
 error_t tty_ioctl(tty_t* tty, u32 func, u32 arg)
 {
+    //kprintf("%lTTY_IOCTL(0x%X, %u, 0x%X)\n", 3, tty, func, arg);
     switch(func)
     {
         case I_TTY_SETPGRP:
-        {
+        {   
             if(tty != current_process->tty) return ERROR_NO_TTY;
             if(tty->session != current_process->session) return ERROR_IS_ANOTHER_SESSION;
             pgroup_t* group = get_group((int) arg);
-            if((!group) | (group->session != current_process->session) | (!group->processes) || (!group->processes->element))
+            if((!group) || (group->session != current_process->session) || (!group->processes) || (!group->processes->element))
                 return ERROR_PERMISSION;
 
             tty->foreground_processes = group;

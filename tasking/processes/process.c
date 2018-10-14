@@ -499,8 +499,8 @@ error_t spawn_init_process()
 
     //init process file array
     tr->files_size = 5;
-    tr->files = kmalloc(tr->files_size*sizeof(fd_t));
-    memset(tr->files, 0, sizeof(fd_t)*tr->files_size);
+    tr->files = kmalloc(tr->files_size*sizeof(fd_t*));
+    memset(tr->files, 0, sizeof(fd_t*)*tr->files_size);
 
     //set tty
     tr->tty = tty1;
