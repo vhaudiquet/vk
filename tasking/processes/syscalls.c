@@ -54,7 +54,6 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     }
 
     fd_t* file = open_file(path, (u8) ecx);
-    //kprintf("%lSYS_OPEN : %s = 0x%X\n", 3, path, file);
     if(!file) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     
     if(current_process->files_count == current_process->files_size)
@@ -74,6 +73,8 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
         }
     }
     current_process->files_count++;
+
+    //kprintf("%lSYS_OPEN : %s = 0x%X (%u)\n", 3, path, file, i);
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(i), "N"(ERROR_NONE):"%eax", "%ecx");
 }
 
@@ -151,21 +152,21 @@ void syscall_stat(u32 ebx, u32 ecx, u32 edx)
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     fsnode_t* file = current_process->files[ebx]->file;
             
-    u32* ptr = (u32*) edx;
-    ptr[0] = (u32) file->file_system->drive;
-    ptr[1] = (u32) file->specific; //st_ino
-    ptr[2] = 0;//TODO: ptr[2] = current_process->files[ebx]->mode;
-    ptr[3] = file->hard_links;
-    ptr[4] = 0; // user id
-    ptr[5] = 0; // group id
-    ptr[6] = 0; // device id
-    ptr[7] = (u32) file->length;
-    ptr[8] = (u32) file->last_access_time;
-    ptr[9] = (u32) file->last_modification_time;
-    ptr[10] = (u32) file->last_modification_time;
-    ptr[11] = 512; //todo: cluster size or ext2 blocksize
-    ptr[12] = (u32) (file->length/512); //todo: clusters or blocks
-            
+    stat_t* ptr = (stat_t*) edx;
+    ptr->st_dev = 0; //todo : device ids //(u16) file->file_system->drive;
+    ptr->st_ino = 0x20; //todo : inode nbr //(u16) file->specific;
+    ptr->st_mode = (file->attributes & FILE_ATTR_DIR) ? 0040000 : 0100000; //TODO: ptr[2] = current_process->files[ebx]->mode;
+    ptr->st_nlink = file->hard_links;
+    ptr->st_uid = 0; // user id
+    ptr->st_gid = 0; // group id
+    ptr->st_rdev = 0; // device id
+    ptr->st_size = (u32) file->length;
+    ptr->st_atime = file->last_access_time;
+    ptr->st_mtime = file->last_modification_time;
+    ptr->st_ctime = file->last_modification_time;
+    ptr->st_blksize = 512; //todo: cluster size or ext2 blocksize
+    ptr->st_blocks = (u32) (file->length/512); //todo: clusters or blocks
+    
     asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NONE):"%eax", "%ecx");
 }
 

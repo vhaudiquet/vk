@@ -36,19 +36,19 @@ typedef struct statfs
 
 typedef struct stat 
 {
-    u32 st_dev;
-    u32 st_ino;
+    u16 st_dev;
+    u16 st_ino;
     u32 st_mode;
     u32 st_nlink;
     u32 st_uid;
     u32 st_gid;
     u32 st_rdev;
     u32 st_size;
-    u32 st_blksize;
-    u32 st_blocks;
     time_t st_atime;
     time_t st_mtime;
     time_t st_ctime;
+    u32 st_blksize;
+    u32 st_blocks;
 } stat_t;
 
 #endif
