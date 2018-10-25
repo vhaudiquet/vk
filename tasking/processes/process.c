@@ -510,6 +510,7 @@ error_t spawn_init_process()
 
     //init stdin, stdout, stderr
     fd_t* std = kmalloc(sizeof(fd_t)); std->offset = 0; std->file = tty1->pointer;
+    std->instances = 3;
     tr->files[0] = std; //stdin
     tr->files[1] = std; //stdout
     tr->files[2] = std; //stderr

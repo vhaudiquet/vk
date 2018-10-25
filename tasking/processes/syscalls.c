@@ -109,6 +109,8 @@ void syscall_write(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     
+    //kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
+
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
     counttr = (u32) (current_process->files[ebx]->offset - counttr);
@@ -153,7 +155,9 @@ void syscall_stat(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     fsnode_t* file = current_process->files[ebx]->file;
-            
+
+    //kprintf("%lSYS_STAT(%u, 0x%X)\n", 3, ebx, edx);
+
     stat_t* ptr = (stat_t*) edx;
     ptr->st_dev = 0; //todo : device ids //(u16) file->file_system->drive;
     ptr->st_ino = 0x20; //todo : inode nbr //(u16) file->specific;
@@ -187,6 +191,8 @@ void syscall_finfo(u32 ebx, u32 ecx, u32 edx)
 {
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
+
+    //kprintf("%lSYS_FINFO(%u, 0x%X)\n", 3, ebx, edx);
 
     switch(ecx)
     {
@@ -329,10 +335,9 @@ void syscall_dup(u32 ebx, u32 ecx, u32 edx)
         oldf->instances++;
         current_process->files_count++;
         new = (int) i;
-
-        //kprintf("%lSYS_DUP: duplicated file %d (0x%X) to %d (by default)\n", 3, ebx, oldf, new);
     }
 
+    //kprintf("%lSYS_DUP: duplicated file %d (0x%X) to %d %s\n", 3, ebx, oldf, new, ecx ? "(by choice)" : "(by default)");
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(new), "N"(ERROR_NONE):"%eax", "%ecx");
 }
 
