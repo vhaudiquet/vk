@@ -120,7 +120,7 @@ error_t ata_pio_read_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_d
 error_t ata_pio_write_flexible(u64 sector, u32 offset, u8* data, u64 count, ata_device_t* drive);
 error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
 error_t ata_dma_write_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_device_t* drive);
-error_t atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive);
+error_t atapi_cmd_dma_read_28(u32 sector, u32 scount, ata_device_t* drive);
 
 #define ATA_CMD_PIO_READ_MULTIPLE_28 0xC4
 #define ATA_CMD_PIO_READ_MULTIPLE_48 0x29

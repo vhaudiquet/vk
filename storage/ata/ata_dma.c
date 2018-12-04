@@ -45,7 +45,7 @@ error_t ata_dma_read_flexible(u64 sector, u32 offset, u8* data, u32 count, ata_d
     if(drive->flags & ATA_FLAG_ATAPI)
     {
         if(sector & 0xF0000000) {mutex_unlock(drive->mutex);return ERROR_DISK_OUT;}
-        if(atapi_cmd_dma_read_28((u32) sector, drive) != ERROR_NONE) 
+        if(atapi_cmd_dma_read_28((u32) sector, scount, drive) != ERROR_NONE) 
         {mutex_unlock(drive->mutex); return ERROR_DISK_BUSY;}
     }
     else if(sector > U32_MAX)

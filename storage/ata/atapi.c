@@ -17,7 +17,7 @@
 
 #include "../storage.h"
 
-error_t atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
+error_t atapi_cmd_dma_read_28(u32 sector, u32 scount, ata_device_t* drive)
 {
     outb(DEVICE_PORT(drive), ((drive->flags & ATA_FLAG_MASTER) ? 0xA0 : 0xB0)); //select drive
     ata_io_wait(drive); //wait for drive selection
@@ -41,7 +41,7 @@ error_t atapi_cmd_dma_read_28(u32 sector, ata_device_t* drive)
         ((sector >> 16) & 0xFF), 
         ((sector >> 8) & 0xFF), 
         (sector & 0xFF), 
-        0, 0, 0, 1, 0, 0
+        0, 0, 0, scount, 0, 0
     };
 
     u8 i = 0;

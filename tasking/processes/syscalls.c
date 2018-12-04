@@ -109,7 +109,7 @@ void syscall_write(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     
-    //kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
+    kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
 
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
