@@ -15,6 +15,8 @@
     along with VK.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+//TODO: SEVERE : SUPPORT BACKUP SUPERBLOCKS WTF
+
 #include "ext2.h"
 
 #define BLOCK_OFFSET(block) ((block)*(ext2->block_size/512))
@@ -67,7 +69,7 @@ file_system_t* ext2_init(block_device_t* drive, u8 partition)
     tr->flags = 0;
     tr->partition = partition;
 
-    if(superblock->read_only_features & 5) //masking 64-bits file sizes (supported) //TODO: support sparse superblocks..
+    if(superblock->read_only_features & 4) //masking 64-bits file sizes (supported) and sparse superblock (unsupported for now but backups...)
     {
         tr->flags |= FS_FLAG_READ_ONLY;
     }
@@ -243,6 +245,7 @@ error_t ext2_link(fsnode_t* src_file, char* file_name, fsnode_t* dir)
 */
 fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
 {
+    kprintf("%lEXT2_CREATE_FILE(%s, %u)\n", 3, name, attributes);
     file_system_t* fs = dir->file_system;
     ext2fs_specific_t* ext2 = fs->specific;
     if(fs->flags & FS_FLAG_READ_ONLY) return 0;

@@ -92,11 +92,11 @@ char* strchr(char* s, char c)
 char* strrchr(char* s, char c)
 {
     char* o = s;
-    s = s + strlen(s) - 1;
+    s = s + strlen(s);
     while(s != o)
     {
-        if(*s == c) {return s;}
         s--;
+        if(*s == c) {return s;}
     }
     return 0;
 }

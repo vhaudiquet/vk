@@ -58,6 +58,7 @@ tty_t* tty_init(char* name)
     tr->canon_buffer = kmalloc(256);
     tr->canon_buffer_count = 0;
     tr->canon_buffer_size = 256;
+    tr->foreground_processes = 0;
     
     tty_write((u8*) "VK 0.0-indev (", 14, tr);
     tty_write((u8*) name, strlen(name), tr);
@@ -82,7 +83,7 @@ tty_t* tty_init(char* name)
 	tr->termio.c_cc[VSTOP] = 19;
 	tr->termio.c_cc[VSUSP] = 26;
 	tr->termio.c_cc[VTIME] = 0;
-    
+
     return tr;
 }
 

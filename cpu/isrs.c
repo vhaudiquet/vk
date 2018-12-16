@@ -48,10 +48,10 @@ void fault_handler(struct regs_int * r)
 	if(r->int_no == 8) _fatal_kernel_error("DOUBLE FAULT", "DOUBLE FAULT", "Unknown", 0);
 	
 	kprintf("%lFAULT in process 0x%X / %d\n", 2, current_process, current_process->pid);
-	kprintf("Processes : ");
-	u32 i; for(i = 0; i<processes_size;i++) kprintf("%x ", processes[i]);
-	kprintf("\n");
-	kprintf("Kernel : %x , idle : %x \n", kernel_process, idle_process);
+	//kprintf("Processes : ");
+	//u32 i; for(i = 0; i<processes_size;i++) kprintf("%x ", processes[i]);
+	//kprintf("\n");
+	//kprintf("Kernel : %x , idle : %x \n", kernel_process, idle_process);
 	kprintf("%lEIP = 0x%X\n", 3, r->eip);
     switch(r->int_no)
 	{
@@ -96,12 +96,40 @@ static void handle_user_fault(struct regs_int* r)
 
 static void handle_page_fault(struct regs_int* r)
 {
+	//get page fault address (in cr2)	
+	u32 f_addr; asm("movl %%cr2, %0":"=r"(f_addr):);
+
+	if(f_addr < 0xBFFFFFFF) //if(address is user space)
+	{
+		if(r->err_code & 1) //if(protection_fault)
+		{
+
+		}
+		else //non-present page
+		{
+			if(r->err_code & 2) //if(write_access)
+			{
+				//map address
+				//TODO : fix that (temp debug, needs cleaner process/thread registering, stack/alloc asking, ...)
+				map_memory(8192, f_addr, current_process->page_directory);
+				return;
+			}
+			else //read access
+			{
+				
+			}
+		}
+	}
+	else //address is kernel space
+	{
+		
+	}
+
 	kprintf("%lEIP = 0x%X (cs = 0x%X)\n", 3, r->eip, r->cs);
 	if(r->cs == 0x08) kprintf("%lKERNEL_ESP = 0x%X\n", 3, r->esp);
 	else if(r->cs == 0x1B) kprintf("%lUSER_ESP = 0x%X\n", 3, r->useresp);
 	else kprintf("%lIncorrect CS !\n", 1);
 	kprintf("%lEAX: 0x%X, EBX: 0x%X, ECX: 0x%X, EDX: 0x%X\nEBP: 0x%X, EDI: 0x%X, ESI: 0x%X\n", 3, r->eax, r->ebx, r->ecx, r->edx, r->ebp, r->edi, r->esi);
-	u32 f_addr; asm("movl %%cr2, %0":"=r"(f_addr):);
 	kprintf("%lFLAGS = 0x%X\n", 3, r->eflags);
 	kprintf("Page fault at address : 0x%X\n", f_addr);
 	kprintf("Error code : %d\n", r->err_code);

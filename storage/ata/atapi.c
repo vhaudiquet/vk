@@ -41,7 +41,7 @@ error_t atapi_cmd_dma_read_28(u32 sector, u32 scount, ata_device_t* drive)
         ((sector >> 16) & 0xFF), 
         ((sector >> 8) & 0xFF), 
         (sector & 0xFF), 
-        0, 0, 0, scount, 0, 0
+        0, 0, 0, (u8) scount, 0, 0
     };
 
     u8 i = 0;

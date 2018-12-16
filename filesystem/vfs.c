@@ -180,6 +180,7 @@ void mount(char* path, file_system_t* fs)
 
 fd_t* open_file(char* path, u8 mode)
 {
+    kprintf("%lOPEN_FILE(%s, %u)\n", 3, path, mode);
     //we are trying to access the root path : simplest case
     if(*path == '/' && strlen(path) == 1)
     {
@@ -489,11 +490,12 @@ static fsnode_t* do_open_fs(char* path, mount_point_t* mp)
 
 fsnode_t* create_file(char* path, u8 attributes)
 {
+    //kprintf("%lCREATE_FILE(%s, %u)\n", 3, path, attributes);
     //get file name
     char* name = strrchr(path, '/')+1;
 
     //get file directory
-    u32 dirlen = (strlen(path) - ((u32)(name - path)));
+    u32 dirlen = ((u32)(name - path));
     char* dir = kmalloc(dirlen+1);
     strncpy(dir, path, dirlen);
     *(dir+dirlen) = 0;
