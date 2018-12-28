@@ -16,6 +16,18 @@
 */
 
 //TODO: SEVERE : SUPPORT BACKUP SUPERBLOCKS WTF
+/*
+    The primary copy of the superblock is stored at an offset of 1024 bytes from the start of the device,
+    and it is essential to mounting the filesystem. 
+    Since it is so important, backup copies of the superblock are stored in block groups throughout the filesystem. 
+	The first version of ext2 (revision 0) stores a copy at the start of every block group, 
+    along with backups of the group descriptor block(s). 
+    Because this can consume a considerable amount of space for large filesystems, 
+    later revisions can optionally reduce the number of backup copies by only putting backups in specific groups 
+    (this is the sparse superblock feature). 
+    The groups chosen are 0, 1 and powers of 3, 5 and 7.
+    (https://www.nongnu.org/ext2-doc/ext2.html)
+*/
 
 #include "ext2.h"
 
@@ -245,7 +257,7 @@ error_t ext2_link(fsnode_t* src_file, char* file_name, fsnode_t* dir)
 */
 fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
 {
-    kprintf("%lEXT2_CREATE_FILE(%s, %u)\n", 3, name, attributes);
+    //kprintf("%lEXT2_CREATE_FILE(%s, %u)\n", 3, name, attributes);
     file_system_t* fs = dir->file_system;
     ext2fs_specific_t* ext2 = fs->specific;
     if(fs->flags & FS_FLAG_READ_ONLY) return 0;
@@ -257,9 +269,8 @@ fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
     ext2_inode_t inode;
     
     //setting type and permissions
-    inode.type_and_permissions = 0;
-    if(attributes | FILE_ATTR_DIR) inode.type_and_permissions |= 0x4000;
-    else inode.type_and_permissions |= 0x8000;
+    if(attributes & FILE_ATTR_DIR) inode.type_and_permissions = 0x4000;
+    else inode.type_and_permissions = 0x8000;
 
     //set user_id/permissions
     inode.user_id = 0;
@@ -377,15 +388,17 @@ static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
     //reading block group descriptor
     ext2_block_group_descriptor_t inode_bg;
     u32 block_group_descriptor_table = (ext2->block_size == 1024 ? 2:1);
-    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
-    
+    error_t readop0 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(block_group_descriptor_table), bg_read_offset, (u8*) &inode_bg, sizeof(ext2_block_group_descriptor_t), fs->drive);
+    if(readop0 != ERROR_NONE) return 0;
+
     //calculating inode location on the disk (based on inode table block start found in block group descriptor)
     u32 inode_read_offset = (index * inode_size);
 
     ext2_inode_t ext2_inode;
 
     //read the inode
-    block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.starting_block_adress), inode_read_offset, (u8*) &ext2_inode, sizeof(ext2_inode_t), fs->drive);
+    error_t readop1 = block_read_flexible(ext2->superblock_offset+BLOCK_OFFSET(inode_bg.starting_block_adress), inode_read_offset, (u8*) &ext2_inode, sizeof(ext2_inode_t), fs->drive);
+    if(readop1 != ERROR_NONE) return 0;
 
     /* we read it successfully ; now we need to normalize it to fsnode_t */
     fsnode_t* std_node = kmalloc(sizeof(fsnode_t));
@@ -480,6 +493,7 @@ static error_t ext2_std_inode_write(fsnode_t* node)
     if(readop1 != ERROR_NONE) return readop1;
 
     //change the informations of the inode to match 'node'
+    //TODO : 0x8000 gets discarded ?
     ext2_inode.type_and_permissions = 0;
     if(node->attributes & FILE_ATTR_DIR) ext2_inode.type_and_permissions |= 0x4000;
 
