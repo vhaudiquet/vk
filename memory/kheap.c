@@ -72,7 +72,8 @@ void* kmalloc(u32 size)
         block_header_t* currentBlock = (block_header_t*) i;
 
         //log
-        //kprintf("[ALLOC] [MALLOC] Block %X (size = %d) (status = %s)\n", i, currentBlock->size, (currentBlock->status ? "RESERVED" : "FREE"))        //kprintf("Comment : %s\n", currentBlock->comment);
+        //kprintf("[ALLOC] [MALLOC] Block %X (size = %d) (status = %s)\n", i, currentBlock->size, (currentBlock->status ? "RESERVED" : "FREE"));       
+        //kprintf("Comment : %s\n", currentBlock->comment);
 
         //Check if the current block is valid
         if(currentBlock->magic != BLOCK_HEADER_MAGIC)
@@ -216,11 +217,11 @@ static void kheap_expand()
     #endif
     
     map_memory(0x400000, KHEAP_BASE_END, kernel_page_directory);
-    u32 i = 0;
+    u32 i = 1;
     for(;i<processes_size;i++)
     {
         process_t* process = processes[i];
-        map_memory(0x400000, KHEAP_BASE_END, process->page_directory);
+        if(process) map_memory(0x400000, KHEAP_BASE_END, process->page_directory);
     }
 
     block_header_t* base_block = (block_header_t*) KHEAP_BASE_END;

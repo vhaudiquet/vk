@@ -125,7 +125,7 @@ error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
     while(length)
     {
         ext2_dirent_t* dirent = (ext2_dirent_t*)((u32) dirent_buffer+offset);
-        if(!dirent->inode) break;
+        if(!dirent->inode) break;//goto cont; //specs says that inode 0 should be ignored, TODO check if we can break... (better perfs)
 
         dirent_t* fd = 
         #ifdef MEMLEAK_DBG
@@ -149,9 +149,13 @@ error_t ext2_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
         ptr = ptr->next;
 
         (*size)++;
-        u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
-        offset += (u32)(8+name_len_real);
-        length -= (u32)(8+name_len_real);
+        //cont:
+        //{
+            u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
+            offset += (u32)(8+name_len_real);
+            if(length <= ((u32) (8+name_len_real))) break;
+            length -= (u32)(8+name_len_real);
+        //}
     }
     kfree(ptr);
 
@@ -223,10 +227,17 @@ fsnode_t* ext2_open(fsnode_t* dir, char* name)
 */
 error_t ext2_unlink(char* file_name, fsnode_t* dir)
 {
+    //kprintf("%lEXT2_UNLINK(%s, 0x%X)\n", 3, file_name, dir);
+
+    //open file using dirent
+    fsnode_t* file = ext2_open(dir, file_name);
+    if(!file) return ERROR_FILE_NOT_FOUND;
+
+    //remove dirent
     error_t direntop = ext2_remove_dirent(file_name, dir);
     if(direntop != ERROR_NONE) return direntop;
 
-    fsnode_t* file = ext2_open(dir, file_name);
+    //after dirent removing, update inode (decreasing hardlinks count)
     file->hard_links--;
     if(!file->hard_links)
     {
@@ -1048,15 +1059,21 @@ static error_t ext2_remove_dirent(char* name, fsnode_t* dir)
 
         u32 name_len_real = dirent->name_len; alignup(name_len_real, 4);
 
-        if(strcfirst(name, (char*) dirent->name) == strlen(name)) 
-        {memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-((u32)8+name_len_real)); break;}
+        if(strcfirst(name, (char*) dirent->name) == strlen(name))
+        {
+            //we found dirent we wanted to remove
+            //copy data after this dirent to this dirent offset
+            memcpy(dirent_buffer+offset, dirent_buffer+offset+8+name_len_real, (u32) length-(8+name_len_real)); 
+            break;
+        }
 
         offset += (u32)(8+name_len_real);
         length -= (u32)(8+name_len_real);
     }
 
     //rewrite the buffer
-    error_t writeop = ext2_inode_write_content(dir, offset, (u32) dir->length, (u8*) dirent_buffer);
+    //TODO : rewrite buffer only from 'offset' bytes
+    error_t writeop = ext2_inode_write_content(dir, 0, (u32) dir->length, dirent_buffer);
 
     kfree(dirent_buffer);
 
@@ -1235,6 +1252,7 @@ static u32 ext2_inode_alloc(file_system_t* fs)
 */
 static void ext2_inode_free(fsnode_t* node)
 {
+    //TODO debug this (size checks)
     file_system_t* fs = node->file_system;
     ext2fs_specific_t* ext2 = fs->specific;
     ext2_node_specific_t* inode = node->specific;
@@ -1245,6 +1263,8 @@ static void ext2_inode_free(fsnode_t* node)
     u32 i = 0;
     for(i=0;i<12;i++)
     {
+        if(!size) goto free_inode;
+
         //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
         if(!inode->direct_block_pointers[i]) 
         {
@@ -1256,10 +1276,9 @@ static void ext2_inode_free(fsnode_t* node)
 
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
-
-        if(!size) goto free_inode;
     }
 
+    if(!size) goto free_inode;
     if(!inode->singly_indirect_block_pointer)
     {
         kprintf("%v[WARNING] [SEVERE] EXT2 Filesystem might be corrupted (singly indirect pointer->0)\n", 0b00000110);
@@ -1270,6 +1289,8 @@ static void ext2_inode_free(fsnode_t* node)
 
     for(i=0;i<(ext2->block_size/4);i++)
     {
+        if(!size) {kfree(singly_indirect_block); ext2_block_free(inode->singly_indirect_block_pointer, fs); goto free_inode;}
+
         //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
         if(!singly_indirect_block[i]) 
         {
@@ -1282,12 +1303,12 @@ static void ext2_inode_free(fsnode_t* node)
 
         if(size >= ext2->block_size) size -= ext2->block_size;
         else size = 0;
-        
-        if(!size) {kfree(singly_indirect_block); ext2_block_free(inode->singly_indirect_block_pointer, fs); goto free_inode;}
     }
         
     kfree(singly_indirect_block);
     ext2_block_free(inode->singly_indirect_block_pointer, fs);
+
+    if(!size) goto free_inode;
 
     if(!inode->doubly_indirect_block_pointer)
     {
@@ -1312,6 +1333,8 @@ static void ext2_inode_free(fsnode_t* node)
 
         for(i=0;i<(ext2->block_size/4);i++)
         {
+            if(!size) {kfree(sib); kfree(doubly_indirect_block); ext2_block_free(doubly_indirect_block[j], fs); ext2_block_free(inode->doubly_indirect_block_pointer, fs); goto free_inode;}
+
             //in case the pointer is invalid, but should not (inode size supposed to cover this area), we return fail
             if(!sib[i]) 
             {
@@ -1324,8 +1347,6 @@ static void ext2_inode_free(fsnode_t* node)
 
             if(size >= ext2->block_size) size -= ext2->block_size;
             else size = 0;
-            
-            if(!size) {kfree(sib); kfree(doubly_indirect_block); ext2_block_free(doubly_indirect_block[j], fs); ext2_block_free(inode->doubly_indirect_block_pointer, fs); goto free_inode;}
         }
 
         kfree(sib);
@@ -1432,7 +1453,17 @@ static void ext2_inode_free(fsnode_t* node)
     {
         fsnode_t* element = iptr->element;
         ext2_node_specific_t* spe = element->specific;
-        if(spe->inode_nbr == inode_nbr) {last->next = iptr->next; kfree(element->specific); kfree(element); kfree(iptr);}
+        
+        //we found our inode
+        if(spe->inode_nbr == inode_nbr) 
+        {
+            last->next = iptr->next;
+            kfree(element->specific);
+            kfree(element);
+            kfree(iptr);
+            break;
+        }
+        
         last = iptr;
         iptr = iptr->next;
         isize--;

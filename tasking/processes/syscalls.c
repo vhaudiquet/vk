@@ -38,7 +38,7 @@ syscall_ioctl};
 
 void syscall_open(u32 ebx, u32 ecx, u32 edx)
 {
-    kprintf("%lOPEN:ecx = %u\n", 3, ecx);
+    kprintf("%lOPEN:ecx = %u, ebx = %s\n", 3, ecx, ebx);
     if(!ptr_validate(ebx, current_process->page_directory)) 
     {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
 
@@ -48,10 +48,11 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
         char* opath = path;
         u32 len = strlen(opath);
         u32 dirlen = strlen(current_process->current_dir);
-        path = kmalloc(len+dirlen+1);
+        path = kmalloc(len+dirlen+2);
         strncpy(path, current_process->current_dir, dirlen);
+        strncat(path, "/", 1);
         strncat(path, opath, len);
-        *(path+len+dirlen) = 0;    
+        *(path+len+dirlen+1) = 0;    
     }
 
     fd_t* file = open_file(path, (u8) ecx);
@@ -132,7 +133,20 @@ void syscall_link(u32 ebx, u32 ecx, u32 edx)
 void syscall_unlink(u32 ebx, u32 ecx, u32 edx)
 {
     if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
+    //kprintf("%lSYS_UNLINK(0x%X = %s)\n", 3, ebx, ebx);
     char* path = (char*) ebx;
+
+    if(*path != '/')
+    {
+        char* opath = path;
+        u32 len = strlen(opath);
+        u32 dirlen = strlen(current_process->current_dir);
+        path = kmalloc(len+dirlen+2);
+        strncpy(path, current_process->current_dir, dirlen);
+        strncat(path, "/", 1);
+        strncat(path, opath, len);
+        *(path+len+dirlen+1) = 0;    
+    }
 
     error_t tr = unlink(path);
     asm("mov %0, %%eax ; mov %0, %%ecx"::"g"(tr):"%eax", "%ecx");

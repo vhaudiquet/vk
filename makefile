@@ -27,12 +27,15 @@ userland:
 	# make ls
 	cd /home/valentin/Documents/vk/res ; i386-vk-gcc ls.c -o ls
 	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/res/hdd/sys
-	# copy init/dash/ls
-	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc ; make vkvshc
+	# make sortixutils
+	cd /home/valentin/Documents/vk/res/sortix-1.0/utils ; i386-vk-gcc cat.c -o vk/cat -lgnu ; i386-vk-gcc rm.c -o vk/rm -lgnu ; i386-vk-gcc clear.c -o vk/clear -lgnu ; i386-vk-gcc echo.c -o vk/echo -lgnu ; i386-vk-gcc rmdir.c -o vk/rmdir -lgnu
+	# copy init/dash/ls/sortixutils
+	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc ; make sutilsc
 	# copy init/dash/ls to iso
 	cp /home/valentin/Documents/vk/sysroot/bin/dash /home/valentin/Documents/vk/iso/bin
 	cp /home/valentin/Documents/vk/res/init /home/valentin/Documents/vk/iso/sys
 	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/iso/bin
+	cp /home/valentin/Documents/vk/res/sortix-1.0/utils/vk/* /home/valentin/Documents/vk/iso/bin
 
 async:
 	make run > /dev/null 2>&1 &

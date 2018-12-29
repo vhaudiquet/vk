@@ -349,11 +349,15 @@ error_t write_file(fd_t* fd, void* buffer, u64 count)
 
 error_t unlink(char* path)
 {
+    //kprintf("%lUNLINK(%s)\n", 3, path);
+    //TODO : check if is directory : if is empty
+
     //get file name
     char* name = strrchr(path, '/')+1;
+    if(((uintptr_t) name) == 1) return ERROR_FILE_NOT_FOUND; // no / in the path...
 
     //get file directory
-    u32 dirlen = (strlen(path) - ((u32)(name - path)));
+    u32 dirlen = ((u32)(name - path));
     char* dir = kmalloc(dirlen+1);
     strncpy(dir, path, dirlen);
     *(dir+dirlen) = 0;
@@ -385,7 +389,7 @@ error_t link(char* src_path, char* dest_path)
     char* dest_name = strrchr(dest_path, '/')+1;
 
     //get dest directory
-    u32 destdirlen = (strlen(dest_path) - ((u32)(dest_name - dest_path)));
+    u32 destdirlen = ((u32)(dest_name - dest_path));
     char* destdir = kmalloc(destdirlen+1);
     strncpy(destdir, dest_path, destdirlen);
     *(destdir+destdirlen) = 0;
@@ -426,7 +430,7 @@ error_t rename(char* src_path, char* dest_name)
     char* src_name = strrchr(src_path, '/')+1;
 
     //get dest directory
-    u32 destdirlen = (strlen(src_path) - ((u32)(src_name - src_path)));
+    u32 destdirlen = ((u32)(src_name - src_path));
     char* destdir = kmalloc(destdirlen+1);
     strncpy(destdir, src_path, destdirlen);
     *(destdir+destdirlen) = 0;
