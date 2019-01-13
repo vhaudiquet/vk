@@ -129,23 +129,26 @@ error_t iso9660_list_dir(list_entry_t* dest, fsnode_t* dir, u32* size)
         if(index == 0)
         {
             //current dir (.)
-            fd = kmalloc(sizeof(dirent_t)+1);
+            fd = kmalloc(sizeof(dirent_t)+2);
             strcpy(fd->name, ".");
+            *(fd->name+1) = 0;
             fd->name_len = 1;
             fd->inode = dirptr->extent_start_lsb; //todo: check if that really works
         }
         else if(index == 1)
         {
             //parent dir (..)
-            fd = kmalloc(sizeof(dirent_t)+2);
+            fd = kmalloc(sizeof(dirent_t)+3);
             strcpy(fd->name, "..");
+            *(fd->name+2) = 0;
             fd->name_len = 2;
             fd->inode = dirptr->extent_start_lsb; //todo: check if that really works
         }
         else
         {
-            fd = kmalloc(sizeof(dirent_t)+dirptr->name_len);
+            fd = kmalloc(sizeof(dirent_t)+dirptr->name_len+1);
             strncpy(fd->name, dirptr->name, dirptr->name_len);
+            *(fd->name+dirptr->name_len) = 0;
             fd->name_len = dirptr->name_len;
             fd->inode = dirptr->extent_start_lsb;
         }

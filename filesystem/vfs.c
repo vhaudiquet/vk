@@ -180,7 +180,7 @@ void mount(char* path, file_system_t* fs)
 
 fd_t* open_file(char* path, u8 mode)
 {
-    kprintf("%lOPEN_FILE(%s, %u)\n", 3, path, mode);
+    //kprintf("%lOPEN_FILE(%s, %u)\n", 3, path, mode);
     //we are trying to access the root path : simplest case
     if(*path == '/' && strlen(path) == 1)
     {

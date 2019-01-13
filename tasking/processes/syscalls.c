@@ -38,7 +38,6 @@ syscall_ioctl};
 
 void syscall_open(u32 ebx, u32 ecx, u32 edx)
 {
-    kprintf("%lOPEN:ecx = %u, ebx = %s\n", 3, ecx, ebx);
     if(!ptr_validate(ebx, current_process->page_directory)) 
     {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
 
@@ -76,7 +75,7 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     }
     current_process->files_count++;
 
-    kprintf("%lSYS_OPEN(%s, %u) = 0x%X (%u)\n", 3, path, ecx, file, i);
+    //kprintf("%lSYS_OPEN(%s, %u) = 0x%X (%u)\n", 3, path, ecx, file, i);
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(i), "N"(ERROR_NONE):"%eax", "%ecx");
 }
 
@@ -111,7 +110,7 @@ void syscall_write(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     
-    kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
+    //kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
 
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
@@ -458,10 +457,10 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     //free old process memory
     free_process_memory(current_process);
 
-    //kprintf("%lSYS_EXEC : loading executable...\n", 3);
+    kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], argc, argv, env, envc);
     if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
-    //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
+    kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //schedule to force reload eip/esp + registers that are in memory
     __asm__ __volatile__("jmp schedule_switch"::"a"(current_process->active_thread), "d"(current_process));

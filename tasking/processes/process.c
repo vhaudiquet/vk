@@ -53,6 +53,7 @@ void process_init()
 /* load an elf executable to 'process' memory */
 error_t load_executable(process_t* process, fd_t* executable, int argc, char** argv, char** env, int envc)
 {
+    //kprintf("%lLOAD_EXECUTABLE(%s)\n", 3, argc ? argv[0] : "NULL");
     //check if the file is really an ELF executable
     error_t elfc = elf_check(executable);
     if(elfc != ERROR_NONE) return elfc;
