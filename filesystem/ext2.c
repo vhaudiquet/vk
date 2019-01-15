@@ -88,6 +88,9 @@ file_system_t* ext2_init(block_device_t* drive, u8 partition)
 
     tr->inode_cache = 0;
     tr->inode_cache_size = 0;
+    tr->cache_mutex = kmalloc(sizeof(mutex_t));
+    tr->cache_mutex->locked_by = 0;
+    tr->cache_mutex->waiting = 0;
 
     //allocating specific data struct
     ext2fs_specific_t* ext2spe = kmalloc(sizeof(ext2fs_specific_t));
@@ -368,9 +371,12 @@ fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
 */
 static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
 {
+    //kprintf("%lEXT2_STD_INODE_READ(%u)\n", 3, inode);
     ext2fs_specific_t* ext2 = fs->specific;
 
     /* try to read inode from the cache */
+    if(fs->cache_mutex->locked_by) mutex_wait(fs->cache_mutex);
+
     list_entry_t* iptr = fs->inode_cache;
     u32 isize = fs->inode_cache_size;
     while(iptr && isize)
@@ -439,10 +445,12 @@ static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
     std_node->specific = specific;
 
     /* now that we have a normalized fsnode_t*, we can cache it and return it */
+    mutex_lock(fs->cache_mutex);
     if(!fs->inode_cache)
     {
         fs->inode_cache = kmalloc(sizeof(list_entry_t));
         fs->inode_cache->element = std_node;
+        fs->inode_cache->next = 0;
         fs->inode_cache_size++;
     }
     else
@@ -461,6 +469,7 @@ static fsnode_t* ext2_std_inode_read(u32 inode, file_system_t* fs)
         last->next = ptr;
         fs->inode_cache_size++;
     }
+    mutex_unlock(fs->cache_mutex);
 
     return std_node;
 }
@@ -1446,6 +1455,7 @@ static void ext2_inode_free(fsnode_t* node)
     /* free inode from the cache */
     //TODO: here we assume that inode we want to free is not the first in the cache (cause the first is theorically inode 2)
     //this is a little risquy tho
+    mutex_lock(fs->cache_mutex);
     list_entry_t* iptr = fs->inode_cache;
     list_entry_t* last = 0;
     u32 isize = fs->inode_cache_size;
@@ -1461,6 +1471,7 @@ static void ext2_inode_free(fsnode_t* node)
             kfree(element->specific);
             kfree(element);
             kfree(iptr);
+            fs->inode_cache_size--;
             break;
         }
         
@@ -1468,6 +1479,8 @@ static void ext2_inode_free(fsnode_t* node)
         iptr = iptr->next;
         isize--;
     }
+    mutex_unlock(fs->cache_mutex);
+
     }
 }
 

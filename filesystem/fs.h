@@ -70,6 +70,7 @@ typedef struct file_system
     u8 flags;
     struct fsnode* root_dir;
     list_entry_t* inode_cache;
+    mutex_t* cache_mutex;
     u32 inode_cache_size;
     void* specific;
 } file_system_t;

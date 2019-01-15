@@ -242,7 +242,20 @@ void syscall_mkdir(u32 ebx, u32 ecx, u32 edx)
 {
     if(!ptr_validate(ebx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
 
-    fsnode_t* node = create_file((char*) ebx, FILE_ATTR_DIR);
+    char* path = (char*) ebx;
+    if(*path != '/')
+    {
+        char* opath = path;
+        u32 len = strlen(opath);
+        u32 dirlen = strlen(current_process->current_dir);
+        path = kmalloc(len+dirlen+2);
+        strncpy(path, current_process->current_dir, dirlen);
+        strncat(path, "/", 1);
+        strncat(path, opath, len);
+        *(path+len+dirlen+1) = 0;    
+    }
+
+    fsnode_t* node = create_file(path, FILE_ATTR_DIR);
     if(!node) asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR):"%eax", "%ecx");
     else asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NONE):"%eax", "%ecx");
 }

@@ -497,6 +497,7 @@ fsnode_t* create_file(char* path, u8 attributes)
     //kprintf("%lCREATE_FILE(%s, %u)\n", 3, path, attributes);
     //get file name
     char* name = strrchr(path, '/')+1;
+    if(((uintptr_t) name) == 1) return 0; //path should be absolute there
 
     //get file directory
     u32 dirlen = ((u32)(name - path));
