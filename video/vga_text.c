@@ -153,6 +153,13 @@ void vga_text_enable_cursor()
     outb(0x3D5, 12); //bits 6-7 must be 0 , if bit 5 set the cursor is disable  , bits 0-4 controll the cursor shape .
 }
 
+void vga_text_set_cursor(u8 X, u8 Y)
+{
+    TEXT_CURSOR_X = X;
+    TEXT_CURSOR_Y = Y;
+    vga_text_update_cursor();
+}
+
 void vga_text_putc(unsigned char c, u8 color)
 {
     //make sure we're in VGA_TEXT and VIDEO_TYPE is set

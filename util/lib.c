@@ -266,11 +266,12 @@ void i2hex(u32 val, unsigned char* dest)
     dest[len]='\0';
 }
 
-int atoi(const unsigned char* s)
+int atoiindex(const unsigned char* s, uint32_t* index)
 {
     int num = 0;
     bool sign = false;
-    for (size_t i=0; s[i] != 0; i++)
+    size_t i = 0;
+    for (; s[i] != 0; i++)
     {
         if (s[i] >= '0' && s[i] <= '9')
         {
@@ -289,7 +290,14 @@ int atoi(const unsigned char* s)
     {
         num *= -1;
     }
+
+    if(index) *index = (uint32_t) i;
     return num;
+}
+
+int atoi(const unsigned char* s)
+{
+    return atoiindex(s, 0);
 }
 /*------------------------------------------------------------------------------*/
 

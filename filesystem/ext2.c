@@ -313,8 +313,11 @@ fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
     inode.os_specific_1 = 0;
     memset(inode.os_specific_2, 0, 12);
 
-    //set block pointers
-    u32 i = 0;
+    //set block pointers, and allocate the first one
+    u32 block = ext2_block_alloc(fs);
+    if(!block) return 0;
+    inode.direct_block_pointers[0] = block;
+    u32 i = 1;
     for(;i<12;i++)
     {
         inode.direct_block_pointers[i] = 0;
@@ -363,6 +366,14 @@ fsnode_t* ext2_create_file(fsnode_t* dir, char* name, u8 attributes)
     if(ext2_create_dirent(inode_nbr, name, dir) != ERROR_NONE) return 0;
 
     fsnode_t* tr = ext2_std_inode_read(inode_nbr, fs);
+
+    //if we are creating a directory, create '.' and '..' entries
+    if(attributes & FILE_ATTR_DIR)
+    {
+        ext2_create_dirent(inode_nbr, ".", tr);
+        ext2_create_dirent(((ext2_node_specific_t*) dir->specific)->inode_nbr, "..", tr);
+    }
+
     return tr;
 }
 

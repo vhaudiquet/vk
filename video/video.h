@@ -29,6 +29,7 @@ void vga_text_putc(unsigned char c, u8 color);
 void vga_text_puts(unsigned char* str, u8 color);
 void vga_text_disable_cursor();
 void vga_text_enable_cursor();
+void vga_text_set_cursor(u8 X, u8 Y);
 void vga_text_cls();
 void vga_text_reset();
 void vga_text_tty_switch(tty_t* tty);

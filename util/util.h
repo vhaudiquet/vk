@@ -56,6 +56,7 @@ static inline unsigned char invCase(unsigned char c) {return islower(c) ? toUppe
 
 //Conversion
 int atoi(const unsigned char* s);
+int atoiindex(const unsigned char* s, uint32_t* index);
 void i2hex(u32 val, unsigned char* dest);
 unsigned char* utoa(u32 n, unsigned char* s);
 unsigned char* itoa(int n, unsigned char* s);

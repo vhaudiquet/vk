@@ -29,6 +29,9 @@ tty_t* tty3 = 0;
 
 tty_t* current_tty = 0;
 
+/*
+* This function is called by the kernel to init std ttys : tty1, tty2, tty3
+*/
 void ttys_init()
 {
     kprintf("Initializing ttys...");
@@ -47,6 +50,9 @@ void ttys_init()
     vga_text_okmsg();
 }
 
+/*
+* This function inits a new tty structure
+*/
 tty_t* tty_init(char* name)
 {
     tty_t* tr = kmalloc(sizeof(tty_t));
@@ -84,6 +90,10 @@ tty_t* tty_init(char* name)
 	tr->termio.c_cc[VSUSP] = 26;
 	tr->termio.c_cc[VTIME] = 0;
 
+    tr->char_width = 80;
+    tr->char_height = 25;
+    tr->cursor_pos = 0;
+
     return tr;
 }
 
@@ -92,6 +102,7 @@ tty_t* tty_init(char* name)
 */
 error_t tty_write(u8* buffer, u32 count, tty_t* tty)
 {
+    //handle terminal writing permission errors
     if(current_process->group != tty->foreground_processes)
     {
         /* if TOSTOP is set and process is not ignoring/blocking SIGTTOU */
@@ -100,6 +111,36 @@ error_t tty_write(u8* buffer, u32 count, tty_t* tty)
             send_signal(current_process->pid, SIGTTOU);
             return ERROR_IO;
         }
+    }
+
+    //handle ANSI escape sequences
+    if(strcfirst("\x1B[", (char*) buffer) == 2)
+    {
+        uint32_t i = 0;
+        //note: assuming n and m will not be negative
+        u32 n = (u32) atoiindex(buffer+2, &i); if(!n) n = 1; //parse n or set default value if absent
+        u8 control = buffer[2+i]; //reset control char
+        u32 m = 1;
+        if(control == ';') 
+        {
+            m = (u32) atoiindex(buffer+2+i, &i); if(!m) m = 1; //parse m if needed and set default value if absent
+            control = buffer[2+i]; //reset control char
+        }
+
+        //kprintf("%lPARSED SEQUENCE = CSI %u;%u %c\n", 3, n, m, control);
+        if(control == 'H')
+        {
+            tty->cursor_pos = tty->char_width*n + m;
+            vga_text_set_cursor((u8) (n-1), (u8) (m-1));
+        }
+        else if(control == 'J')
+        {
+            if(n==2) vga_text_cls();
+        }
+        
+        count = count-3-i;
+        if(count) return tty_write(buffer+3+i, count, tty);
+        else return ERROR_NONE;
     }
 
     if(tty->count+count > tty->buffer_size)
@@ -198,6 +239,9 @@ error_t tty_read(u8* buffer, u32 count, tty_t* tty)
     return ERROR_NONE;
 }
 
+/*
+* This function switches current view to tty
+*/
 void tty_switch(tty_t* tty)
 {
     if(tty != current_tty)
@@ -281,6 +325,9 @@ void tty_input(tty_t* tty, u8 c)
     iostream_write(&c, 1, tty->keyboard_stream);
 }
 
+/*
+* This function can be used to set/read some parameters of the tty
+*/
 error_t tty_ioctl(tty_t* tty, u32 func, u32 arg)
 {
     //kprintf("%lTTY_IOCTL(0x%X, %u, 0x%X)\n", 3, tty, func, arg);

@@ -38,6 +38,9 @@ typedef struct TTY
     u8* canon_buffer;
     u32 canon_buffer_count;
     u32 canon_buffer_size;
+    u32 char_width;
+    u32 char_height;
+    u32 cursor_pos;
     io_stream_t* keyboard_stream;
     fsnode_t* pointer;
     struct termios termio;
