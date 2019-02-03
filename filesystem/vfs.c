@@ -182,7 +182,8 @@ fd_t* open_file(char* path, u8 mode)
 {
     //kprintf("%lOPEN_FILE(%s, %u)\n", 3, path, mode);
     //we are trying to access the root path : simplest case
-    if(*path == '/' && strlen(path) == 1)
+    size_t path_len = strlen(path);
+    if(*path == '/' && path_len == 1)
     {
         file_system_t* fs = root_point->fs;
         fd_t* tr = kmalloc(sizeof(fd_t));
@@ -229,12 +230,15 @@ fd_t* open_file(char* path, u8 mode)
     tr->file = node;
     tr->offset = 0;
     tr->instances = 1;
+    tr->path = kmalloc(path_len+1);
+    strncpy(tr->path, path, path_len);
+    *(tr->path+path_len) = 0;
 
     //depending on mode
     if((mode == OPEN_MODE_R) | (mode == OPEN_MODE_RP)) return tr;
     else
     {
-        if(node == 0) {tr->file = create_file(path, 0); if(!tr->file) return 0;}
+        if(node == 0) {tr->file = create_file(path, 0); if(!tr->file) {kfree(tr); return 0;}}
         if((mode == OPEN_MODE_W) | (mode == OPEN_MODE_WP))
         {
             u8* zero_buffer = kmalloc((u32) flength(tr)); memset(zero_buffer, 0, (size_t) flength(tr));

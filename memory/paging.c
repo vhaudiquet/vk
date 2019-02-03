@@ -150,7 +150,7 @@ static void map_page(u32 phys_addr, u32 virt_addr, u32* page_directory)
     }
 
     u32* page = (u32*) (((u32) page_table) + pt_index*4 + KERNEL_VIRTUAL_BASE);
-    if(*page) kprintf("page=%x (virt=0x%X)\n", *page, virt_addr);
+    //if(*page) kprintf("%lpage=%x (virt=0x%X)\n", 3, *page, virt_addr);
     if(*page) fatal_kernel_error("Trying to map physical to an already mapped virtual address", "MAP_PAGE");
 
     if(kernel) *page = (phys_addr) | 259; //present, read/write, global

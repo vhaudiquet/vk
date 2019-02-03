@@ -57,6 +57,7 @@ typedef struct fd
     fsnode_t* file;
     u64 offset;
     u32 instances;
+    char* path;
 } fd_t;
 
 #define FS_FLAG_CASE_INSENSITIVE 1

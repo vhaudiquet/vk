@@ -28,7 +28,7 @@ userland:
 	cd /home/valentin/Documents/vk/res ; i386-vk-gcc ls.c -o ls
 	cp /home/valentin/Documents/vk/res/ls /home/valentin/Documents/vk/res/hdd/sys
 	# make sortixutils
-	cd /home/valentin/Documents/vk/res/sortix-1.0/utils ; i386-vk-gcc cat.c -o vk/cat -lgnu ; i386-vk-gcc rm.c -o vk/rm -lgnu ; i386-vk-gcc clear.c -o vk/clear -lgnu ; i386-vk-gcc echo.c -o vk/echo -lgnu ; i386-vk-gcc rmdir.c -o vk/rmdir -lgnu ; i386-vk-gcc mkdir.c -o vk/mkdir -lgnu
+	cd /home/valentin/Documents/vk/res/sortix-1.0/utils ; i386-vk-gcc cat.c -o vk/cat -lgnu ; i386-vk-gcc rm.c -o vk/rm -lgnu ; i386-vk-gcc clear.c -o vk/clear -lgnu ; i386-vk-gcc echo.c -o vk/echo -lgnu ; i386-vk-gcc rmdir.c -o vk/rmdir -lgnu ; i386-vk-gcc mkdir.c -o vk/mkdir -lgnu ; i386-vk-gcc cp.c -o vk/cp -lgnu
 	# copy init/dash/ls/sortixutils
 	cd /home/valentin/Documents/vk/res/hdd/sys ; make dashc ; make initc ; make lsc ; make sutilsc
 	# copy init/dash/ls to iso

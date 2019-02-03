@@ -21,6 +21,8 @@
 #include "memory/mem.h"
 #include "syscalls.h"
 #include "external_structures.h"
+#include "filesystem/ext2.h"
+#include "filesystem/iso9660.h"
 
 static bool ptr_validate(u32 ptr, u32* page_directory);
 
@@ -174,7 +176,7 @@ void syscall_stat(u32 ebx, u32 ecx, u32 edx)
 
     stat_t* ptr = (stat_t*) edx;
     ptr->st_dev = 0; //todo : device ids //(u16) file->file_system->drive;
-    ptr->st_ino = 0x20; //todo : inode nbr //(u16) file->specific;
+    ptr->st_ino = 0x20;
     ptr->st_mode = (file->attributes & FILE_ATTR_DIR) ? 0040000 : 0100000; //TODO: ptr[2] = current_process->files[ebx]->mode;
     ptr->st_nlink = file->hard_links;
     ptr->st_uid = 0; // user id
@@ -186,6 +188,21 @@ void syscall_stat(u32 ebx, u32 ecx, u32 edx)
     ptr->st_ctime = file->last_modification_time;
     ptr->st_blksize = 512; //todo: cluster size or ext2 blocksize
     ptr->st_blocks = (u32) (file->length/512); //todo: clusters or blocks
+
+    //file-system dependant stats
+    switch(file->file_system->fs_type)
+    {
+        case FS_TYPE_EXT2:
+        {
+            ptr->st_ino = ((ext2_node_specific_t*) file->specific)->inode_nbr;
+            break;
+        }
+        case FS_TYPE_ISO9660:
+        {
+            ptr->st_ino = ((iso9660_node_specific_t*) file->specific)->extent_start;
+            break;
+        }
+    }
     
     asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_NONE):"%eax", "%ecx");
 }
@@ -220,6 +237,15 @@ void syscall_finfo(u32 ebx, u32 ecx, u32 edx)
             }
             else *((u32*)edx) = VK_NOT_A_DEVICE;
             
+            break;
+        }
+        case VK_FINFO_PATH:
+        {
+            fd_t* file = current_process->files[ebx];
+            size_t path_len = strlen(file->path);
+            strncpy((char*) edx, file->path, path_len);
+            *(((char*) edx)+path_len) = 0;
+
             break;
         }
         default:{asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(UNKNOWN_ERROR):"%eax", "%ecx"); return;}
@@ -470,10 +496,10 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
     //free old process memory
     free_process_memory(current_process);
 
-    kprintf("%lSYS_EXEC : loading executable...\n", 3);
+    //kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], argc, argv, env, envc);
-    if(load != ERROR_NONE) {kprintf("LOAD = %u\n", load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
-    kprintf("%lSYS_EXEC : executable loaded.\n", 3);
+    if(load != ERROR_NONE) {kprintf("%lLOAD = %u\n", 3, load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
+    //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //schedule to force reload eip/esp + registers that are in memory
     __asm__ __volatile__("jmp schedule_switch"::"a"(current_process->active_thread), "d"(current_process));
