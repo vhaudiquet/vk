@@ -72,6 +72,7 @@ error_t load_executable(process_t* process, fd_t* executable, int argc, char** a
     asm("cli");
 
     //TODO: check if this area isnt already mapped by elf code/data
+    //URGENT : occurred while tweaking libc functions, 0xBFFFE000-0xC0000000 cannot always be the stack segment...
     void* stack_offset = (void*) 0xC0000000;
     
     #ifdef PAGING_DEBUG

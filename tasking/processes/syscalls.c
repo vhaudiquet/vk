@@ -44,6 +44,7 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
 
     char* path = (char*) ebx;
+    u8 is_path_freeable = 0;
     if(*path != '/')
     {
         char* opath = path;
@@ -53,10 +54,12 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
         strncpy(path, current_process->current_dir, dirlen);
         strncat(path, "/", 1);
         strncat(path, opath, len);
-        *(path+len+dirlen+1) = 0;    
+        *(path+len+dirlen+1) = 0;
+        is_path_freeable = 1;
     }
 
     fd_t* file = open_file(path, (u8) ecx);
+    if(is_path_freeable) kfree(path);
     if(!file) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     
     if(current_process->files_count == current_process->files_size)
@@ -77,7 +80,7 @@ void syscall_open(u32 ebx, u32 ecx, u32 edx)
     }
     current_process->files_count++;
 
-    //kprintf("%lSYS_OPEN(%s, %u) = 0x%X (%u)\n", 3, path, ecx, file, i);
+    kprintf("%lSYS_OPEN(%s, %u) = 0x%X (%u)\n", 3, path, ecx, file, i);
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(i), "N"(ERROR_NONE):"%eax", "%ecx");
 }
 
@@ -90,7 +93,7 @@ void syscall_close(u32 ebx, u32 ecx, u32 edx)
         current_process->files_count--;
         close_file(file);
         
-        //kprintf("%lSYS_CLOSE : closed file %u\n", 3, ebx);
+        kprintf("%lSYS_CLOSE : closed file %u\n", 3, ebx);
     }
 }
 
@@ -99,7 +102,7 @@ void syscall_read(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND)); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR)); return;}
     
-    //kprintf("%lSYSCALL_READ()\n", 3);
+    if(ebx >= 3) kprintf("%lSYSCALL_READ(%u, count %u)\n", 3, ebx, edx);
 
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = read_file(current_process->files[ebx], (void*) ecx, edx);
@@ -112,7 +115,7 @@ void syscall_write(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(ecx, current_process->page_directory)) {asm("mov $0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     
-    //kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
+    if(ebx >= 3) kprintf("%lSYS_WRITE(%u, count %u): ", 3, ebx, edx);
 
     u32 counttr = (u32) current_process->files[ebx]->offset;
     error_t tr = write_file(current_process->files[ebx], (u8*) ecx, edx);
@@ -172,7 +175,7 @@ void syscall_stat(u32 ebx, u32 ecx, u32 edx)
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
     fsnode_t* file = current_process->files[ebx]->file;
 
-    //kprintf("%lSYS_STAT(%u, 0x%X)\n", 3, ebx, edx);
+    kprintf("%lSYS_STAT(%u, 0x%X)\n", 3, ebx, edx);
 
     stat_t* ptr = (stat_t*) edx;
     ptr->st_dev = 0; //todo : device ids //(u16) file->file_system->drive;
@@ -223,7 +226,7 @@ void syscall_finfo(u32 ebx, u32 ecx, u32 edx)
     if((current_process->files_size < ebx) | (!current_process->files[ebx])) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_FILE_NOT_FOUND):"%eax", "%ecx"); return;}
     if(!ptr_validate(edx, current_process->page_directory)) {asm("mov %0, %%eax ; mov %0, %%ecx"::"N"(ERROR_INVALID_PTR):"%eax", "%ecx"); return;}
 
-    //kprintf("%lSYS_FINFO(%u, 0x%X)\n", 3, ebx, edx);
+    kprintf("%lSYS_FINFO(%u, 0x%X)\n", 3, ebx, edx);
 
     switch(ecx)
     {
@@ -390,7 +393,7 @@ void syscall_dup(u32 ebx, u32 ecx, u32 edx)
         new = (int) i;
     }
 
-    //kprintf("%lSYS_DUP: duplicated file %d (0x%X) to %d %s\n", 3, ebx, oldf, new, ecx ? "(by choice)" : "(by default)");
+    kprintf("%lSYS_DUP: duplicated file %d (0x%X) to %d %s\n", 3, ebx, oldf, new, ecx ? "(by choice)" : "(by default)");
     asm("mov %0, %%eax ; mov %1, %%ecx"::"g"(new), "N"(ERROR_NONE):"%eax", "%ecx");
 }
 
@@ -498,7 +501,12 @@ void syscall_exec(u32 ebx, u32 ecx, u32 edx)
 
     //kprintf("%lSYS_EXEC : loading executable...\n", 3);
     error_t load = load_executable(current_process, current_process->files[ebx], argc, argv, env, envc);
-    if(load != ERROR_NONE) {kprintf("%lLOAD = %u\n", 3, load); fatal_kernel_error("LOAD", "SYSCALL_EXEC");} //TEMP : just kill process
+    if(load != ERROR_NONE) 
+    {
+        kprintf("%lLOAD = %u\n", 3, load); 
+        exit_process(current_process, (3<<8)); 
+        //fatal_kernel_error("LOAD", "SYSCALL_EXEC");
+    }
     //kprintf("%lSYS_EXEC : executable loaded.\n", 3);
 
     //schedule to force reload eip/esp + registers that are in memory
